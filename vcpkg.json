@@ -1,0 +1,15 @@
+{
+  "name": "solar-cooker-rt",
+  "version": "0.1.0",
+  "builtin-baseline": "3fb54e6717ea6a48099b02798e82fafefb2d410e",
+  "dependencies": [
+    "glm",
+    "nlohmann-json",
+    "imgui",
+    "implot",
+    "assimp",
+    "doctest",
+    "fmt",
+    "spdlog"
+  ]
+}

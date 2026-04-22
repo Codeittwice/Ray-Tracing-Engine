@@ -1,0 +1,17 @@
+{
+  "cmake.configureSettings": {
+    "CMAKE_TOOLCHAIN_FILE": "C:/dev/vcpkg/scripts/buildsystems/vcpkg.cmake"
+  },
+  "cmake.generator": "Ninja",
+  "cmake.buildDirectory": "${workspaceFolder}/build/${buildType}",
+  "C_Cpp.intelliSenseEngine": "disabled",
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "xaver.clang-format",
+  "files.associations": { "*.hpp": "cpp", "*.cpp": "cpp" },
+  "clangd.arguments": [
+    "--compile-commands-dir=${workspaceFolder}/build/debug",
+    "--background-index",
+    "--clang-tidy",
+    "--header-insertion=never"
+  ]
+}
