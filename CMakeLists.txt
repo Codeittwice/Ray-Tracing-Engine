@@ -23,7 +23,14 @@ target_link_libraries(scrt_core PUBLIC
 target_compile_features(scrt_core PUBLIC cxx_std_20)
 set_project_warnings(scrt_core)
 
-# Sources will be added per phase via target_sources(scrt_core PRIVATE ...)
+# ---------- Phase 1 sources ----------
+target_sources(scrt_core PRIVATE
+    src/math/Rng.cpp
+    src/core/AABB.cpp
+    src/core/Transform.cpp
+    src/optics/Refract.cpp
+    src/optics/Fresnel.cpp
+)
 
 # ---------- scrt_tests ----------
 enable_testing()
@@ -31,14 +38,15 @@ add_executable(scrt_tests)
 target_link_libraries(scrt_tests PRIVATE scrt_core doctest::doctest)
 set_project_warnings(scrt_tests)
 
-# Test sources added per phase via target_sources(scrt_tests PRIVATE ...)
+target_sources(scrt_tests PRIVATE
+    tests/test_main.cpp
+    tests/test_vec.cpp
+    tests/test_reflect_refract.cpp
+    tests/test_fresnel.cpp
+    tests/test_intersections.cpp
+)
 
 include(CTest)
-include(${doctest_DIR}/doctest.cmake OPTIONAL RESULT_VARIABLE _doctest_cmake)
-if(_doctest_cmake)
-    doctest_discover_tests(scrt_tests)
-else()
-    add_test(NAME scrt_tests COMMAND scrt_tests)
-endif()
+add_test(NAME scrt_tests COMMAND scrt_tests)
 
 # scrt_viz and scrt_app are added in Phase 6.
