@@ -38,6 +38,13 @@ vec2 Rng::unit_disk_concentric() {
     return {r * std::cos(theta), r * std::sin(theta)};
 }
 
+double Rng::gaussian(double sigma) {
+    double u1 = uniform01();
+    while (u1 < 1e-15) u1 = uniform01();
+    double u2 = uniform01();
+    return sigma * std::sqrt(-2.0 * std::log(u1)) * std::cos(TWO_PI * u2);
+}
+
 vec3 Rng::unit_sphere_direction() {
     // Inverse-CDF: cos(theta) uniform in [-1,1], phi uniform in [0, 2*pi).
     double cos_theta = 1.0 - 2.0 * uniform01();

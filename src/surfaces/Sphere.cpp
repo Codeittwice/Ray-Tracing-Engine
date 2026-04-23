@@ -27,17 +27,17 @@ bool Sphere::intersect(const core::Ray& r, double t_min, double t_max, core::Hit
             return false;
     }
 
-    math::vec3 p_local = lr.origin + t * lr.direction;
-    math::vec3 n_local = p_local / radius_;
+    math::vec3 p_local  = lr.origin + t * lr.direction;
+    math::vec3 outward  = p_local / radius_;
+    bool front          = (glm::dot(lr.direction, outward) < 0.0);
+    math::vec3 n_local  = front ? outward : -outward;
 
-    if (glm::dot(lr.direction, n_local) > 0.0)
-        n_local = -n_local;
-
-    hit.t        = t;
-    hit.position = xform_.point_to_world(p_local);
-    hit.normal   = xform_.normal_to_world(n_local);
-    hit.uv       = {std::atan2(p_local.y, p_local.x), std::acos(p_local.z / radius_)};
-    hit.surface  = this;
+    hit.t          = t;
+    hit.position   = xform_.point_to_world(p_local);
+    hit.normal     = xform_.normal_to_world(n_local);
+    hit.uv         = {std::atan2(p_local.y, p_local.x), std::acos(p_local.z / radius_)};
+    hit.front_face = front;
+    hit.surface    = this;
     return true;
 }
 

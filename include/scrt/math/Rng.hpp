@@ -15,6 +15,7 @@ public:
     double uniform(double a, double b);  ///< Uniform sample in [a, b).
     vec2   unit_disk_concentric();       ///< Point on unit disk (Shirley mapping).
     vec3   unit_sphere_direction();      ///< Direction uniform on unit sphere.
+    double gaussian(double sigma = 1.0); ///< Zero-mean Gaussian via Box-Muller.
     void   seed(uint64_t s);            ///< Reseed for deterministic testing.
 
 private:

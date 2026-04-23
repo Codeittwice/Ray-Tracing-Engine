@@ -56,16 +56,16 @@ bool Paraboloid::intersect(const core::Ray& r, double t_min, double t_max,
         return false;
 
     // Gradient of F(x,y,z)=x²+y²−4fz: (2x, 2y, −4f)
-    math::vec3 grad{2.0*p.x, 2.0*p.y, -f4};
-    math::vec3 n_local = math::safe_normalize(grad);
-    if (glm::dot(lr.direction, n_local) > 0.0)
-        n_local = -n_local;
+    math::vec3 outward = math::safe_normalize(math::vec3{2.0*p.x, 2.0*p.y, -f4});
+    bool front         = (glm::dot(lr.direction, outward) < 0.0);
+    math::vec3 n_local = front ? outward : -outward;
 
-    hit.t        = t;
-    hit.position = xform_.point_to_world(p);
-    hit.normal   = xform_.normal_to_world(n_local);
-    hit.uv       = {p.x, p.y};
-    hit.surface  = this;
+    hit.t          = t;
+    hit.position   = xform_.point_to_world(p);
+    hit.normal     = xform_.normal_to_world(n_local);
+    hit.uv         = {p.x, p.y};
+    hit.front_face = front;
+    hit.surface    = this;
     return true;
 }
 

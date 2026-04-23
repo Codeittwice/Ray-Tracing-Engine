@@ -22,13 +22,15 @@ bool Plane::intersect(const core::Ray& r, double t_min, double t_max, core::Hit&
     if (std::abs(x) > hw_ || std::abs(y) > hh_)
         return false;
 
-    math::vec3 n_local{0.0, 0.0, (lr.direction.z < 0.0) ? 1.0 : -1.0};
+    bool front = (lr.direction.z < 0.0);
+    math::vec3 n_local{0.0, 0.0, front ? 1.0 : -1.0};
 
-    hit.t        = t;
-    hit.position = xform_.point_to_world(math::vec3{x, y, 0.0});
-    hit.normal   = xform_.normal_to_world(n_local);
-    hit.uv       = {x, y};
-    hit.surface  = this;
+    hit.t          = t;
+    hit.position   = xform_.point_to_world(math::vec3{x, y, 0.0});
+    hit.normal     = xform_.normal_to_world(n_local);
+    hit.uv         = {x, y};
+    hit.front_face = front;
+    hit.surface    = this;
     return true;
 }
 

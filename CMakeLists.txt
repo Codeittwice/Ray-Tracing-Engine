@@ -32,6 +32,13 @@ target_sources(scrt_core PRIVATE
     src/optics/Fresnel.cpp
 )
 
+# ---------- Phase 3 sources ----------
+target_sources(scrt_core PRIVATE
+    src/optics/Paraxial.cpp
+    src/materials/Dielectric.cpp
+    src/materials/RealMirror.cpp
+)
+
 # ---------- Phase 2 sources ----------
 target_sources(scrt_core PRIVATE
     src/surfaces/Plane.cpp
@@ -60,6 +67,7 @@ target_sources(scrt_tests PRIVATE
     tests/test_fresnel.cpp
     tests/test_intersections.cpp
     tests/test_sun.cpp
+    tests/test_paraxial.cpp
 )
 
 include(CTest)
