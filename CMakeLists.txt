@@ -32,6 +32,21 @@ target_sources(scrt_core PRIVATE
     src/optics/Fresnel.cpp
 )
 
+# ---------- Phase 2 sources ----------
+target_sources(scrt_core PRIVATE
+    src/surfaces/Plane.cpp
+    src/surfaces/Sphere.cpp
+    src/surfaces/Paraboloid.cpp
+    src/materials/PerfectMirror.cpp
+    src/materials/Absorber.cpp
+    src/sources/Pillbox.cpp
+    src/scene/Aperture.cpp
+    src/scene/Receiver.cpp
+    src/scene/Scene.cpp
+    src/tracer/FluxAccumulator.cpp
+    src/tracer/Tracer.cpp
+)
+
 # ---------- scrt_tests ----------
 enable_testing()
 add_executable(scrt_tests)
@@ -44,9 +59,25 @@ target_sources(scrt_tests PRIVATE
     tests/test_reflect_refract.cpp
     tests/test_fresnel.cpp
     tests/test_intersections.cpp
+    tests/test_sun.cpp
 )
 
 include(CTest)
 add_test(NAME scrt_tests COMMAND scrt_tests)
 
 # scrt_viz and scrt_app are added in Phase 6.
+
+# ---------- Documentation (Doxygen → HTML + LaTeX/PDF) ----------
+find_package(Doxygen OPTIONAL_COMPONENTS dot)
+if(DOXYGEN_FOUND)
+    add_custom_target(docs
+        COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_SOURCE_DIR}/Doxyfile
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        COMMENT "Generating API documentation (HTML + LaTeX)"
+        VERBATIM
+    )
+    message(STATUS "Doxygen found: 'cmake --build build/debug --target docs' generates docs.")
+    message(STATUS "  PDF: run 'make' inside docs/generated/latex/ after building docs target.")
+else()
+    message(STATUS "Doxygen not found; 'docs' target unavailable.")
+endif()
