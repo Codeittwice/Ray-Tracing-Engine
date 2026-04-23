@@ -1,0 +1,109 @@
+{
+    "scene": {
+        "aperture": {
+            "center": [
+                0.0,
+                0.0,
+                2.0
+            ],
+            "normal": [
+                0.0,
+                0.0,
+                1.0
+            ],
+            "radius": 0.45,
+            "type": "disk"
+        },
+        "elements": [
+            {
+                "material": "silvered",
+                "name": "scheffler_dish",
+                "surface": {
+                    "aperture_box": {
+                        "max": [
+                            0.45,
+                            0.45,
+                            0.12
+                        ],
+                        "min": [
+                            -0.45,
+                            -0.45,
+                            0.0
+                        ]
+                    },
+                    "coeffs": {
+                        "A": 1.0,
+                        "B": 1.0,
+                        "C": 0.0,
+                        "D": 0.0,
+                        "E": 0.0,
+                        "F": 0.0,
+                        "G": 0.0,
+                        "H": 0.0,
+                        "I": -2.0,
+                        "J": 0.0
+                    },
+                    "type": "quadric"
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        0.0,
+                        20.0,
+                        0.0
+                    ],
+                    "translation": [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                }
+            }
+        ],
+        "materials": [
+            {
+                "id": "silvered",
+                "reflectance": 0.92,
+                "slope_error_mrad": 1.0,
+                "type": "real_mirror"
+            }
+        ],
+        "name": "Scheffler-style off-axis paraboloid reflector",
+        "receiver": {
+            "grid": {
+                "nx": 64,
+                "ny": 64
+            },
+            "surface": {
+                "half_height": 0.05,
+                "half_width": 0.05,
+                "type": "plane"
+            },
+            "transform": {
+                "translation": [
+                    0.18,
+                    0.0,
+                    0.5
+                ]
+            }
+        },
+        "sun": {
+            "direction": [
+                0.0,
+                0.0,
+                -1.0
+            ],
+            "dni_wm2": 1000.0,
+            "sunshape": {
+                "half_angle_mrad": 4.65,
+                "type": "pillbox"
+            }
+        }
+    },
+    "trace": {
+        "max_bounces": 4,
+        "max_paths_to_record": 200,
+        "n_primary_rays": 100000,
+        "record_paths": false,
+        "rng_seed": 99
+    }
+}

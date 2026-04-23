@@ -1,0 +1,82 @@
+{
+    "scene": {
+        "aperture": {
+            "center": [
+                0.0,
+                0.0,
+                2.0
+            ],
+            "normal": [
+                0.0,
+                0.0,
+                1.0
+            ],
+            "radius": 0.5,
+            "type": "disk"
+        },
+        "elements": [
+            {
+                "material": "aluminum",
+                "name": "primary_dish",
+                "surface": {
+                    "aperture_radius_m": 0.5,
+                    "focal_length_m": 0.6,
+                    "type": "paraboloid"
+                },
+                "transform": {
+                    "translation": [
+                        0.0,
+                        0.0,
+                        0.0
+                    ]
+                }
+            }
+        ],
+        "materials": [
+            {
+                "id": "aluminum",
+                "reflectance": 0.85,
+                "slope_error_mrad": 2.0,
+                "type": "real_mirror"
+            }
+        ],
+        "name": "Parabolic dish demo",
+        "receiver": {
+            "grid": {
+                "nx": 64,
+                "ny": 64
+            },
+            "surface": {
+                "half_height": 0.05,
+                "half_width": 0.05,
+                "type": "plane"
+            },
+            "transform": {
+                "translation": [
+                    0.0,
+                    0.0,
+                    0.6
+                ]
+            }
+        },
+        "sun": {
+            "direction": [
+                0.0,
+                0.0,
+                -1.0
+            ],
+            "dni_wm2": 1000.0,
+            "sunshape": {
+                "half_angle_mrad": 4.65,
+                "type": "pillbox"
+            }
+        }
+    },
+    "trace": {
+        "max_bounces": 8,
+        "max_paths_to_record": 500,
+        "n_primary_rays": 100000,
+        "record_paths": false,
+        "rng_seed": 42
+    }
+}

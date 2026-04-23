@@ -1,0 +1,108 @@
+{
+    "scene": {
+        "aperture": {
+            "center": [
+                0.0,
+                0.0,
+                1.0
+            ],
+            "normal": [
+                0.0,
+                0.0,
+                1.0
+            ],
+            "radius": 0.4,
+            "type": "disk"
+        },
+        "elements": [
+            {
+                "material": "mirror",
+                "name": "north_panel",
+                "surface": {
+                    "half_height": 0.25,
+                    "half_width": 0.25,
+                    "type": "plane"
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        -67.5,
+                        0.0,
+                        0.0
+                    ],
+                    "translation": [
+                        0.0,
+                        0.35,
+                        0.2
+                    ]
+                }
+            },
+            {
+                "material": "mirror",
+                "name": "south_panel",
+                "surface": {
+                    "half_height": 0.25,
+                    "half_width": 0.25,
+                    "type": "plane"
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        67.5,
+                        0.0,
+                        0.0
+                    ],
+                    "translation": [
+                        0.0,
+                        -0.35,
+                        0.2
+                    ]
+                }
+            }
+        ],
+        "materials": [
+            {
+                "id": "mirror",
+                "reflectance": 0.9,
+                "slope_error_mrad": 1.5,
+                "type": "real_mirror"
+            }
+        ],
+        "name": "Box cooker (V-groove two-mirror)",
+        "receiver": {
+            "grid": {
+                "nx": 32,
+                "ny": 32
+            },
+            "surface": {
+                "half_height": 0.1,
+                "half_width": 0.1,
+                "type": "plane"
+            },
+            "transform": {
+                "translation": [
+                    0.0,
+                    0.0,
+                    -0.1
+                ]
+            }
+        },
+        "sun": {
+            "direction": [
+                0.0,
+                0.0,
+                -1.0
+            ],
+            "dni_wm2": 1000.0,
+            "sunshape": {
+                "half_angle_mrad": 4.65,
+                "type": "pillbox"
+            }
+        }
+    },
+    "trace": {
+        "max_bounces": 4,
+        "max_paths_to_record": 200,
+        "n_primary_rays": 50000,
+        "record_paths": false,
+        "rng_seed": 7
+    }
+}

@@ -39,6 +39,14 @@ target_sources(scrt_core PRIVATE
     src/materials/RealMirror.cpp
 )
 
+# ---------- Phase 4 sources ----------
+target_sources(scrt_core PRIVATE
+    src/surfaces/GeneralQuadric.cpp
+    src/surfaces/ImplicitSDF.cpp
+    src/io/SceneLoader.cpp
+    src/io/ResultsExporter.cpp
+)
+
 # ---------- Phase 2 sources ----------
 target_sources(scrt_core PRIVATE
     src/surfaces/Plane.cpp
@@ -68,7 +76,11 @@ target_sources(scrt_tests PRIVATE
     tests/test_intersections.cpp
     tests/test_sun.cpp
     tests/test_paraxial.cpp
+    tests/test_scene_io.cpp
 )
+
+target_compile_definitions(scrt_tests PRIVATE
+    SCRT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 
 include(CTest)
 add_test(NAME scrt_tests COMMAND scrt_tests)

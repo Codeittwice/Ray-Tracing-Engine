@@ -20,7 +20,7 @@ Follow `SolarCookerRayTracer_Plan.md` exactly. That document specifies:
 - If unsure about a design decision, ask the user before coding.
 
 ## Current phase
-Phase 3 — Complete. Phase 4 awaiting approval.
+Phase 4 — Complete. Phase 5 awaiting approval.
 
 ## Platform
 Windows 10/11, MSVC (current stable release, x64), CMake, Ninja generator, vcpkg at C:\dev\vcpkg in manifest mode. VCPKG_ROOT environment variable is set.
