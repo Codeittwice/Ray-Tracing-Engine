@@ -1,6 +1,8 @@
 #include <doctest/doctest.h>
+#include "scrt/io/MeshImporter.hpp"
 #include "scrt/io/ResultsExporter.hpp"
 #include "scrt/io/SceneLoader.hpp"
+#include "scrt/surfaces/TriangleMesh.hpp"
 #include "scrt/tracer/Tracer.hpp"
 #include <filesystem>
 #include <fstream>
@@ -139,4 +141,46 @@ TEST_CASE("T11: export_flux_csv writes a readable file") {
     scrt::io::export_summary_json(acc, res, 1000.0, json_path);
     CHECK(std::filesystem::exists(json_path));
     std::filesystem::remove(json_path);
+}
+
+// T12 -----------------------------------------------------------------------
+
+TEST_CASE("T12: TriangleMesh import with scale_to_meters, world_bounds correct") {
+    // Write a minimal unit-cube OBJ to a temp file.
+    // Vertices span [0,1]^3 → with scale=0.001, world span = 0.001 m.
+    const auto obj_path = std::filesystem::temp_directory_path() / "scrt_test_cube.obj";
+    {
+        std::ofstream f(obj_path);
+        REQUIRE(f.is_open());
+        // 8 vertices of a unit cube
+        f << "v 0 0 0\nv 1 0 0\nv 0 1 0\nv 1 1 0\n";
+        f << "v 0 0 1\nv 1 0 1\nv 0 1 1\nv 1 1 1\n";
+        // 12 triangles (2 per face, 6 faces)
+        f << "f 1 2 4\nf 1 4 3\n"; // bottom
+        f << "f 5 7 8\nf 5 8 6\n"; // top
+        f << "f 1 5 6\nf 1 6 2\n"; // front
+        f << "f 3 4 8\nf 3 8 7\n"; // back
+        f << "f 1 3 7\nf 1 7 5\n"; // left
+        f << "f 2 6 8\nf 2 8 4\n"; // right
+    }
+
+    constexpr double kScale = 0.001;
+    scrt::io::ImportedMesh imp = scrt::io::import_mesh(obj_path, kScale);
+    std::filesystem::remove(obj_path);
+
+    // Assimp may split vertices when generating per-face normals, so vertex count ≥ 8.
+    REQUIRE(imp.vertices.size() >= 8u);
+    REQUIRE(imp.indices.size()  % 3 == 0);
+    REQUIRE(imp.indices.size()  >= 36u); // at least 12 triangles
+
+    scrt::surfaces::TriangleMesh mesh(std::move(imp.vertices), std::move(imp.indices));
+
+    scrt::core::AABB bounds = mesh.world_bounds();
+    double span_x = static_cast<double>(bounds.max().x - bounds.min().x);
+    double span_y = static_cast<double>(bounds.max().y - bounds.min().y);
+    double span_z = static_cast<double>(bounds.max().z - bounds.min().z);
+
+    CHECK(span_x == doctest::Approx(kScale).epsilon(1e-9));
+    CHECK(span_y == doctest::Approx(kScale).epsilon(1e-9));
+    CHECK(span_z == doctest::Approx(kScale).epsilon(1e-9));
 }

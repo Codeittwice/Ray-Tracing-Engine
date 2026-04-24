@@ -17,6 +17,11 @@ void Scene::set_receiver(std::unique_ptr<Receiver> r) { receiver_ = std::move(r)
 void Scene::set_sun(std::unique_ptr<sources::SunSource> s) { sun_ = std::move(s); }
 void Scene::set_aperture(Aperture a) { aperture_ = a; }
 
+void Scene::build_acceleration_structure() {
+    bvh_.build(surfaces_);
+    use_bvh_ = !bvh_.empty();
+}
+
 std::span<const std::unique_ptr<surfaces::Surface>> Scene::surfaces() const {
     return surfaces_;
 }
@@ -27,11 +32,19 @@ bool Scene::intersect(const core::Ray& r, double t_min, double t_max,
     double t_best = t_max;
     core::Hit tmp;
 
-    for (const auto& s : surfaces_) {
-        if (s->intersect(r, t_min, t_best, tmp)) {
+    if (use_bvh_) {
+        if (bvh_.intersect(r, t_min, t_best, tmp)) {
             t_best = tmp.t;
             hit    = tmp;
             found  = true;
+        }
+    } else {
+        for (const auto& s : surfaces_) {
+            if (s->intersect(r, t_min, t_best, tmp)) {
+                t_best = tmp.t;
+                hit    = tmp;
+                found  = true;
+            }
         }
     }
 

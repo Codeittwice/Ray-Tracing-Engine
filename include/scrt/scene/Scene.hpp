@@ -1,4 +1,5 @@
 #pragma once
+#include "scrt/accel/BVH.hpp"
 #include "scrt/core/Hit.hpp"
 #include "scrt/core/Ray.hpp"
 #include "scrt/materials/Material.hpp"
@@ -12,7 +13,8 @@
 
 namespace scrt::scene {
 
-/// Owns all optical elements; provides world-space intersection (linear scan for Phase 2).
+/// Owns all optical elements; provides world-space intersection.
+/// Call build_acceleration_structure() after adding all surfaces for BVH-accelerated traversal.
 class Scene {
 public:
     /// Takes ownership of a material; returns its index.
@@ -25,13 +27,16 @@ public:
     void set_sun(std::unique_ptr<sources::SunSource> s);
     void set_aperture(Aperture a);
 
+    /// Build BVH over all currently added surfaces. Must be called before run().
+    void build_acceleration_structure();
+
     std::span<const std::unique_ptr<surfaces::Surface>> surfaces()  const;
     const Receiver*      receiver() const { return receiver_.get(); }
     Receiver*            receiver()       { return receiver_.get(); }
     const sources::SunSource* sun()  const { return sun_.get(); }
     const Aperture&      aperture()  const { return aperture_; }
 
-    /// World-space closest-hit across all surfaces + receiver (linear scan).
+    /// World-space closest-hit across all surfaces + receiver.
     bool intersect(const core::Ray& r, double t_min, double t_max,
                    core::Hit& hit) const;
 
@@ -41,6 +46,8 @@ private:
     std::unique_ptr<Receiver>                         receiver_;
     std::unique_ptr<sources::SunSource>               sun_;
     Aperture                                          aperture_;
+    accel::BVH                                        bvh_;
+    bool                                              use_bvh_ = false;
 };
 
 } // namespace scrt::scene

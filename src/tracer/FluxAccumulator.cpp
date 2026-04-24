@@ -31,6 +31,12 @@ void FluxAccumulator::deposit(const core::Ray& r, const core::Hit& h) noexcept {
     power_sum_[static_cast<std::size_t>(iy * nx_ + ix)] += r.power;
 }
 
+void FluxAccumulator::merge_from(const FluxAccumulator& other) noexcept {
+    assert(power_sum_.size() == other.power_sum_.size());
+    for (std::size_t i = 0; i < power_sum_.size(); ++i)
+        power_sum_[i] += other.power_sum_[i];
+}
+
 void FluxAccumulator::finalize(std::size_t /*total_primary_rays*/) {
     double bin_area = bin_width_m() * bin_height_m();
     for (std::size_t i = 0; i < power_sum_.size(); ++i)

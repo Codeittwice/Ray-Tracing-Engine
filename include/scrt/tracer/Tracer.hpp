@@ -18,6 +18,7 @@ struct TraceConfig {
     std::uint64_t rng_seed             = 0;        ///< 0 → std::random_device
     bool          record_paths         = false;
     std::size_t   max_paths_to_record  = 2000;
+    int           num_threads          = 0;        ///< 0 → std::thread::hardware_concurrency
 };
 
 /// Summary returned after a completed run.
@@ -28,7 +29,7 @@ struct TraceResult {
     std::vector<std::vector<math::vec3>>  sampled_paths;
 };
 
-/// Single-threaded Monte Carlo ray tracer (parallelism added in Phase 5).
+/// Multi-threaded Monte Carlo ray tracer using std::execution::par.
 class Tracer {
 public:
     explicit Tracer(const scene::Scene& s) : scene_(&s) {}

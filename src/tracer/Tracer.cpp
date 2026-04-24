@@ -2,8 +2,14 @@
 #include "scrt/math/Constants.hpp"
 #include "scrt/materials/Material.hpp"
 #include "scrt/scene/Scene.hpp"
+#include <algorithm>
 #include <chrono>
+#include <execution>
 #include <limits>
+#include <mutex>
+#include <numeric>
+#include <thread>
+#include <vector>
 
 namespace scrt::tracer {
 
@@ -49,44 +55,94 @@ void Tracer::trace_one(core::Ray r, FluxAccumulator& acc, math::Rng& rng,
 TraceResult Tracer::run(const TraceConfig& cfg, FluxAccumulator& acc) const {
     auto t0 = std::chrono::steady_clock::now();
 
-    math::Rng rng(cfg.rng_seed != 0 ? cfg.rng_seed
-                                    : static_cast<std::uint64_t>(
-                                          std::chrono::steady_clock::now()
-                                              .time_since_epoch()
-                                              .count()));
-
     const auto& sun = *scene_->sun();
     const auto& ap  = scene_->aperture();
-
-    // Power per primary ray: P_total = DNI * aperture_area; shared across N rays
     double ray_power = sun.dni() * ap.area() / static_cast<double>(cfg.n_primary_rays);
+
+    int nthreads = cfg.num_threads > 0
+                       ? cfg.num_threads
+                       : static_cast<int>(std::thread::hardware_concurrency());
+    if (nthreads < 1) nthreads = 1;
+
+    // Divide rays evenly into nthreads slots
+    std::vector<int> slots(nthreads);
+    std::iota(slots.begin(), slots.end(), 0);
+
+    std::size_t base_rays   = cfg.n_primary_rays / static_cast<std::size_t>(nthreads);
+    std::size_t extra_rays  = cfg.n_primary_rays % static_cast<std::size_t>(nthreads);
+
+    // One FluxAccumulator per slot; merged after all slots finish
+    std::vector<FluxAccumulator> slot_accs;
+    slot_accs.reserve(nthreads);
+    for (int i = 0; i < nthreads; ++i)
+        slot_accs.emplace_back(acc.half_width(), acc.half_height(), acc.nx(), acc.ny());
 
     TraceResult result;
     result.primary_rays_traced = cfg.n_primary_rays;
 
-    for (std::size_t i = 0; i < cfg.n_primary_rays; ++i) {
-        std::vector<math::vec3>* path_ptr = nullptr;
-        std::vector<math::vec3> path_buf;
-        if (cfg.record_paths && result.sampled_paths.size() < cfg.max_paths_to_record) {
-            path_ptr = &path_buf;
+    std::mutex path_mutex;
+
+    std::for_each(std::execution::par, slots.begin(), slots.end(),
+                  [&](int slot) {
+        std::size_t slot_rays = base_rays + (static_cast<std::size_t>(slot) < extra_rays ? 1 : 0);
+        std::size_t ray_start = base_rays * static_cast<std::size_t>(slot) +
+                                std::min(static_cast<std::size_t>(slot), extra_rays);
+
+        // Unique seed per slot so slots don't produce identical sequences
+        std::uint64_t seed = cfg.rng_seed != 0
+                                 ? cfg.rng_seed + static_cast<std::uint64_t>(slot) * 6364136223846793005ULL
+                                 : static_cast<std::uint64_t>(
+                                       std::chrono::steady_clock::now()
+                                           .time_since_epoch()
+                                           .count()) +
+                                       static_cast<std::uint64_t>(slot) * 6364136223846793005ULL;
+
+        math::Rng slot_rng(seed);
+        FluxAccumulator& slot_acc = slot_accs[static_cast<std::size_t>(slot)];
+        std::size_t hits = 0;
+
+        for (std::size_t i = 0; i < slot_rays; ++i) {
+            std::vector<math::vec3>* path_ptr = nullptr;
+            std::vector<math::vec3> path_buf;
+
+            {
+                // Only record paths if budget allows (check under lock, record outside)
+                if (cfg.record_paths) {
+                    std::lock_guard<std::mutex> lk(path_mutex);
+                    if (result.sampled_paths.size() < cfg.max_paths_to_record)
+                        path_ptr = &path_buf;
+                }
+            }
+
+            core::Ray r = sun.sample_ray(ap, slot_rng);
+            r.power     = ray_power;
+            r.id        = static_cast<std::uint32_t>(ray_start + i);
+
+            trace_one(r, slot_acc, slot_rng, path_ptr, cfg.max_bounces,
+                      cfg.power_cutoff_w, hits);
+
+            if (path_ptr && !path_buf.empty()) {
+                std::lock_guard<std::mutex> lk(path_mutex);
+                if (result.sampled_paths.size() < cfg.max_paths_to_record)
+                    result.sampled_paths.push_back(std::move(path_buf));
+            }
         }
 
-        core::Ray r = sun.sample_ray(ap, rng);
-        r.power     = ray_power;
-        r.id        = static_cast<std::uint32_t>(i);
+        // Atomically accumulate hit count
+        {
+            std::lock_guard<std::mutex> lk(path_mutex);
+            result.total_hits += hits;
+        }
+    });
 
-        trace_one(r, acc, rng, path_ptr, cfg.max_bounces, cfg.power_cutoff_w,
-                  result.total_hits);
-
-        if (path_ptr && !path_buf.empty())
-            result.sampled_paths.push_back(std::move(path_buf));
-    }
+    // Merge slot accumulators into the output accumulator
+    for (auto& sa : slot_accs)
+        acc.merge_from(sa);
 
     acc.finalize(cfg.n_primary_rays);
 
     auto t1 = std::chrono::steady_clock::now();
-    result.wall_time_s =
-        std::chrono::duration<double>(t1 - t0).count();
+    result.wall_time_s = std::chrono::duration<double>(t1 - t0).count();
 
     return result;
 }

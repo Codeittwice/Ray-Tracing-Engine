@@ -1,6 +1,7 @@
 #include "scrt/io/SceneLoader.hpp"
 #include "scrt/core/AABB.hpp"
 #include "scrt/core/Transform.hpp"
+#include "scrt/io/MeshImporter.hpp"
 #include "scrt/materials/Absorber.hpp"
 #include "scrt/materials/Dielectric.hpp"
 #include "scrt/materials/PerfectMirror.hpp"
@@ -15,6 +16,7 @@
 #include "scrt/surfaces/Paraboloid.hpp"
 #include "scrt/surfaces/Plane.hpp"
 #include "scrt/surfaces/Sphere.hpp"
+#include "scrt/surfaces/TriangleMesh.hpp"
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
@@ -53,7 +55,8 @@ core::Transform parse_transform(const json& j) {
     return rot;
 }
 
-std::unique_ptr<surfaces::Surface> parse_surface(const json& sj) {
+std::unique_ptr<surfaces::Surface> parse_surface(const json& sj,
+                                                   const std::filesystem::path& base_dir) {
     require(sj.contains("type"), "surface missing 'type'");
     std::string type = sj["type"];
 
@@ -94,8 +97,11 @@ std::unique_ptr<surfaces::Surface> parse_surface(const json& sj) {
         return std::make_unique<surfaces::GeneralQuadric>(c, core::AABB{bmin, bmax});
     }
     if (type == "mesh") {
-        throw std::runtime_error(
-            "SceneLoader: mesh surfaces require Phase 5 (TriangleMesh not yet implemented)");
+        require(sj.contains("path"), "mesh surface missing 'path'");
+        double scale = sj.value("scale_to_meters", 1.0);
+        auto imp = import_mesh(base_dir / sj["path"].get<std::string>(), scale);
+        return std::make_unique<surfaces::TriangleMesh>(
+            std::move(imp.vertices), std::move(imp.indices));
     }
     throw std::runtime_error("SceneLoader: unknown surface type '" + type + "'");
 }
@@ -103,6 +109,7 @@ std::unique_ptr<surfaces::Surface> parse_surface(const json& sj) {
 } // namespace
 
 LoadedScene load_scene(const std::filesystem::path& path) {
+    std::filesystem::path base_dir = path.parent_path();
     std::ifstream file(path);
     require(file.is_open(), "cannot open '" + path.string() + "'");
 
@@ -182,7 +189,7 @@ LoadedScene load_scene(const std::filesystem::path& path) {
             require(el.contains("surface"),  "element missing 'surface'");
             require(el.contains("material"), "element missing 'material'");
 
-            auto surf = parse_surface(el["surface"]);
+            auto surf = parse_surface(el["surface"], base_dir);
             if (el.contains("transform"))
                 surf->set_transform(parse_transform(el["transform"]));
             if (el.contains("name"))
@@ -240,6 +247,8 @@ LoadedScene load_scene(const std::filesystem::path& path) {
         if (tj.contains("max_paths_to_record"))
             cfg.max_paths_to_record = tj["max_paths_to_record"].get<std::size_t>();
     }
+
+    scene->build_acceleration_structure();
 
     return {std::move(scene), cfg};
 }

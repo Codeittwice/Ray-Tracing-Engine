@@ -13,13 +13,14 @@ find_package(nlohmann_json CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(doctest CONFIG REQUIRED)
-# Polyscope, ImGui, ImPlot, Assimp added in later phases.
+find_package(assimp CONFIG REQUIRED)
+# Polyscope, ImGui, ImPlot added in Phase 6.
 
 # ---------- scrt_core (physics core, no GUI) ----------
 add_library(scrt_core STATIC)
 target_include_directories(scrt_core PUBLIC include)
 target_link_libraries(scrt_core PUBLIC
-    glm::glm nlohmann_json::nlohmann_json fmt::fmt spdlog::spdlog)
+    glm::glm nlohmann_json::nlohmann_json fmt::fmt spdlog::spdlog assimp::assimp)
 target_compile_features(scrt_core PUBLIC cxx_std_20)
 set_project_warnings(scrt_core)
 
@@ -45,6 +46,13 @@ target_sources(scrt_core PRIVATE
     src/surfaces/ImplicitSDF.cpp
     src/io/SceneLoader.cpp
     src/io/ResultsExporter.cpp
+)
+
+# ---------- Phase 5 sources ----------
+target_sources(scrt_core PRIVATE
+    src/accel/BVH.cpp
+    src/io/MeshImporter.cpp
+    src/surfaces/TriangleMesh.cpp
 )
 
 # ---------- Phase 2 sources ----------
