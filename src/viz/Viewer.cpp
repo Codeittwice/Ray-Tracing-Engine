@@ -119,7 +119,7 @@ void Viewer::update_receiver_flux() {
 
     auto* mesh = polyscope::registerSurfaceMesh("receiver_flux", pv, pf);
     auto* q    = mesh->addVertexScalarQuantity("flux_Wm2", fvals);
-    q->setColorMap("plasma");
+    q->setColorMap("viridis");
     q->setEnabled(true);
 }
 

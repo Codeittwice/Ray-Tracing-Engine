@@ -23,6 +23,14 @@ Thumbs.db
 desktop.ini
 .DS_Store
 
+# Runtime outputs
+results/
+*.log
+*.png
+*.polyscope.ini
+imgui.ini
+*.bak
+
 # Compiled
 *.o
 *.obj
