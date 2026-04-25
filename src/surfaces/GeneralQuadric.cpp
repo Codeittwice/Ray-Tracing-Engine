@@ -1,6 +1,8 @@
 #include "scrt/surfaces/GeneralQuadric.hpp"
 #include "scrt/math/Vec.hpp"
 #include <cmath>
+#include <limits>
+#include <vector>
 
 namespace scrt::surfaces {
 
@@ -109,9 +111,65 @@ core::AABB GeneralQuadric::world_bounds() const {
     return box;
 }
 
-void GeneralQuadric::tessellate(int /*nseg*/, std::vector<math::vec3>& /*verts*/,
-                                std::vector<std::uint32_t>& /*indices*/) const {
-    // Phase 6: implement marching-cubes tessellation.
+void GeneralQuadric::tessellate(int nseg, std::vector<math::vec3>& verts,
+                                std::vector<std::uint32_t>& indices) const {
+    // Sample an N×N grid on the clip-box XY extents, solve for z at each point.
+    const int N = std::max(nseg, 4);
+    const double xlo = clip_.min().x, xhi = clip_.max().x;
+    const double ylo = clip_.min().y, yhi = clip_.max().y;
+    const double zlo = clip_.min().z, zhi = clip_.max().z;
+    const auto&  c   = coeffs_;
+
+    std::uint32_t base = static_cast<std::uint32_t>(verts.size());
+    std::uint32_t local = 0;
+    std::vector<std::int32_t> vidx(static_cast<std::size_t>((N+1)*(N+1)), -1);
+
+    for (int iy = 0; iy <= N; ++iy) {
+        double y = ylo + (yhi - ylo) * iy / N;
+        for (int ix = 0; ix <= N; ++ix) {
+            double x = xlo + (xhi - xlo) * ix / N;
+            // Cz² + (Ex+Fy+I)z + (Ax²+By²+Dxy+Gx+Hy+J) = 0
+            double qa = c.C;
+            double qb = c.E*x + c.F*y + c.I;
+            double qc2 = c.A*x*x + c.B*y*y + c.D*x*y + c.G*x + c.H*y + c.J;
+            double z = std::numeric_limits<double>::quiet_NaN();
+            if (std::abs(qa) < 1e-14) {
+                if (std::abs(qb) > 1e-14) z = -qc2 / qb;
+            } else {
+                double disc = qb*qb - 4.0*qa*qc2;
+                if (disc >= 0.0) {
+                    double sq = std::sqrt(disc);
+                    double z1 = (-qb - sq) / (2.0*qa);
+                    double z2 = (-qb + sq) / (2.0*qa);
+                    if (z1 >= zlo && z1 <= zhi)      z = z1;
+                    else if (z2 >= zlo && z2 <= zhi) z = z2;
+                }
+            }
+            if (!std::isnan(z) && z >= zlo && z <= zhi) {
+                vidx[static_cast<std::size_t>(iy*(N+1)+ix)] =
+                    static_cast<std::int32_t>(local++);
+                verts.push_back(xform_.point_to_world({x, y, z}));
+            }
+        }
+    }
+    for (int iy = 0; iy < N; ++iy) {
+        for (int ix = 0; ix < N; ++ix) {
+            std::int32_t v00 = vidx[static_cast<std::size_t>( iy   *(N+1)+ ix   )];
+            std::int32_t v10 = vidx[static_cast<std::size_t>( iy   *(N+1)+(ix+1))];
+            std::int32_t v01 = vidx[static_cast<std::size_t>((iy+1)*(N+1)+ ix   )];
+            std::int32_t v11 = vidx[static_cast<std::size_t>((iy+1)*(N+1)+(ix+1))];
+            if (v00>=0 && v10>=0 && v01>=0) {
+                indices.push_back(base+static_cast<std::uint32_t>(v00));
+                indices.push_back(base+static_cast<std::uint32_t>(v10));
+                indices.push_back(base+static_cast<std::uint32_t>(v01));
+            }
+            if (v10>=0 && v11>=0 && v01>=0) {
+                indices.push_back(base+static_cast<std::uint32_t>(v10));
+                indices.push_back(base+static_cast<std::uint32_t>(v11));
+                indices.push_back(base+static_cast<std::uint32_t>(v01));
+            }
+        }
+    }
 }
 
 } // namespace scrt::surfaces

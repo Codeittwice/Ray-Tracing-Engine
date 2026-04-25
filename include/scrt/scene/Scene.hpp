@@ -31,6 +31,8 @@ public:
     void build_acceleration_structure();
 
     std::span<const std::unique_ptr<surfaces::Surface>> surfaces()  const;
+    /// Non-const span over materials — for live parameter editing in the viewer.
+    std::span<std::unique_ptr<materials::Material>>       mutable_materials();
     const Receiver*      receiver() const { return receiver_.get(); }
     Receiver*            receiver()       { return receiver_.get(); }
     const sources::SunSource* sun()  const { return sun_.get(); }

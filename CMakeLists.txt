@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(solar_cooker_rt CXX)
+project(solar_cooker_rt C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -14,7 +14,36 @@ find_package(fmt CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(doctest CONFIG REQUIRED)
 find_package(assimp CONFIG REQUIRED)
-# Polyscope, ImGui, ImPlot added in Phase 6.
+
+# ---------- Phase 6: Polyscope (FetchContent — not in vcpkg registry) ----------
+include(FetchContent)
+
+FetchContent_Declare(polyscope
+    GIT_REPOSITORY https://github.com/nmwsharp/polyscope.git
+    GIT_TAG        v2.3.0
+    GIT_SHALLOW    TRUE
+)
+# GLM_ENABLE_EXPERIMENTAL required because polyscope uses glm/gtx/dual_quaternion
+add_compile_definitions(GLM_ENABLE_EXPERIMENTAL)
+FetchContent_MakeAvailable(polyscope)
+# vcpkg GLM 1.0.x removed quaternion op/ that polyscope's dual_quaternion uses.
+# Prepend polyscope's own bundled (older) GLM so its source files see the right API.
+target_include_directories(polyscope BEFORE PUBLIC "${polyscope_SOURCE_DIR}/deps/glm")
+
+FetchContent_Declare(implot_fetch
+    GIT_REPOSITORY https://github.com/epezent/implot.git
+    GIT_TAG        v0.17
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(implot_fetch)
+
+# Build ImPlot against polyscope's bundled ImGui (same translation unit = one context)
+add_library(implot_lib STATIC
+    ${implot_fetch_SOURCE_DIR}/implot.cpp
+    ${implot_fetch_SOURCE_DIR}/implot_items.cpp
+)
+target_include_directories(implot_lib PUBLIC ${implot_fetch_SOURCE_DIR})
+target_link_libraries(implot_lib PRIVATE polyscope)
 
 # ---------- scrt_core (physics core, no GUI) ----------
 add_library(scrt_core STATIC)
@@ -93,7 +122,19 @@ target_compile_definitions(scrt_tests PRIVATE
 include(CTest)
 add_test(NAME scrt_tests COMMAND scrt_tests)
 
-# scrt_viz and scrt_app are added in Phase 6.
+# ---------- scrt_viz (visualization, depends on Polyscope + ImPlot) ----------
+add_library(scrt_viz STATIC
+    src/viz/Viewer.cpp
+    src/viz/RayRenderer.cpp
+    src/viz/FluxPlotter.cpp
+)
+target_link_libraries(scrt_viz PUBLIC scrt_core polyscope implot_lib)
+set_project_warnings(scrt_viz)
+
+# ---------- scrt_app (desktop entry point) ----------
+add_executable(scrt_app app/main.cpp)
+target_link_libraries(scrt_app PRIVATE scrt_viz)
+set_project_warnings(scrt_app)
 
 # ---------- Documentation (Doxygen → HTML + LaTeX/PDF) ----------
 find_package(Doxygen OPTIONAL_COMPONENTS dot)

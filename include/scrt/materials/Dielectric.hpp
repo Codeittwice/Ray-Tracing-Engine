@@ -19,6 +19,9 @@ public:
     double n()              const { return n_; }
     double absorption()     const { return alpha_; }
 
+    void set_n(double n)             noexcept { n_ = n; }
+    void set_absorption(double alpha) noexcept { alpha_ = alpha; }
+
 private:
     double n_;
     double alpha_;

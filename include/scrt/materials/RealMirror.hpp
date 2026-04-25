@@ -16,6 +16,9 @@ public:
     double reflectance()    const { return rho_; }
     double slope_error()    const { return slope_error_; }
 
+    void set_reflectance(double r)       noexcept { rho_ = r; }
+    void set_slope_error_mrad(double s)  noexcept { slope_error_ = s; }
+
 private:
     double rho_;
     double slope_error_;  ///< 1-sigma in mrad.
