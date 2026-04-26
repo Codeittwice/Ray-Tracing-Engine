@@ -96,6 +96,26 @@ TEST_CASE("T11: parabolic_dish.json loads and produces positive receiver flux") 
     CHECK(acc.total_power_w() > 0.0);
 }
 
+TEST_CASE("T11: fresnel_lens_cooker traces without crash") {
+    auto path = std::filesystem::path(SCRT_SOURCE_DIR) / "examples" / "fresnel_lens_cooker.json";
+    REQUIRE(std::filesystem::exists(path));
+
+    scrt::io::LoadedScene ls = scrt::io::load_scene(path);
+    REQUIRE(ls.scene != nullptr);
+
+    ls.cfg.n_primary_rays = 500;
+    ls.cfg.rng_seed       = 42;
+    ls.cfg.num_threads    = 1;  // serial for determinism
+
+    const auto& ra = ls.scene->receiver()->accumulator();
+    scrt::tracer::FluxAccumulator acc(ra.half_width(), ra.half_height(), ra.nx(), ra.ny());
+    scrt::tracer::Tracer tracer(*ls.scene);
+    auto result = tracer.run(ls.cfg, acc);
+
+    CHECK(result.primary_rays_traced == 500);
+    CHECK(acc.total_power_w() >= 0.0);
+}
+
 TEST_CASE("T11: all example scenes load without error") {
     const char* files[] = {
         "parabolic_dish.json",

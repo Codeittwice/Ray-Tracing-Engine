@@ -20,7 +20,7 @@ Follow `SolarCookerRayTracer_Plan.md` exactly. That document specifies:
 - If unsure about a design decision, ask the user before coding.
 
 ## Current phase
-Phase 6 — Complete. Phase 7 awaiting approval.
+Phase 7 — Complete. All phases done.
 
 ## Platform
 Windows 10/11, MSVC (VS 2025, v18) x64, CMake 4.x, Ninja generator, vcpkg at C:\dev\vcpkg in manifest mode. CMakePresets.json encodes MSVC/SDK paths (INCLUDE, LIB, PATH, compiler) so cmake --preset debug works from any shell without needing a Developer Command Prompt.

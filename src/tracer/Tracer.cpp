@@ -42,8 +42,9 @@ void Tracer::trace_one(core::Ray r, FluxAccumulator& acc, math::Rng& rng,
                 r = inter.transmitted;
                 break;
             case materials::InteractionKind::Split:
-                trace_one(inter.reflected, acc, rng, path, max_bounces,
-                          power_cutoff, hit_count);
+                if (inter.reflected.power >= power_cutoff)
+                    trace_one(inter.reflected, acc, rng, path, max_bounces,
+                              power_cutoff, hit_count);
                 r = inter.transmitted;
                 break;
         }

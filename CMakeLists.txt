@@ -99,6 +99,11 @@ target_sources(scrt_core PRIVATE
     src/tracer/Tracer.cpp
 )
 
+# ---------- Phase 7 sources ----------
+target_sources(scrt_core PRIVATE
+    src/sources/Buie.cpp
+)
+
 # ---------- scrt_tests ----------
 enable_testing()
 add_executable(scrt_tests)

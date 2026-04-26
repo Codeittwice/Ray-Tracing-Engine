@@ -11,6 +11,7 @@
 #include "scrt/scene/Aperture.hpp"
 #include "scrt/scene/Receiver.hpp"
 #include "scrt/scene/Scene.hpp"
+#include "scrt/sources/Buie.hpp"
 #include "scrt/sources/Pillbox.hpp"
 #include "scrt/surfaces/GeneralQuadric.hpp"
 #include "scrt/surfaces/Paraboloid.hpp"
@@ -142,10 +143,20 @@ LoadedScene load_scene(const std::filesystem::path& path) {
                 double se  = mj.value("slope_error_mrad", 0.0);
                 mat = std::make_unique<materials::RealMirror>(rho, se);
             } else if (type == "dielectric") {
-                require(mj.contains("n"), "dielectric material missing 'n'");
-                double n     = mj["n"].get<double>();
+                double n     = mj.value("n", 1.5);
                 double alpha = mj.value("absorption_per_m", 0.0);
-                mat = std::make_unique<materials::Dielectric>(n, alpha);
+                auto di = std::make_unique<materials::Dielectric>(n, alpha);
+                if (mj.contains("sellmeier")) {
+                    std::string preset = mj["sellmeier"].get<std::string>();
+                    if (preset == "bk7")
+                        di->set_sellmeier(materials::SellmeierCoeffs::bk7());
+                    else if (preset == "fused_silica")
+                        di->set_sellmeier(materials::SellmeierCoeffs::fused_silica());
+                    else
+                        throw std::runtime_error(
+                            "SceneLoader: unknown Sellmeier preset '" + preset + "'");
+                }
+                mat = std::move(di);
             } else if (type == "absorber") {
                 mat = std::make_unique<materials::Absorber>();
             } else {
@@ -163,10 +174,17 @@ LoadedScene load_scene(const std::filesystem::path& path) {
         const json& sj = s["sun"];
         require(sj.contains("sunshape"), "sun missing 'sunshape'");
         std::string shape_type = sj["sunshape"].value("type", "pillbox");
-        require(shape_type == "pillbox",
-                "only 'pillbox' sunshape is supported in Phase 4; got '" + shape_type + "'");
-        double ha_mrad = sj["sunshape"].value("half_angle_mrad", 4.65);
-        auto sun = std::make_unique<sources::Pillbox>(ha_mrad * 1e-3);
+        std::unique_ptr<sources::SunSource> sun;
+        if (shape_type == "pillbox") {
+            double ha_mrad = sj["sunshape"].value("half_angle_mrad", 4.65);
+            sun = std::make_unique<sources::Pillbox>(ha_mrad * 1e-3);
+        } else if (shape_type == "buie") {
+            double chi = sj["sunshape"].value("chi", 0.05);
+            sun = std::make_unique<sources::Buie>(chi);
+        } else {
+            throw std::runtime_error(
+                "SceneLoader: unknown sunshape type '" + shape_type + "'");
+        }
         sun->set_sun_direction(math::safe_normalize(read_vec3(sj, "direction")));
         sun->set_dni(sj.value("dni_wm2", 1000.0));
         scene->set_sun(std::move(sun));

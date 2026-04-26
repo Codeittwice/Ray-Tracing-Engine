@@ -6,11 +6,24 @@ namespace scrt::materials {
 Dielectric::Dielectric(double n, double absorption_per_m)
     : n_(n), alpha_(absorption_per_m) {}
 
+double Dielectric::n_at(double wavelength_nm) const {
+    if (!sellmeier_) return n_;
+    const auto& s = *sellmeier_;
+    double lam_um = wavelength_nm * 1e-3;       // nm → µm
+    double l2     = lam_um * lam_um;
+    double n2     = 1.0
+                  + s.B1 * l2 / (l2 - s.C1)
+                  + s.B2 * l2 / (l2 - s.C2)
+                  + s.B3 * l2 / (l2 - s.C3);
+    return std::sqrt(n2 > 1.0 ? n2 : 1.0);
+}
+
 Interaction Dielectric::interact(const core::Ray& r, const core::Hit& h,
                                  math::Rng& /*rng*/) const {
+    double n_glass = n_at(r.wavelength_nm);
     // front_face=true → entering medium (air→glass), front_face=false → exiting (glass→air)
-    double n1 = h.front_face ? 1.0 : n_;
-    double n2 = h.front_face ? n_  : 1.0;
+    double n1 = h.front_face ? 1.0    : n_glass;
+    double n2 = h.front_face ? n_glass : 1.0;
 
     // h.normal is already oriented against the incoming ray
     double cos_i = -glm::dot(r.direction, h.normal);  // positive
