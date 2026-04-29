@@ -1,81 +1,62 @@
 {
     "scene": {
         "aperture": {
-            "center": [
-                0.0,
-                0.0,
-                1.0
-            ],
-            "normal": [
-                0.0,
-                0.0,
-                1.0
-            ],
-            "radius": 0.12,
+            "center": [0.0, 0.0, 1.0],
+            "normal": [0.0, 0.0, 1.0],
+            "radius": 0.115,
             "type": "disk"
         },
         "elements": [
             {
                 "material": "glass",
-                "name": "lens_sphere",
+                "name": "fresnel_lens",
                 "surface": {
-                    "radius": 0.15,
-                    "type": "sphere"
+                    "type": "fresnel_zone_lens",
+                    "focal_length_m": 0.3,
+                    "inner_radius_m": 0.005,
+                    "pitch_m": 0.005,
+                    "n_zones": 22,
+                    "n_lens": 1.5
                 },
                 "transform": {
-                    "translation": [
-                        0.0,
-                        0.0,
-                        0.0
-                    ]
+                    "translation": [0.0, 0.0, 0.0]
                 }
             }
         ],
         "materials": [
             {
-                "absorption_per_m": 2.0,
                 "id": "glass",
+                "type": "dielectric",
                 "n": 1.5,
-                "type": "dielectric"
+                "absorption_per_m": 2.0
             }
         ],
-        "name": "Fresnel lens cooker (glass sphere approximation)",
+        "name": "Fresnel zone lens cooker",
         "receiver": {
-            "grid": {
-                "nx": 64,
-                "ny": 64
-            },
+            "grid": {"nx": 64, "ny": 64},
             "surface": {
-                "half_height": 0.06,
+                "type": "plane",
                 "half_width": 0.06,
-                "type": "plane"
+                "half_height": 0.06
             },
             "transform": {
-                "translation": [
-                    0.0,
-                    0.0,
-                    -0.45
-                ]
+                "translation": [0.0, 0.0, -0.3]
             }
         },
         "sun": {
-            "direction": [
-                0.0,
-                0.0,
-                -1.0
-            ],
+            "direction": [0.0, 0.0, -1.0],
             "dni_wm2": 1000.0,
             "sunshape": {
-                "half_angle_mrad": 4.65,
-                "type": "pillbox"
+                "type": "pillbox",
+                "half_angle_mrad": 4.65
             }
         }
     },
     "trace": {
-        "max_bounces": 8,
-        "max_paths_to_record": 500,
         "n_primary_rays": 100000,
+        "max_bounces": 8,
+        "rng_seed": 42,
         "record_paths": false,
-        "rng_seed": 42
+        "max_paths_to_record": 500
     }
 }

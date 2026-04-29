@@ -109,6 +109,11 @@ target_sources(scrt_core PRIVATE
     src/surfaces/CylindricalParaboloid.cpp
 )
 
+# ---------- Item 3: FresnelZoneLens ----------
+target_sources(scrt_core PRIVATE
+    src/surfaces/FresnelZoneLens.cpp
+)
+
 # ---------- scrt_tests ----------
 enable_testing()
 add_executable(scrt_tests)
@@ -125,6 +130,7 @@ target_sources(scrt_tests PRIVATE
     tests/test_paraxial.cpp
     tests/test_scene_io.cpp
     tests/test_dielectric_spectrum.cpp
+    tests/test_fresnel_zone_lens.cpp
 )
 
 target_compile_definitions(scrt_tests PRIVATE

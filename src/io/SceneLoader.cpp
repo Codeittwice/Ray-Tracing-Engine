@@ -14,6 +14,7 @@
 #include "scrt/sources/Buie.hpp"
 #include "scrt/sources/Pillbox.hpp"
 #include "scrt/surfaces/CylindricalParaboloid.hpp"
+#include "scrt/surfaces/FresnelZoneLens.hpp"
 #include "scrt/surfaces/GeneralQuadric.hpp"
 #include "scrt/surfaces/Paraboloid.hpp"
 #include "scrt/surfaces/Plane.hpp"
@@ -97,6 +98,19 @@ std::unique_ptr<surfaces::Surface> parse_surface(const json& sj,
                         bj["max"][1].get<double>(),
                         bj["max"][2].get<double>()};
         return std::make_unique<surfaces::GeneralQuadric>(c, core::AABB{bmin, bmax});
+    }
+    if (type == "fresnel_zone_lens") {
+        require(sj.contains("focal_length_m"),  "fresnel_zone_lens missing 'focal_length_m'");
+        require(sj.contains("inner_radius_m"),  "fresnel_zone_lens missing 'inner_radius_m'");
+        require(sj.contains("pitch_m"),         "fresnel_zone_lens missing 'pitch_m'");
+        require(sj.contains("n_zones"),         "fresnel_zone_lens missing 'n_zones'");
+        require(sj.contains("n_lens"),          "fresnel_zone_lens missing 'n_lens'");
+        return std::make_unique<surfaces::FresnelZoneLens>(
+            sj["focal_length_m"].get<double>(),
+            sj["inner_radius_m"].get<double>(),
+            sj["pitch_m"].get<double>(),
+            sj["n_zones"].get<int>(),
+            sj["n_lens"].get<double>());
     }
     if (type == "cylindrical_paraboloid") {
         require(sj.contains("focal_length_m"),         "cylindrical_paraboloid missing 'focal_length_m'");
