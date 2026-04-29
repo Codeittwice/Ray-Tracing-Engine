@@ -131,6 +131,7 @@ target_sources(scrt_tests PRIVATE
     tests/test_scene_io.cpp
     tests/test_dielectric_spectrum.cpp
     tests/test_fresnel_zone_lens.cpp
+    tests/test_compare.cpp
 )
 
 target_compile_definitions(scrt_tests PRIVATE
@@ -138,6 +139,11 @@ target_compile_definitions(scrt_tests PRIVATE
 
 include(CTest)
 add_test(NAME scrt_tests COMMAND scrt_tests)
+
+# ---------- scrt_compare (headless multi-scene comparison, no GUI) ----------
+add_executable(scrt_compare app/compare_main.cpp)
+target_link_libraries(scrt_compare PRIVATE scrt_core)
+set_project_warnings(scrt_compare)
 
 # ---------- scrt_viz (visualization, depends on Polyscope + ImPlot) ----------
 add_library(scrt_viz STATIC
