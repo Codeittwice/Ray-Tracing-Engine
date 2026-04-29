@@ -166,6 +166,15 @@ LoadedScene load_scene(const std::filesystem::path& path) {
                         throw std::runtime_error(
                             "SceneLoader: unknown Sellmeier preset '" + preset + "'");
                 }
+                if (mj.contains("alpha_spectrum")) {
+                    std::vector<std::pair<double,double>> spec;
+                    for (const auto& pt : mj["alpha_spectrum"]) {
+                        require(pt.is_array() && pt.size() == 2,
+                                "alpha_spectrum entry must be [wavelength_nm, alpha_per_m]");
+                        spec.push_back({pt[0].get<double>(), pt[1].get<double>()});
+                    }
+                    di->set_alpha_spectrum(std::move(spec));
+                }
                 mat = std::move(di);
             } else if (type == "absorber") {
                 mat = std::make_unique<materials::Absorber>();

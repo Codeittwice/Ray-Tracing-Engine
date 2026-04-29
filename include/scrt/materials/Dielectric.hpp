@@ -4,6 +4,8 @@
 #include "scrt/optics/Reflect.hpp"
 #include "scrt/optics/Refract.hpp"
 #include <optional>
+#include <utility>
+#include <vector>
 
 namespace scrt::materials {
 
@@ -48,10 +50,20 @@ public:
     /// Refractive index at the given wavelength (nm).  Falls back to n_ if no Sellmeier set.
     double n_at(double wavelength_nm) const;
 
+    /// Replace the scalar absorption coefficient with a piecewise-linear spectrum.
+    /// @param spec  Pairs of (wavelength_nm, alpha_per_m), any order; sorted internally.
+    void set_alpha_spectrum(std::vector<std::pair<double,double>> spec);
+    bool has_alpha_spectrum() const { return !alpha_spectrum_.empty(); }
+
+    /// Beer-Lambert coefficient (m⁻¹) at the given wavelength.
+    /// Linearly interpolates the spectrum if set; otherwise returns the scalar alpha.
+    double alpha_at(double wavelength_nm) const;
+
 private:
     double n_;
     double alpha_;
-    std::optional<SellmeierCoeffs> sellmeier_;
+    std::optional<SellmeierCoeffs>          sellmeier_;
+    std::vector<std::pair<double,double>>   alpha_spectrum_;  ///< Sorted by wavelength_nm.
 };
 
 } // namespace scrt::materials

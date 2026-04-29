@@ -1,10 +1,32 @@
 #include "scrt/materials/Dielectric.hpp"
+#include <algorithm>
 #include <cmath>
 
 namespace scrt::materials {
 
 Dielectric::Dielectric(double n, double absorption_per_m)
     : n_(n), alpha_(absorption_per_m) {}
+
+void Dielectric::set_alpha_spectrum(std::vector<std::pair<double,double>> spec) {
+    std::sort(spec.begin(), spec.end());
+    alpha_spectrum_ = std::move(spec);
+}
+
+double Dielectric::alpha_at(double wavelength_nm) const {
+    if (alpha_spectrum_.empty())
+        return alpha_;
+    if (wavelength_nm <= alpha_spectrum_.front().first)
+        return alpha_spectrum_.front().second;
+    if (wavelength_nm >= alpha_spectrum_.back().first)
+        return alpha_spectrum_.back().second;
+    // Binary search for the upper bracket node.
+    auto it = std::lower_bound(alpha_spectrum_.begin(), alpha_spectrum_.end(),
+                               std::make_pair(wavelength_nm, 0.0));
+    const auto& hi = *it;
+    const auto& lo = *std::prev(it);
+    double t = (wavelength_nm - lo.first) / (hi.first - lo.first);
+    return lo.second + t * (hi.second - lo.second);
+}
 
 double Dielectric::n_at(double wavelength_nm) const {
     if (!sellmeier_) return n_;
@@ -45,9 +67,10 @@ Interaction Dielectric::interact(const core::Ray& r, const core::Hit& h,
     auto fr = optics::fresnel_unpolarized(cos_i, cos_t, n1, n2);
 
     // Apply Beer-Lambert along the path already travelled inside the glass (on exit)
-    double p = r.power;
-    if (!h.front_face && alpha_ > 0.0)
-        p *= std::exp(-alpha_ * h.t);
+    double p     = r.power;
+    double alpha = alpha_at(r.wavelength_nm);
+    if (!h.front_face && alpha > 0.0)
+        p *= std::exp(-alpha * h.t);
 
     Interaction ia;
     ia.kind = InteractionKind::Split;

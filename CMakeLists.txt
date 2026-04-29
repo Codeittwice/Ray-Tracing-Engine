@@ -124,6 +124,7 @@ target_sources(scrt_tests PRIVATE
     tests/test_sun.cpp
     tests/test_paraxial.cpp
     tests/test_scene_io.cpp
+    tests/test_dielectric_spectrum.cpp
 )
 
 target_compile_definitions(scrt_tests PRIVATE
