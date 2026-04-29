@@ -104,6 +104,11 @@ target_sources(scrt_core PRIVATE
     src/sources/Buie.cpp
 )
 
+# ---------- Item 1: CylindricalParaboloid ----------
+target_sources(scrt_core PRIVATE
+    src/surfaces/CylindricalParaboloid.cpp
+)
+
 # ---------- scrt_tests ----------
 enable_testing()
 add_executable(scrt_tests)

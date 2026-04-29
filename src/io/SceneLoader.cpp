@@ -13,6 +13,7 @@
 #include "scrt/scene/Scene.hpp"
 #include "scrt/sources/Buie.hpp"
 #include "scrt/sources/Pillbox.hpp"
+#include "scrt/surfaces/CylindricalParaboloid.hpp"
 #include "scrt/surfaces/GeneralQuadric.hpp"
 #include "scrt/surfaces/Paraboloid.hpp"
 #include "scrt/surfaces/Plane.hpp"
@@ -96,6 +97,15 @@ std::unique_ptr<surfaces::Surface> parse_surface(const json& sj,
                         bj["max"][1].get<double>(),
                         bj["max"][2].get<double>()};
         return std::make_unique<surfaces::GeneralQuadric>(c, core::AABB{bmin, bmax});
+    }
+    if (type == "cylindrical_paraboloid") {
+        require(sj.contains("focal_length_m"),         "cylindrical_paraboloid missing 'focal_length_m'");
+        require(sj.contains("aperture_half_width_m"),  "cylindrical_paraboloid missing 'aperture_half_width_m'");
+        require(sj.contains("aperture_half_length_m"), "cylindrical_paraboloid missing 'aperture_half_length_m'");
+        return std::make_unique<surfaces::CylindricalParaboloid>(
+            sj["focal_length_m"].get<double>(),
+            sj["aperture_half_width_m"].get<double>(),
+            sj["aperture_half_length_m"].get<double>());
     }
     if (type == "mesh") {
         require(sj.contains("path"), "mesh surface missing 'path'");

@@ -1,0 +1,64 @@
+{
+    "scene": {
+        "name": "Parabolic trough concentrator",
+        "aperture": {
+            "type": "disk",
+            "center": [0.0, 0.0, 1.5],
+            "normal": [0.0, 0.0, 1.0],
+            "radius": 0.25
+        },
+        "sun": {
+            "direction": [0.0, 0.0, -1.0],
+            "dni_wm2": 1000.0,
+            "sunshape": {
+                "type": "pillbox",
+                "half_angle_mrad": 4.65
+            }
+        },
+        "materials": [
+            {
+                "id": "mirror_trough",
+                "type": "real_mirror",
+                "reflectance": 0.92,
+                "slope_error_mrad": 1.5
+            },
+            {
+                "id": "absorber",
+                "type": "absorber"
+            }
+        ],
+        "elements": [
+            {
+                "name": "trough",
+                "material": "mirror_trough",
+                "surface": {
+                    "type": "cylindrical_paraboloid",
+                    "focal_length_m": 0.3,
+                    "aperture_half_width_m": 0.25,
+                    "aperture_half_length_m": 0.5
+                },
+                "transform": {
+                    "translation": [0.0, 0.0, 0.0]
+                }
+            }
+        ],
+        "receiver": {
+            "surface": {
+                "type": "plane",
+                "half_width": 0.02,
+                "half_height": 0.5
+            },
+            "transform": {
+                "translation": [0.0, 0.0, 0.3]
+            },
+            "grid": {"nx": 64, "ny": 64}
+        }
+    },
+    "trace": {
+        "n_primary_rays": 200000,
+        "max_bounces": 8,
+        "rng_seed": 42,
+        "record_paths": false,
+        "max_paths_to_record": 500
+    }
+}
