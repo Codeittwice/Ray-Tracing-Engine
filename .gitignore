@@ -25,7 +25,9 @@ desktop.ini
 
 # Runtime outputs
 results/
+dist/
 *.log
+*.zip
 *.png
 *.polyscope.ini
 imgui.ini

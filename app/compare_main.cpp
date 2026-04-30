@@ -10,18 +10,21 @@
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
-        std::cerr << "Usage: scrt_compare scene1.json [scene2.json ...] [--rays N] [--out summary.csv]\n";
+        std::cerr << "Usage: scrt_compare scene1.json [scene2.json ...] [--rays N] [--dni D] [--out summary.csv]\n";
         return 1;
     }
 
     std::vector<std::filesystem::path> scene_paths;
     std::size_t                        n_rays_override = 0;
+    double                             dni_override    = 0.0;
     std::filesystem::path              out_path        = "summary.csv";
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--rays" && i + 1 < argc) {
             n_rays_override = std::stoull(argv[++i]);
+        } else if (arg == "--dni" && i + 1 < argc) {
+            dni_override = std::stod(argv[++i]);
         } else if (arg == "--out" && i + 1 < argc) {
             out_path = argv[++i];
         } else {
@@ -50,6 +53,9 @@ int main(int argc, char* argv[]) {
 
             if (n_rays_override > 0)
                 ls.cfg.n_primary_rays = n_rays_override;
+
+            if (dni_override > 0.0 && ls.scene->sun())
+                ls.scene->sun()->set_dni(dni_override);
 
             auto* recv = ls.scene->receiver();
             if (!recv)
