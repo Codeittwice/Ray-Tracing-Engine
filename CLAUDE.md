@@ -1,7 +1,7 @@
 # Project: Solar Cooker Ray Tracer (C++ / CMake / vcpkg)
 
 ## Source of truth
-Follow `SolarCookerRayTracer_Plan.md` exactly. That document specifies:
+Follow `docs/plans/SolarCookerRayTracer_Plan.md` exactly. That document specifies:
 - Repository layout (Section 1)
 - Dependencies and vcpkg manifest (Section 2)
 - Build configuration (Section 3)
