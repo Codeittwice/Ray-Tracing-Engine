@@ -1,6 +1,6 @@
 {
     "scene": {
-        "name": "Box cooker (Milikias-style, 3 reflectors)",
+        "name": "Panel cooker (CooKit-inspired, 4 flat reflectors)",
         "sun": {
             "direction": [0.0, 0.0, -1.0],
             "dni_wm2": 1000.0,
@@ -19,13 +19,13 @@
             {
                 "id": "foil_mirror",
                 "type": "real_mirror",
-                "reflectance": 0.88,
-                "slope_error_mrad": 3.0
+                "reflectance": 0.85,
+                "slope_error_mrad": 4.0
             }
         ],
         "elements": [
             {
-                "name": "back_reflector",
+                "name": "back_panel",
                 "material": "foil_mirror",
                 "surface": {
                     "type": "plane",
@@ -34,41 +34,54 @@
                 },
                 "transform": {
                     "rotation_euler_deg": [67.5, 0.0, 0.0],
-                    "translation": [0.0, 0.35, 0.25]
+                    "translation": [0.0, 0.35, 0.35]
                 }
             },
             {
-                "name": "east_reflector",
+                "name": "left_wing",
                 "material": "foil_mirror",
                 "surface": {
                     "type": "plane",
                     "half_width": 0.25,
-                    "half_height": 0.25
-                },
-                "transform": {
-                    "rotation_euler_deg": [0.0, -67.5, 0.0],
-                    "translation": [0.35, 0.0, 0.25]
-                }
-            },
-            {
-                "name": "west_reflector",
-                "material": "foil_mirror",
-                "surface": {
-                    "type": "plane",
-                    "half_width": 0.25,
-                    "half_height": 0.25
+                    "half_height": 0.20
                 },
                 "transform": {
                     "rotation_euler_deg": [0.0, 67.5, 0.0],
-                    "translation": [-0.35, 0.0, 0.25]
+                    "translation": [-0.35, 0.0, 0.35]
+                }
+            },
+            {
+                "name": "right_wing",
+                "material": "foil_mirror",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.25,
+                    "half_height": 0.20
+                },
+                "transform": {
+                    "rotation_euler_deg": [0.0, -67.5, 0.0],
+                    "translation": [0.35, 0.0, 0.35]
+                }
+            },
+            {
+                "name": "front_flap",
+                "material": "foil_mirror",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.20,
+                    "half_height": 0.20
+                },
+                "transform": {
+                    "rotation_euler_deg": [-67.5, 0.0, 0.0],
+                    "translation": [0.0, -0.35, 0.25]
                 }
             }
         ],
         "receiver": {
             "surface": {
                 "type": "plane",
-                "half_width": 0.15,
-                "half_height": 0.15
+                "half_width": 0.10,
+                "half_height": 0.10
             },
             "grid": {
                 "nx": 32,
@@ -81,9 +94,9 @@
     },
     "trace": {
         "n_primary_rays": 100000,
-        "max_bounces": 4,
+        "max_bounces": 3,
         "record_paths": false,
         "max_paths_to_record": 200,
-        "rng_seed": 7
+        "rng_seed": 13
     }
 }
