@@ -33,9 +33,12 @@ public:
     std::span<const std::unique_ptr<surfaces::Surface>> surfaces()  const;
     /// Non-const span over materials — for live parameter editing in the viewer.
     std::span<std::unique_ptr<materials::Material>>       mutable_materials();
+    /// Non-const span over surfaces — for live transform editing in the viewer.
+    std::span<std::unique_ptr<surfaces::Surface>>         mutable_surfaces();
     const Receiver*      receiver() const { return receiver_.get(); }
     Receiver*            receiver()       { return receiver_.get(); }
     const sources::SunSource* sun()  const { return sun_.get(); }
+          sources::SunSource* sun()        { return sun_.get(); }
     const Aperture&      aperture()  const { return aperture_; }
 
     /// World-space closest-hit across all surfaces + receiver.

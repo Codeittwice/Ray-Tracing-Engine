@@ -1,13 +1,17 @@
 #include "scrt/viz/Viewer.hpp"
 #include "scrt/viz/FluxPlotter.hpp"
 #include "scrt/viz/RayRenderer.hpp"
+#include "scrt/core/Transform.hpp"
+#include "scrt/io/SceneLoader.hpp"
 #include "scrt/materials/Dielectric.hpp"
 #include "scrt/materials/RealMirror.hpp"
+#include "scrt/math/Constants.hpp"
 #include "scrt/scene/Aperture.hpp"
 #include "scrt/scene/Receiver.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -29,12 +33,117 @@ void Viewer::set_scene(scene::Scene* s) {
     }
 }
 
+// ---- set_examples_dir --------------------------------------------------------
+
+void Viewer::set_examples_dir(std::filesystem::path dir) {
+    examples_dir_ = std::move(dir);
+    scan_examples_dir();
+}
+
+// ---- scan_examples_dir -------------------------------------------------------
+
+void Viewer::scan_examples_dir() {
+    available_scenes_.clear();
+    scene_display_names_.clear();
+    if (!std::filesystem::exists(examples_dir_)) return;
+    for (const auto& e : std::filesystem::directory_iterator(examples_dir_))
+        if (e.path().extension() == ".json")
+            available_scenes_.push_back(e.path());
+    std::sort(available_scenes_.begin(), available_scenes_.end());
+    for (const auto& p : available_scenes_)
+        scene_display_names_.push_back(p.filename().string());
+}
+
+// ---- load_from_file ----------------------------------------------------------
+
+void Viewer::load_from_file(const std::filesystem::path& path) {
+    auto ls = io::load_scene(path);
+    load_scene_internal(std::move(ls));
+}
+
+// ---- load_scene_internal -----------------------------------------------------
+
+void Viewer::load_scene_internal(io::LoadedScene ls) {
+    ls.scene->build_acceleration_structure();
+    ls.cfg.record_paths        = true;
+    ls.cfg.max_paths_to_record = 200;
+    owned_scene_ = std::make_unique<io::LoadedScene>(std::move(ls));
+
+    traced_       = false;
+    need_retrace_ = false;
+    need_rebuild_ = false;
+
+    polyscope::removeAllStructures();
+    set_scene(owned_scene_->scene.get());
+    cfg_ = owned_scene_->cfg;
+    init_surf_xforms();
+    register_scene();
+    run_trace(10'000);
+}
+
+// ---- init_surf_xforms --------------------------------------------------------
+
+void Viewer::init_surf_xforms() {
+    surf_xforms_.clear();
+    if (!scene_) return;
+    for (const auto& s : scene_->surfaces()) {
+        SurfXformState st;
+        st.base = s->transform();
+        surf_xforms_.push_back(st);
+    }
+    need_rebuild_ = false;
+}
+
+// ---- apply_surf_xform --------------------------------------------------------
+
+void Viewer::apply_surf_xform(std::size_t idx) {
+    auto& st    = surf_xforms_[idx];
+    auto  surfs = scene_->mutable_surfaces();
+    auto& surf  = *surfs[idx];
+
+    auto delta = core::Transform::from_translation(
+                     {static_cast<double>(st.trans[0]),
+                      static_cast<double>(st.trans[1]),
+                      static_cast<double>(st.trans[2])})
+                 .compose(core::Transform::from_euler_xyz(
+                     {static_cast<double>(st.rot_deg[0]) * math::DEG2RAD,
+                      static_cast<double>(st.rot_deg[1]) * math::DEG2RAD,
+                      static_cast<double>(st.rot_deg[2]) * math::DEG2RAD}));
+
+    surf.set_transform(delta.compose(st.base));
+
+    std::vector<math::vec3>    verts;
+    std::vector<std::uint32_t> indices;
+    surf.tessellate(32, verts, indices);
+
+    if (!verts.empty() && indices.size() >= 3) {
+        std::vector<std::array<double, 3>>        pv;
+        std::vector<std::array<std::uint32_t, 3>> pf;
+        pv.reserve(verts.size());
+        for (const auto& v : verts) pv.push_back({v.x, v.y, v.z});
+        pf.reserve(indices.size() / 3);
+        for (std::size_t k = 0; k + 2 < indices.size(); k += 3)
+            pf.push_back({indices[k], indices[k + 1], indices[k + 2]});
+        std::string name = surf.name().empty()
+            ? "surface_" + std::to_string(idx) : surf.name();
+        polyscope::registerSurfaceMesh(name, pv, pf);
+    }
+
+    need_rebuild_ = true;
+    need_retrace_ = true;
+}
+
 // ---- run_trace ---------------------------------------------------------------
 
 void Viewer::run_trace(std::size_t n_rays) {
     if (!scene_) return;
     auto* recv = scene_->receiver();
     if (!recv) return;
+
+    if (need_rebuild_) {
+        scene_->build_acceleration_structure();
+        need_rebuild_ = false;
+    }
 
     // Fresh accumulator (zeroed) for this run
     auto& ra = recv->accumulator();
@@ -123,12 +232,81 @@ void Viewer::update_receiver_flux() {
     q->setEnabled(true);
 }
 
+// ---- draw_scene_browser ------------------------------------------------------
+
+void Viewer::draw_scene_browser() {
+    if (!ImGui::CollapsingHeader("Scene Browser")) return;
+    if (available_scenes_.empty()) {
+        ImGui::TextDisabled("No example scenes found.");
+        return;
+    }
+
+    std::vector<const char*> names;
+    names.reserve(scene_display_names_.size());
+    for (const auto& n : scene_display_names_)
+        names.push_back(n.c_str());
+
+    ImGui::SetNextItemWidth(-1);
+    ImGui::ListBox("##scenes", &selected_scene_idx_,
+                   names.data(), static_cast<int>(names.size()), 6);
+
+    if (!load_error_.empty())
+        ImGui::TextColored({1.0f, 0.3f, 0.3f, 1.0f}, "%s", load_error_.c_str());
+
+    ImGui::BeginDisabled(selected_scene_idx_ < 0);
+    if (ImGui::Button("Load selected scene", ImVec2(-1, 0))) {
+        load_error_.clear();
+        try {
+            load_from_file(available_scenes_[static_cast<std::size_t>(selected_scene_idx_)]);
+        } catch (const std::exception& e) {
+            load_error_ = e.what();
+        }
+    }
+    ImGui::EndDisabled();
+}
+
+// ---- draw_transform_editor ---------------------------------------------------
+
+void Viewer::draw_transform_editor() {
+    if (!scene_ || surf_xforms_.empty()) return;
+    if (!ImGui::CollapsingHeader("Transforms")) return;
+
+    auto surfs = scene_->mutable_surfaces();
+    for (std::size_t i = 0; i < surf_xforms_.size(); ++i) {
+        auto& st   = surf_xforms_[i];
+        auto& surf = *surfs[i];
+        ImGui::PushID(static_cast<int>(i));
+
+        std::string surf_name = surf.name().empty()
+            ? "surface_" + std::to_string(i) : surf.name();
+        ImGui::Text("%s", surf_name.c_str());
+        ImGui::Indent();
+
+        bool changed = false;
+        changed |= ImGui::DragFloat3("Translate (m)", st.trans,   0.001f, -5.f, 5.f,    "%.3f");
+        changed |= ImGui::DragFloat3("Rotate (deg)",  st.rot_deg, 0.5f,   -180.f, 180.f, "%.1f");
+        if (changed) apply_surf_xform(i);
+
+        if (ImGui::Button("Reset##xf")) {
+            st.trans[0] = st.trans[1] = st.trans[2] = 0.f;
+            st.rot_deg[0] = st.rot_deg[1] = st.rot_deg[2] = 0.f;
+            apply_surf_xform(i);
+        }
+        ImGui::Unindent();
+        ImGui::PopID();
+        ImGui::Separator();
+    }
+}
+
 // ---- draw_gui ----------------------------------------------------------------
 
 void Viewer::draw_gui() {
-    ImGui::SetNextWindowSize(ImVec2(300, 560), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(300, 720), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
     ImGui::Begin("Solar Cooker RT");
+
+    draw_scene_browser();
+    draw_transform_editor();
 
     // ---- Scene --
     if (ImGui::CollapsingHeader("Scene", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -232,16 +410,17 @@ void Viewer::run() {
     polyscope::init();
     ImPlot::CreateContext();
 
+    init_surf_xforms();
     register_scene();
 
     // Quick preview
-    auto prev_cfg      = cfg_;
-    prev_cfg.n_primary_rays = 10'000;
-    prev_cfg.record_paths   = true;
+    auto prev_cfg                = cfg_;
+    prev_cfg.n_primary_rays      = 10'000;
+    prev_cfg.record_paths        = true;
     prev_cfg.max_paths_to_record = 200;
-    cfg_               = prev_cfg;
+    cfg_                         = prev_cfg;
     run_trace(10'000);
-    cfg_               = prev_cfg; // restore from scene file
+    cfg_                         = prev_cfg;
 
     polyscope::state::userCallback = [this]() { draw_gui(); };
     polyscope::show();

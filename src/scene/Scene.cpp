@@ -30,6 +30,10 @@ std::span<std::unique_ptr<materials::Material>> Scene::mutable_materials() {
     return materials_;
 }
 
+std::span<std::unique_ptr<surfaces::Surface>> Scene::mutable_surfaces() {
+    return surfaces_;
+}
+
 bool Scene::intersect(const core::Ray& r, double t_min, double t_max,
                       core::Hit& hit) const {
     bool   found  = false;
