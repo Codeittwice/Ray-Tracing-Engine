@@ -29,6 +29,24 @@ ctest --test-dir build/debug --output-on-failure
 
 Opens a Polyscope GUI showing the scene geometry, traced rays and the flux heatmap on the receiver.
 
+### Switching scenes without restarting
+
+The GUI has a **Scene Browser** panel (top of the left sidebar).  Pass `--examples-dir` to populate it with any folder of JSON files, then click a name and hit **"Load selected scene"** to swap in-place.
+
+```powershell
+# Browse all 49 compact optimisation scenes in-app
+.\build\debug\scrt_app.exe results\compact_study\scenes\A_r020.json `
+    --examples-dir results\compact_study\scenes
+
+# Browse the standard examples
+.\build\debug\scrt_app.exe examples\panel_cooker_12.json `
+    --examples-dir examples
+```
+
+Loading triggers a 10 k-ray preview automatically.  Hit **Full Trace** in the Trace panel for the full run.
+
+### All flags
+
 ```powershell
 # Open a specific scene
 .\build\debug\scrt_app.exe examples\panel_cooker_12.json
