@@ -237,6 +237,12 @@ def eta(power_w: float, dni: float = 1000.0) -> float:
     return power_w / (dni * APERTURE_AREA) * 100.0
 
 
+def hw_for_ring(r: float, n: int = 12) -> float:
+    """Half-width for gap-free tiling: panel edge just reaches the midpoint between
+    adjacent panel centres.  hw = r * tan(π/n)."""
+    return r * math.tan(math.pi / n)
+
+
 def mirror_area_cm2(hw: float, hh: float) -> float:
     return 12 * 4 * hw * hh * 1e4
 
@@ -277,35 +283,37 @@ def main() -> None:
         sys.exit(1)
 
     # Shared defaults
-    DEFAULT_HW     = 0.05
     DEFAULT_HH     = 0.10
     DEFAULT_RECV   = 0.05
     DEFAULT_ZRECV  = 0.0
 
-    HDR_A = (f"{'Scene':<22} {'r':>6} {'h_z':>6} {'tilt':>7} "
+    HDR_A = (f"{'Scene':<22} {'r':>6} {'h_z':>6} {'hw':>7} {'tilt':>7} "
              f"{'mirror cm2':>12} {'fp m':>7} | {'W':>8} {'CR':>7} {'eta%':>7}")
 
     # ====================================================================
     # STUDY A — ring radius  (h_z = r, tilt stays near 67.5 deg)
+    # hw is always derived: hw = r * tan(pi/12)  ->  gap-free ring
     # ====================================================================
     pr(); pr("=" * 90)
-    pr("## Study A — Ring radius  (h_z = r -> tilt ~67.5 deg, hw=0.05 hh=0.10 recv=0.05 m)")
+    pr("## Study A — Ring radius  (h_z = r -> tilt ~67.5 deg, hh=0.10 recv=0.05 m)")
+    pr("   hw derived from r for seamless ring: hw = r * tan(pi/12)")
     pr("=" * 90)
 
     a_scenes: list = []
     a_meta: dict   = {}
     for r in [0.08, 0.10, 0.12, 0.15, 0.18, 0.20]:
         h_z = r
-        fp  = footprint_radius(r, DEFAULT_HH, DEFAULT_HW, h_z, DEFAULT_ZRECV)
+        hw  = hw_for_ring(r)
+        fp  = footprint_radius(r, DEFAULT_HH, hw, h_z, DEFAULT_ZRECV)
         if fp > MAX_HALF_SPAN:
             pr(f"  SKIP A r={r:.2f}: fp={fp:.4f} m")
             continue
         name = f"A_r{int(r * 100):03d}"
-        write_scene(make_scene(r, h_z, DEFAULT_HW, DEFAULT_HH,
+        write_scene(make_scene(r, h_z, hw, DEFAULT_HH,
                                DEFAULT_ZRECV, DEFAULT_RECV, name),
                     SCENES_DIR / f"{name}.json")
         a_scenes.append(str(SCENES_DIR / f"{name}.json"))
-        a_meta[name] = dict(r=r, h_z=h_z, hw=DEFAULT_HW, hh=DEFAULT_HH,
+        a_meta[name] = dict(r=r, h_z=h_z, hw=hw, hh=DEFAULT_HH,
                             fp=fp, tilt=tilt_at_0deg(r, h_z, DEFAULT_ZRECV))
 
     pr(f"  Running {len(a_scenes)} scenes ...")
@@ -316,11 +324,11 @@ def main() -> None:
         ma = mirror_area_cm2(m["hw"], m["hh"])
         if name in a_res:
             v = a_res[name]
-            pr(f"{name:<22} {m['r']:>6.3f} {m['h_z']:>6.3f} {m['tilt']:>7.1f} "
+            pr(f"{name:<22} {m['r']:>6.3f} {m['h_z']:>6.3f} {m['hw']:>7.4f} {m['tilt']:>7.1f} "
                f"{ma:>12.1f} {m['fp']:>7.4f} | "
                f"{v['power_w']:>8.2f} {v['cr']:>7.2f} {eta(v['power_w']):>7.2f}")
         else:
-            pr(f"{name:<22} {m['r']:>6.3f} {m['h_z']:>6.3f} {m['tilt']:>7.1f} "
+            pr(f"{name:<22} {m['r']:>6.3f} {m['h_z']:>6.3f} {m['hw']:>7.4f} {m['tilt']:>7.1f} "
                f"{ma:>12.1f} {m['fp']:>7.4f} | {'---':>8}")
 
     best_a      = a_meta.get(best_by_power(a_res, list(a_meta)), {})
@@ -332,22 +340,24 @@ def main() -> None:
     # STUDY B — tilt angle  (vary h_z with r = BEST_R)
     # ====================================================================
     pr(); pr("=" * 90)
-    pr(f"## Study B — Tilt angle  (r = {BEST_R} m fixed, vary h_z, hw=0.05 hh=0.10 recv=0.05 m)")
+    pr(f"## Study B — Tilt angle  (r = {BEST_R} m fixed, vary h_z, hh=0.10 recv=0.05 m)")
+    pr(f"   hw = hw_for_ring({BEST_R}) = {hw_for_ring(BEST_R):.4f} m  (fixed, seamless ring)")
     pr("=" * 90)
 
     b_scenes: list = []
     b_meta: dict   = {}
+    b_hw = hw_for_ring(BEST_R)
     for h_z in [0.06, 0.08, 0.10, 0.12, 0.15, 0.18, 0.20, 0.25, 0.30]:
-        fp = footprint_radius(BEST_R, DEFAULT_HH, DEFAULT_HW, h_z, DEFAULT_ZRECV)
+        fp = footprint_radius(BEST_R, DEFAULT_HH, b_hw, h_z, DEFAULT_ZRECV)
         if fp > MAX_HALF_SPAN:
             pr(f"  SKIP B h_z={h_z:.2f}: fp={fp:.4f} m")
             continue
         name = f"B_hz{int(h_z * 100):03d}"
-        write_scene(make_scene(BEST_R, h_z, DEFAULT_HW, DEFAULT_HH,
+        write_scene(make_scene(BEST_R, h_z, b_hw, DEFAULT_HH,
                                DEFAULT_ZRECV, DEFAULT_RECV, name),
                     SCENES_DIR / f"{name}.json")
         b_scenes.append(str(SCENES_DIR / f"{name}.json"))
-        b_meta[name] = dict(r=BEST_R, h_z=h_z, hw=DEFAULT_HW, hh=DEFAULT_HH,
+        b_meta[name] = dict(r=BEST_R, h_z=h_z, hw=b_hw, hh=DEFAULT_HH,
                             fp=fp, tilt=tilt_at_0deg(BEST_R, h_z, DEFAULT_ZRECV))
 
     pr(f"  Running {len(b_scenes)} scenes ...")
@@ -358,71 +368,62 @@ def main() -> None:
         ma = mirror_area_cm2(m["hw"], m["hh"])
         if name in b_res:
             v = b_res[name]
-            pr(f"{name:<22} {m['r']:>6.3f} {m['h_z']:>6.3f} {m['tilt']:>7.1f} "
+            pr(f"{name:<22} {m['r']:>6.3f} {m['h_z']:>6.3f} {m['hw']:>7.4f} {m['tilt']:>7.1f} "
                f"{ma:>12.1f} {m['fp']:>7.4f} | "
                f"{v['power_w']:>8.2f} {v['cr']:>7.2f} {eta(v['power_w']):>7.2f}")
         else:
-            pr(f"{name:<22} {m['r']:>6.3f} {m['h_z']:>6.3f} {m['tilt']:>7.1f} "
+            pr(f"{name:<22} {m['r']:>6.3f} {m['h_z']:>6.3f} {m['hw']:>7.4f} {m['tilt']:>7.1f} "
                f"{ma:>12.1f} {m['fp']:>7.4f} | {'---':>8}")
 
     best_b  = b_meta.get(best_by_power(b_res, list(b_meta)), {})
     BEST_HZ = best_b.get("h_z", BEST_HZ)
-    pr(f"\n  --> Best panel height: h_z = {BEST_HZ} m  "
+    pr(f"\n  --> Best tilt: h_z = {BEST_HZ} m  "
        f"tilt = {best_b.get('tilt', 0):.1f} deg")
 
     # ====================================================================
-    # STUDY C — panel size grid  (hw x hh at best r, h_z)
+    # STUDY C — panel height sweep  (only hh varies; hw derived from r)
     # ====================================================================
     pr(); pr("=" * 90)
-    pr(f"## Study C — Panel size  (r = {BEST_R} m, h_z = {BEST_HZ} m, recv = 0.05 m)")
+    pr(f"## Study C — Panel height  (r = {BEST_R} m, h_z = {BEST_HZ} m, recv = 0.05 m)")
+    c_hw = hw_for_ring(BEST_R)
+    pr(f"   hw = {c_hw:.4f} m (derived, seamless ring)  —  only panel height hh is varied")
     pr("=" * 90)
 
-    HWS = [0.04, 0.05, 0.06, 0.07]
-    HHS = [0.06, 0.08, 0.10, 0.12]
+    HHS = [0.06, 0.08, 0.10, 0.12, 0.14, 0.16, 0.18, 0.20]
     c_scenes: list = []
     c_meta: dict   = {}
-    for hw in HWS:
-        for hh in HHS:
-            fp = footprint_radius(BEST_R, hh, hw, BEST_HZ, DEFAULT_ZRECV)
-            if fp > MAX_HALF_SPAN:
-                pr(f"  SKIP C hw={hw} hh={hh}: fp={fp:.4f} m")
-                continue
-            name = f"C_hw{int(hw * 100):02d}_hh{int(hh * 100):02d}"
-            write_scene(make_scene(BEST_R, BEST_HZ, hw, hh,
-                                   DEFAULT_ZRECV, DEFAULT_RECV, name),
-                        SCENES_DIR / f"{name}.json")
-            c_scenes.append(str(SCENES_DIR / f"{name}.json"))
-            c_meta[name] = dict(r=BEST_R, h_z=BEST_HZ, hw=hw, hh=hh, fp=fp)
+    for hh in HHS:
+        fp = footprint_radius(BEST_R, hh, c_hw, BEST_HZ, DEFAULT_ZRECV)
+        if fp > MAX_HALF_SPAN:
+            pr(f"  SKIP C hh={hh}: fp={fp:.4f} m")
+            continue
+        name = f"C_hh{int(hh * 100):02d}"
+        write_scene(make_scene(BEST_R, BEST_HZ, c_hw, hh,
+                               DEFAULT_ZRECV, DEFAULT_RECV, name),
+                    SCENES_DIR / f"{name}.json")
+        c_scenes.append(str(SCENES_DIR / f"{name}.json"))
+        c_meta[name] = dict(r=BEST_R, h_z=BEST_HZ, hw=c_hw, hh=hh, fp=fp)
 
     pr(f"  Running {len(c_scenes)} scenes ...")
     c_res = run_compare(c_scenes)
 
-    pr()
-    pr("  Power (W) heat-map:")
-    pr(f"  {'hw\\hh':<10}" + "".join(f"{h:>10.2f}" for h in HHS))
-    pr("  " + "-" * (10 + 10 * len(HHS)))
-    for hw in HWS:
-        row = f"  {hw:<10.2f}"
-        for hh in HHS:
-            name = f"C_hw{int(hw*100):02d}_hh{int(hh*100):02d}"
-            row += f"{c_res[name]['power_w']:>10.1f}" if name in c_res else f"{'--':>10}"
-        pr(row)
-
-    pr()
-    pr("  Concentration ratio (CR) heat-map:")
-    pr(f"  {'hw\\hh':<10}" + "".join(f"{h:>10.2f}" for h in HHS))
-    pr("  " + "-" * (10 + 10 * len(HHS)))
-    for hw in HWS:
-        row = f"  {hw:<10.2f}"
-        for hh in HHS:
-            name = f"C_hw{int(hw*100):02d}_hh{int(hh*100):02d}"
-            row += f"{c_res[name]['cr']:>10.2f}" if name in c_res else f"{'--':>10}"
-        pr(row)
+    HDR_C = (f"  {'Scene':<18} {'hh m':>7} {'hw m':>7} {'mirror cm2':>12} {'fp m':>7} | "
+             f"{'W':>8} {'CR':>7} {'eta%':>7}")
+    pr(); pr(HDR_C); pr("  " + "-" * (len(HDR_C) - 2))
+    for name, m in c_meta.items():
+        ma = mirror_area_cm2(m["hw"], m["hh"])
+        if name in c_res:
+            v = c_res[name]
+            pr(f"  {name:<18} {m['hh']:>7.3f} {m['hw']:>7.4f} {ma:>12.1f} {m['fp']:>7.4f} | "
+               f"{v['power_w']:>8.2f} {v['cr']:>7.2f} {eta(v['power_w']):>7.2f}")
+        else:
+            pr(f"  {name:<18} {m['hh']:>7.3f} {m['hw']:>7.4f} {ma:>12.1f} {m['fp']:>7.4f} | "
+               f"{'---':>8}")
 
     best_c   = c_meta.get(best_by_power(c_res, list(c_meta)), {})
-    BEST_HW  = best_c.get("hw", DEFAULT_HW)
+    BEST_HW  = best_c.get("hw", c_hw)
     BEST_HH  = best_c.get("hh", DEFAULT_HH)
-    pr(f"\n  --> Best panel size: hw = {BEST_HW} m, hh = {BEST_HH} m  "
+    pr(f"\n  --> Best panel height: hh = {BEST_HH} m  hw = {BEST_HW:.4f} m  "
        f"({mirror_area_cm2(BEST_HW, BEST_HH):.0f} cm2 total mirror)")
 
     # ====================================================================
@@ -430,7 +431,7 @@ def main() -> None:
     # ====================================================================
     pr(); pr("=" * 90)
     pr(f"## Study D — Receiver distance  (r={BEST_R} h_z={BEST_HZ} "
-       f"hw={BEST_HW} hh={BEST_HH} recv=0.05 m)")
+       f"hw={BEST_HW:.4f} hh={BEST_HH} recv=0.05 m)")
     pr("=" * 90)
 
     d_scenes: list = []
@@ -516,8 +517,8 @@ def main() -> None:
     pr(f"  Ring radius            : {BEST_R:.3f} m")
     pr(f"  Panel center height    : {BEST_HZ:.3f} m")
     pr(f"  Tilt (back panel)      : {tilt_at_0deg(BEST_R, BEST_HZ, BEST_ZRECV):.1f} deg")
-    pr(f"  Panel size (W x H)     : {2*BEST_HW*100:.0f} cm x {2*BEST_HH*100:.0f} cm  "
-       f"per panel")
+    pr(f"  Panel size (W x H)     : {2*BEST_HW*100:.1f} cm x {2*BEST_HH*100:.0f} cm  "
+       f"per panel  (width gap-free derived: r*tan(pi/12))")
     pr(f"  Total mirror area      : {mirror_area_cm2(BEST_HW, BEST_HH):.0f} cm2  "
        f"({12 * 4 * BEST_HW * BEST_HH:.4f} m2)")
     pr(f"  Receiver z-offset      : {BEST_ZRECV:.3f} m")

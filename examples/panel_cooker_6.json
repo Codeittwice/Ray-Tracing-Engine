@@ -41,14 +41,14 @@
                 "material": "foil_mirror",
                 "surface": {
                     "type": "plane",
-                    "half_width": 0.25,
+                    "half_width": 0.202073,
                     "half_height": 0.2
                 },
                 "transform": {
                     "rotation_euler_deg": [
                         67.5,
                         -0.0,
-                        0.0
+                        -0.0
                     ],
                     "translation": [
                         0.0,
@@ -62,7 +62,7 @@
                 "material": "foil_mirror",
                 "surface": {
                     "type": "plane",
-                    "half_width": 0.25,
+                    "half_width": 0.202073,
                     "half_height": 0.2
                 },
                 "transform": {
@@ -83,7 +83,7 @@
                 "material": "foil_mirror",
                 "surface": {
                     "type": "plane",
-                    "half_width": 0.25,
+                    "half_width": 0.202073,
                     "half_height": 0.2
                 },
                 "transform": {
@@ -104,7 +104,7 @@
                 "material": "foil_mirror",
                 "surface": {
                     "type": "plane",
-                    "half_width": 0.25,
+                    "half_width": 0.202073,
                     "half_height": 0.2
                 },
                 "transform": {
@@ -125,7 +125,7 @@
                 "material": "foil_mirror",
                 "surface": {
                     "type": "plane",
-                    "half_width": 0.25,
+                    "half_width": 0.202073,
                     "half_height": 0.2
                 },
                 "transform": {
@@ -146,7 +146,7 @@
                 "material": "foil_mirror",
                 "surface": {
                     "type": "plane",
-                    "half_width": 0.25,
+                    "half_width": 0.202073,
                     "half_height": 0.2
                 },
                 "transform": {
