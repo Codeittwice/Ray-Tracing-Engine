@@ -10,10 +10,17 @@ Configure and compile (first time, or after source changes):
 
 ```powershell
 cmake --preset debug
-cmake --build build/debug
+cmake --build --preset debug
 ```
 
-Binaries land in `build/debug/`.  Use `--preset release` / `--build build/release` for a faster optimised build.
+Binaries land in `build/debug/`.  Use `--preset release` for a faster optimised build.
+
+> **Important — always pass `--preset debug` to the build step too.**
+> `CMakePresets.json` embeds the `INCLUDE`, `LIB`, and `PATH` variables that MSVC
+> needs to find its standard-library headers (e.g. `<cmath>`).  Those variables only
+> apply when you use `cmake --build --preset debug`.  Running the bare
+> `cmake --build build/debug` bypasses the preset environment and causes a fatal
+> `C1083: Cannot open include file: 'cmath'` error.
 
 Run the test suite:
 
