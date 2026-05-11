@@ -1,6 +1,6 @@
 {
     "scene": {
-        "name": "Panel cooker (CooKit-inspired, 4 flat reflectors)",
+        "name": "Panel cooker (circular ring, 8 flat reflectors)",
         "sun": {
             "direction": [
                 0.0,
@@ -37,17 +37,17 @@
         ],
         "elements": [
             {
-                "name": "back_panel",
+                "name": "panel_00_0deg",
                 "material": "foil_mirror",
                 "surface": {
                     "type": "plane",
                     "half_width": 0.25,
-                    "half_height": 0.25
+                    "half_height": 0.2
                 },
                 "transform": {
                     "rotation_euler_deg": [
                         67.5,
-                        0.0,
+                        -0.0,
                         0.0
                     ],
                     "translation": [
@@ -58,7 +58,7 @@
                 }
             },
             {
-                "name": "left_wing",
+                "name": "panel_01_45deg",
                 "material": "foil_mirror",
                 "surface": {
                     "type": "plane",
@@ -67,19 +67,19 @@
                 },
                 "transform": {
                     "rotation_euler_deg": [
-                        0.0,
-                        67.5,
-                        90.0
+                        59.638807,
+                        -40.789471,
+                        -20.941
                     ],
                     "translation": [
-                        -0.35,
-                        0.0,
+                        0.247487,
+                        0.247487,
                         0.35
                     ]
                 }
             },
             {
-                "name": "right_wing",
+                "name": "panel_02_90deg",
                 "material": "foil_mirror",
                 "surface": {
                     "type": "plane",
@@ -100,23 +100,107 @@
                 }
             },
             {
-                "name": "front_flap",
+                "name": "panel_03_135deg",
                 "material": "foil_mirror",
                 "surface": {
                     "type": "plane",
-                    "half_width": 0.2,
+                    "half_width": 0.25,
+                    "half_height": 0.2
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        -59.638807,
+                        -40.789471,
+                        -159.059
+                    ],
+                    "translation": [
+                        0.247487,
+                        -0.247487,
+                        0.35
+                    ]
+                }
+            },
+            {
+                "name": "panel_04_180deg",
+                "material": "foil_mirror",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.25,
                     "half_height": 0.2
                 },
                 "transform": {
                     "rotation_euler_deg": [
                         -67.5,
-                        0.0,
-                        180.0
+                        -0.0,
+                        -180.0
                     ],
                     "translation": [
                         0.0,
                         -0.35,
-                        0.25
+                        0.35
+                    ]
+                }
+            },
+            {
+                "name": "panel_05_225deg",
+                "material": "foil_mirror",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.25,
+                    "half_height": 0.2
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        -59.638807,
+                        40.789471,
+                        159.059
+                    ],
+                    "translation": [
+                        -0.247487,
+                        -0.247487,
+                        0.35
+                    ]
+                }
+            },
+            {
+                "name": "panel_06_270deg",
+                "material": "foil_mirror",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.25,
+                    "half_height": 0.2
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        -0.0,
+                        67.5,
+                        90.0
+                    ],
+                    "translation": [
+                        -0.35,
+                        -0.0,
+                        0.35
+                    ]
+                }
+            },
+            {
+                "name": "panel_07_315deg",
+                "material": "foil_mirror",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.25,
+                    "half_height": 0.2
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        59.638807,
+                        40.789471,
+                        20.941
+                    ],
+                    "translation": [
+                        -0.247487,
+                        0.247487,
+                        0.35
                     ]
                 }
             }

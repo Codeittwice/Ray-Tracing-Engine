@@ -67,26 +67,49 @@ def euler_from_normal(n):
     return math.degrees(pitch), math.degrees(yaw)
 
 
+def compute_roll(pitch_deg: float, yaw_deg: float) -> float:
+    """Roll angle (deg) that keeps all panel base edges horizontal.
+
+    After Rx(pitch)*Ry(yaw)*Rz(roll), the panel width axis (local X) maps to
+    world direction with z-component = sin(roll)*sin(pitch) - cos(roll)*sin(yaw)*cos(pitch).
+    Setting that to zero gives roll = atan2(sin(yaw)*cos(pitch), sin(pitch))."""
+    p = math.radians(pitch_deg)
+    y = math.radians(yaw_deg)
+    return math.degrees(math.atan2(math.sin(y) * math.cos(p), math.sin(p)))
+
+
 def panel_transform(r: float, theta_rad: float, h_z: float, z_recv: float):
-    """Return ((px, py, h_z), pitch_deg, yaw_deg) for one panel."""
+    """Return ((px, py, h_z), pitch_deg, yaw_deg, roll_deg) for one panel."""
     px = r * math.sin(theta_rad)
     py = r * math.cos(theta_rad)
     n  = reflect_normal(px, py, h_z, z_recv)
     pitch, yaw = euler_from_normal(n)
-    return (px, py, h_z), pitch, yaw
+    roll = compute_roll(pitch, yaw)
+    return (px, py, h_z), pitch, yaw, roll
 
 
-def _height_dir(pitch_deg: float):
-    """World-space panel-height direction after Rx(pitch)*Ry(0)."""
-    p = math.radians(pitch_deg)
-    return (0.0, math.cos(p), math.sin(p))
-
-
-def _width_dir(yaw_deg: float, pitch_deg: float):
-    """World-space panel-width direction after Rx(pitch)*Ry(yaw)."""
+def _height_dir(pitch_deg: float, yaw_deg: float, roll_deg: float):
+    """World-space panel-height direction after Rx(pitch)*Ry(yaw)*Rz(roll)."""
     p = math.radians(pitch_deg)
     y = math.radians(yaw_deg)
-    return (math.cos(y), math.sin(p)*math.sin(y), -math.cos(p)*math.sin(y))
+    r = math.radians(roll_deg)
+    return (
+        -math.sin(r) * math.cos(y),
+        math.cos(r) * math.cos(p) - math.sin(r) * math.sin(y) * math.sin(p),
+        math.cos(r) * math.sin(p) + math.sin(r) * math.sin(y) * math.cos(p),
+    )
+
+
+def _width_dir(yaw_deg: float, pitch_deg: float, roll_deg: float):
+    """World-space panel-width direction after Rx(pitch)*Ry(yaw)*Rz(roll)."""
+    p = math.radians(pitch_deg)
+    y = math.radians(yaw_deg)
+    r = math.radians(roll_deg)
+    return (
+        math.cos(r) * math.cos(y),
+        math.sin(r) * math.cos(p) + math.cos(r) * math.sin(y) * math.sin(p),
+        math.sin(r) * math.sin(p) - math.cos(r) * math.sin(y) * math.cos(p),
+    )
 
 
 def footprint_radius(r: float, hh: float, hw: float,
@@ -97,9 +120,9 @@ def footprint_radius(r: float, hh: float, hw: float,
         theta = math.radians(i * 30)
         px = r * math.sin(theta)
         py = r * math.cos(theta)
-        _, pitch, yaw = panel_transform(r, theta, h_z, z_recv)
-        hd = _height_dir(pitch)
-        wd = _width_dir(yaw, pitch)
+        _, pitch, yaw, roll = panel_transform(r, theta, h_z, z_recv)
+        hd = _height_dir(pitch, yaw, roll)
+        wd = _width_dir(yaw, pitch, roll)
         for sh in (+1, -1):
             for sw in (+1, -1):
                 cx = px + sh*hh*hd[0] + sw*hw*wd[0]
@@ -110,7 +133,7 @@ def footprint_radius(r: float, hh: float, hw: float,
 
 def tilt_at_0deg(r: float, h_z: float, z_recv: float) -> float:
     """Pitch angle (deg) for the panel at azimuth 0 (back panel)."""
-    _, pitch, _ = panel_transform(r, 0.0, h_z, z_recv)
+    _, pitch, _yaw, _roll = panel_transform(r, 0.0, h_z, z_recv)
     return pitch
 
 # ---------------------------------------------------------------------------
@@ -122,13 +145,13 @@ def make_scene(r: float, h_z: float, hw: float, hh: float,
     elements = []
     for i in range(12):
         theta = math.radians(i * 30)
-        (px, py, pz), pitch, yaw = panel_transform(r, theta, h_z, z_recv)
+        (px, py, pz), pitch, yaw, roll = panel_transform(r, theta, h_z, z_recv)
         elements.append({
             "name": f"panel_{i:02d}_{i*30}deg",
             "material": "foil_mirror",
             "surface": {"type": "plane", "half_width": hw, "half_height": hh},
             "transform": {
-                "rotation_euler_deg": [round(pitch, 4), round(yaw, 4), 0.0],
+                "rotation_euler_deg": [round(pitch, 4), round(yaw, 4), round(roll, 4)],
                 "translation": [round(px, 6), round(py, 6), round(pz, 6)]
             }
         })

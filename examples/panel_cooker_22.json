@@ -1,0 +1,528 @@
+{
+    "scene": {
+        "name": "Panel cooker (circular ring, 22 flat reflectors)",
+        "sun": {
+            "direction": [
+                0.0,
+                0.0,
+                -1.0
+            ],
+            "dni_wm2": 1000.0,
+            "sunshape": {
+                "type": "pillbox",
+                "half_angle_mrad": 4.65
+            }
+        },
+        "aperture": {
+            "type": "disk",
+            "center": [
+                0.0,
+                0.0,
+                0.8
+            ],
+            "normal": [
+                0.0,
+                0.0,
+                1.0
+            ],
+            "radius": 0.65
+        },
+        "materials": [
+            {
+                "id": "foil_mirror",
+                "type": "real_mirror",
+                "reflectance": 0.85,
+                "slope_error_mrad": 4.0
+            }
+        ],
+        "elements": [
+            {
+                "name": "panel_00_0deg",
+                "material": "foil_mirror",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.25,
+                    "half_height": 0.2
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        67.5,
+                        -0.0,
+                        0.0
+                    ],
+                    "translation": [
+                        0.0,
+                        0.35,
+                        0.35
+                    ]
+                }
+            },
+            {
+                "name": "panel_01_16p364deg",
+                "material": "foil_mirror",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.25,
+                    "half_height": 0.2
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        66.65012,
+                        -15.087089,
+                        -6.4112
+                    ],
+                    "translation": [
+                        0.098606,
+                        0.335823,
+                        0.35
+                    ]
+                }
+            },
+            {
+                "name": "panel_02_32p727deg",
+                "material": "foil_mirror",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.25,
+                    "half_height": 0.2
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        63.785444,
+                        -29.966065,
+                        -13.8169
+                    ],
+                    "translation": [
+                        0.189224,
+                        0.294439,
+                        0.35
+                    ]
+                }
+            },
+            {
+                "name": "panel_03_49p091deg",
+                "material": "foil_mirror",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.25,
+                    "half_height": 0.2
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        57.685763,
+                        -44.284493,
+                        -23.8282
+                    ],
+                    "translation": [
+                        0.264512,
+                        0.229201,
+                        0.35
+                    ]
+                }
+            },
+            {
+                "name": "panel_04_65p455deg",
+                "material": "foil_mirror",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.25,
+                    "half_height": 0.2
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        45.082974,
+                        -57.181366,
+                        -39.9617
+                    ],
+                    "translation": [
+                        0.318371,
+                        0.145395,
+                        0.35
+                    ]
+                }
+            },
+            {
+                "name": "panel_05_81p818deg",
+                "material": "foil_mirror",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.25,
+                    "half_height": 0.2
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        18.961615,
+                        -66.131389,
+                        -69.4083
+                    ],
+                    "translation": [
+                        0.346438,
+                        0.04981,
+                        0.35
+                    ]
+                }
+            },
+            {
+                "name": "panel_06_98p182deg",
+                "material": "foil_mirror",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.25,
+                    "half_height": 0.2
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        -18.961615,
+                        -66.131389,
+                        -110.5917
+                    ],
+                    "translation": [
+                        0.346438,
+                        -0.04981,
+                        0.35
+                    ]
+                }
+            },
+            {
+                "name": "panel_07_114p545deg",
+                "material": "foil_mirror",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.25,
+                    "half_height": 0.2
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        -45.082974,
+                        -57.181366,
+                        -140.0383
+                    ],
+                    "translation": [
+                        0.318371,
+                        -0.145395,
+                        0.35
+                    ]
+                }
+            },
+            {
+                "name": "panel_08_130p909deg",
+                "material": "foil_mirror",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.25,
+                    "half_height": 0.2
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        -57.685763,
+                        -44.284493,
+                        -156.1718
+                    ],
+                    "translation": [
+                        0.264512,
+                        -0.229201,
+                        0.35
+                    ]
+                }
+            },
+            {
+                "name": "panel_09_147p273deg",
+                "material": "foil_mirror",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.25,
+                    "half_height": 0.2
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        -63.785444,
+                        -29.966065,
+                        -166.1831
+                    ],
+                    "translation": [
+                        0.189224,
+                        -0.294439,
+                        0.35
+                    ]
+                }
+            },
+            {
+                "name": "panel_10_163p636deg",
+                "material": "foil_mirror",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.25,
+                    "half_height": 0.2
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        -66.65012,
+                        -15.087089,
+                        -173.5888
+                    ],
+                    "translation": [
+                        0.098606,
+                        -0.335823,
+                        0.35
+                    ]
+                }
+            },
+            {
+                "name": "panel_11_180deg",
+                "material": "foil_mirror",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.25,
+                    "half_height": 0.2
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        -67.5,
+                        -0.0,
+                        -180.0
+                    ],
+                    "translation": [
+                        0.0,
+                        -0.35,
+                        0.35
+                    ]
+                }
+            },
+            {
+                "name": "panel_12_196p364deg",
+                "material": "foil_mirror",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.25,
+                    "half_height": 0.2
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        -66.65012,
+                        15.087089,
+                        173.5888
+                    ],
+                    "translation": [
+                        -0.098606,
+                        -0.335823,
+                        0.35
+                    ]
+                }
+            },
+            {
+                "name": "panel_13_212p727deg",
+                "material": "foil_mirror",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.25,
+                    "half_height": 0.2
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        -63.785444,
+                        29.966065,
+                        166.1831
+                    ],
+                    "translation": [
+                        -0.189224,
+                        -0.294439,
+                        0.35
+                    ]
+                }
+            },
+            {
+                "name": "panel_14_229p091deg",
+                "material": "foil_mirror",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.25,
+                    "half_height": 0.2
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        -57.685763,
+                        44.284493,
+                        156.1718
+                    ],
+                    "translation": [
+                        -0.264512,
+                        -0.229201,
+                        0.35
+                    ]
+                }
+            },
+            {
+                "name": "panel_15_245p455deg",
+                "material": "foil_mirror",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.25,
+                    "half_height": 0.2
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        -45.082974,
+                        57.181366,
+                        140.0383
+                    ],
+                    "translation": [
+                        -0.318371,
+                        -0.145395,
+                        0.35
+                    ]
+                }
+            },
+            {
+                "name": "panel_16_261p818deg",
+                "material": "foil_mirror",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.25,
+                    "half_height": 0.2
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        -18.961615,
+                        66.131389,
+                        110.5917
+                    ],
+                    "translation": [
+                        -0.346438,
+                        -0.04981,
+                        0.35
+                    ]
+                }
+            },
+            {
+                "name": "panel_17_278p182deg",
+                "material": "foil_mirror",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.25,
+                    "half_height": 0.2
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        18.961615,
+                        66.131389,
+                        69.4083
+                    ],
+                    "translation": [
+                        -0.346438,
+                        0.04981,
+                        0.35
+                    ]
+                }
+            },
+            {
+                "name": "panel_18_294p545deg",
+                "material": "foil_mirror",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.25,
+                    "half_height": 0.2
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        45.082974,
+                        57.181366,
+                        39.9617
+                    ],
+                    "translation": [
+                        -0.318371,
+                        0.145395,
+                        0.35
+                    ]
+                }
+            },
+            {
+                "name": "panel_19_310p909deg",
+                "material": "foil_mirror",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.25,
+                    "half_height": 0.2
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        57.685763,
+                        44.284493,
+                        23.8282
+                    ],
+                    "translation": [
+                        -0.264512,
+                        0.229201,
+                        0.35
+                    ]
+                }
+            },
+            {
+                "name": "panel_20_327p273deg",
+                "material": "foil_mirror",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.25,
+                    "half_height": 0.2
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        63.785444,
+                        29.966065,
+                        13.8169
+                    ],
+                    "translation": [
+                        -0.189224,
+                        0.294439,
+                        0.35
+                    ]
+                }
+            },
+            {
+                "name": "panel_21_343p636deg",
+                "material": "foil_mirror",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.25,
+                    "half_height": 0.2
+                },
+                "transform": {
+                    "rotation_euler_deg": [
+                        66.65012,
+                        15.087089,
+                        6.4112
+                    ],
+                    "translation": [
+                        -0.098606,
+                        0.335823,
+                        0.35
+                    ]
+                }
+            }
+        ],
+        "receiver": {
+            "surface": {
+                "type": "plane",
+                "half_width": 0.1,
+                "half_height": 0.1
+            },
+            "grid": {
+                "nx": 32,
+                "ny": 32
+            },
+            "transform": {
+                "translation": [
+                    0.0,
+                    0.0,
+                    0.0
+                ]
+            }
+        }
+    },
+    "trace": {
+        "n_primary_rays": 100000,
+        "max_bounces": 3,
+        "record_paths": false,
+        "max_paths_to_record": 200,
+        "rng_seed": 13
+    }
+}
