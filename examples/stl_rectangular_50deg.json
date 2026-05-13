@@ -1,0 +1,56 @@
+{
+    "scene": {
+        "aperture": {
+            "center": [0.0, 0.0, 2.0],
+            "normal": [0.0, 0.0, 1.0],
+            "radius": 0.5,
+            "type": "disk"
+        },
+        "elements": [
+            {
+                "material": "aluminum",
+                "name": "rectangular_50deg_reflector",
+                "surface": {
+                    "path": "../assets/meshes/panels_only_rectangular_50deg.stl",
+                    "scale_to_meters": 0.001,
+                    "type": "mesh"
+                },
+                "transform": {
+                    "translation": [-0.1511501, -0.2553768, -0.2502383]
+                }
+            }
+        ],
+        "materials": [
+            {
+                "id": "aluminum",
+                "reflectance": 0.85,
+                "slope_error_mrad": 2.0,
+                "type": "real_mirror"
+            }
+        ],
+        "name": "STL rectangular reflector 50 deg",
+        "receiver": {
+            "grid": {"nx": 64, "ny": 64},
+            "surface": {
+                "half_height": 0.15,
+                "half_width": 0.15,
+                "type": "plane"
+            },
+            "transform": {
+                "translation": [0.0, 0.0, -0.1181206]
+            }
+        },
+        "sun": {
+            "direction": [0.0, 0.0, -1.0],
+            "dni_wm2": 1000.0,
+            "sunshape": {"half_angle_mrad": 4.65, "type": "pillbox"}
+        }
+    },
+    "trace": {
+        "max_bounces": 8,
+        "max_paths_to_record": 500,
+        "n_primary_rays": 100000,
+        "record_paths": false,
+        "rng_seed": 42
+    }
+}

@@ -116,6 +116,59 @@ Traces multiple scenes and writes one summary CSV row per scene.
 
 Both scripts auto-detect the project root and must be run with Python 3.11+.  No special CWD is required.
 
+### scripts/sweep_stl_rect_angles.py - STL angle and flap-extension study
+
+This is the current workflow for the rectangular STL reflector study. It compares the baseline
+STL panel angle scenes, then can generate attached flap-extension candidates for Polyscope
+inspection and flux-map comparison.
+
+The design-sweep mode keeps the baseline STL reflector meshes and adds four analytic flap
+extensions:
+
+- Each flap is `0.30 m` wide, matching the baseline panel width.
+- Each flap extends `0.20 m` from the outer/top edge of the baseline panel.
+- Flap angles are swept above the base angle: `base + 5 deg`, `base + 10 deg`, `base + 15 deg`.
+- Baseline angles tested by default are `55 deg`, `60 deg`, and `65 deg`.
+- Candidates are ranked by total captured power, with center-starved flux maps flagged when
+  `center/mean < 75%`.
+
+Run a 1M-ray screening pass:
+
+```powershell
+python scripts\sweep_stl_rect_angles.py --design-sweep --screen-only --design-screen-rays 1000000
+```
+
+The main outputs are:
+
+- `results/stl_rect_design_sweep/scenes/*.json` - generated candidate scenes
+- `results/stl_rect_design_sweep/screen_comparison.txt` - readable ranked summary
+- `results/stl_rect_design_sweep/screen_comparison.csv` - raw comparison table
+- `results/stl_rect_design_sweep/screen_maps/*.png` - shared-scale flux maps
+
+Open the generated candidates in Polyscope:
+
+```powershell
+.\build\debug\scrt_app.exe --examples-dir .\results\stl_rect_design_sweep\scenes
+```
+
+The viewer's Scene Browser lists every generated candidate. Load them one at a time to verify
+that each flap is hinged to the outer panel edge and tilts radially outward from its parent
+panel.
+
+Run the original fixed-angle STL sweep:
+
+```powershell
+python scripts\sweep_stl_rect_angles.py --rays 100000 --flux-rays 10000000
+```
+
+That writes:
+
+- `results/stl_rect_angle_sweep/results.csv`
+- `results/stl_rect_angle_sweep/summary.txt`
+- `results/stl_rect_angle_sweep/flux_comparison.csv`
+- `results/stl_rect_angle_sweep/flux_comparison.txt`
+- `results/stl_rect_angle_sweep/flux_*.png`
+
 ### scripts/sweep.py — multi-parameter sweep over all example scenes
 
 Runs every example scene at four ray counts × four DNI values (16 runs each) and produces three summary tables.

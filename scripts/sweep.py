@@ -30,6 +30,25 @@ SCENES = [
     "examples/scheffler_reflector.json",
     "examples/fresnel_lens_cooker.json",
     "examples/panel_cooker.json",
+    "examples/panel_cooker_6.json",
+    "examples/panel_cooker_8.json",
+    "examples/panel_cooker_10.json",
+    "examples/panel_cooker_12.json",
+    "examples/panel_cooker_14.json",
+    "examples/panel_cooker_16.json",
+    "examples/panel_cooker_18.json",
+    "examples/panel_cooker_20.json",
+    "examples/panel_cooker_22.json",
+    "examples/panel_cooker_24.json",
+    "examples/panel_cooker_26.json",
+    "examples/panel_cooker_12_receiver_0_5.json",
+    "examples/panel_cooker_12_receiver_1_0.json",
+    "examples/panel_cooker_12_receiver_1_5.json",
+    "examples/panel_cooker_12_receiver_2_0.json",
+    "examples/panel_cooker_12_receiver_0_5_neg.json",
+    "examples/panel_cooker_12_receiver_1_0_neg.json",
+    "examples/panel_cooker_12_receiver_1_5_neg.json",
+    "examples/panel_cooker_12_receiver_2_0_neg.json"
 ]
 
 RAY_COUNTS = [10_000, 50_000, 200_000, 500_000]

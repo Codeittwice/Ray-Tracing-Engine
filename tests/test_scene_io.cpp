@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include "scrt/core/Transform.hpp"
 #include "scrt/io/MeshImporter.hpp"
 #include "scrt/io/ResultsExporter.hpp"
 #include "scrt/io/SceneLoader.hpp"
@@ -203,4 +204,13 @@ TEST_CASE("T12: TriangleMesh import with scale_to_meters, world_bounds correct")
     CHECK(span_x == doctest::Approx(kScale).epsilon(1e-9));
     CHECK(span_y == doctest::Approx(kScale).epsilon(1e-9));
     CHECK(span_z == doctest::Approx(kScale).epsilon(1e-9));
+
+    mesh.set_transform(scrt::core::Transform::from_translation({1.0, -2.0, 0.5}));
+    scrt::core::AABB moved = mesh.world_bounds();
+    CHECK(moved.min().x == doctest::Approx(1.0).epsilon(1e-9));
+    CHECK(moved.min().y == doctest::Approx(-2.0).epsilon(1e-9));
+    CHECK(moved.min().z == doctest::Approx(0.5).epsilon(1e-9));
+    CHECK(moved.max().x == doctest::Approx(1.0 + kScale).epsilon(1e-9));
+    CHECK(moved.max().y == doctest::Approx(-2.0 + kScale).epsilon(1e-9));
+    CHECK(moved.max().z == doctest::Approx(0.5 + kScale).epsilon(1e-9));
 }

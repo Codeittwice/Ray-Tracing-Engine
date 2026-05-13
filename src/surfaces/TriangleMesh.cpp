@@ -13,7 +13,7 @@ TriangleMesh::TriangleMesh(std::vector<math::vec3> vertices,
     assert(idx_.size() % 3 == 0);
     int n = static_cast<int>(idx_.size() / 3);
 
-    // Compute mesh world bounds
+    // Compute mesh local bounds.
     for (const auto& v : verts_)
         bounds_.expand(v);
 
@@ -127,6 +127,7 @@ bool TriangleMesh::isect_tri_node(int nidx, const core::Ray& r,
                 hit.position = r.origin + t * r.direction;
                 hit.normal   = (glm::dot(n, r.direction) < 0.0) ? n : -n;
                 hit.uv       = uv;
+                hit.front_face = glm::dot(n, r.direction) < 0.0;
                 hit.surface  = this;
                 found = true;
             }
@@ -141,18 +142,38 @@ bool TriangleMesh::isect_tri_node(int nidx, const core::Ray& r,
 bool TriangleMesh::intersect(const core::Ray& r, double t_min, double t_max,
                               core::Hit& hit) const {
     if (tri_nodes_.empty()) return false;
-    return isect_tri_node(0, r, t_min, t_max, hit);
+
+    core::Ray lr = xform_.ray_to_local(r);
+    core::Hit local_hit;
+    if (!isect_tri_node(0, lr, t_min, t_max, local_hit))
+        return false;
+
+    hit            = local_hit;
+    hit.position   = xform_.point_to_world(local_hit.position);
+    hit.normal     = xform_.normal_to_world(local_hit.normal);
+    hit.surface    = this;
+    return true;
 }
 
 core::AABB TriangleMesh::world_bounds() const {
-    return bounds_;
+    core::AABB box;
+    const math::vec3 bmin = bounds_.min();
+    const math::vec3 bmax = bounds_.max();
+    for (double x : {bmin.x, bmax.x}) {
+        for (double y : {bmin.y, bmax.y}) {
+            for (double z : {bmin.z, bmax.z}) {
+                box.expand(xform_.point_to_world({x, y, z}));
+            }
+        }
+    }
+    return box;
 }
 
 void TriangleMesh::tessellate(int /*nseg*/, std::vector<math::vec3>& verts,
                                std::vector<std::uint32_t>& indices) const {
     std::uint32_t base = static_cast<std::uint32_t>(verts.size());
     for (const auto& v : verts_)
-        verts.push_back(v);
+        verts.push_back(xform_.point_to_world(v));
     for (auto i : idx_)
         indices.push_back(base + i);
 }

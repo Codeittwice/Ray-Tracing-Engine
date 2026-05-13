@@ -1,0 +1,82 @@
+{
+    "scene": {
+        "aperture": {
+            "center": [
+                0.0,
+                0.0,
+                2.0
+            ],
+            "normal": [
+                0.0,
+                0.0,
+                1.0
+            ],
+            "radius": 0.5,
+            "type": "disk"
+        },
+        "elements": [
+            {
+                "material": "aluminum",
+                "name": "cad_stl_circular_reflector",
+                "surface": {
+                    "path": "../assets/meshes/12_panels_only_circular_70deg.stl",
+                    "scale_to_meters": 0.001,
+                    "type": "mesh"
+                },
+                "transform": {
+                    "translation": [
+                        -0.1011068,
+                        -0.1346726,
+                        -0.2358828
+                    ]
+                }
+            }
+        ],
+        "materials": [
+            {
+                "id": "aluminum",
+                "reflectance": 0.85,
+                "slope_error_mrad": 2.0,
+                "type": "real_mirror"
+            }
+        ],
+        "name": "STL circular reflector demo",
+        "receiver": {
+            "grid": {
+                "nx": 64,
+                "ny": 64
+            },
+            "surface": {
+                "half_height": 0.06,
+                "half_width": 0.06,
+                "type": "plane"
+            },
+            "transform": {
+                "translation": [
+                    0.0,
+                    0.0,
+                    -0.1149087
+                ]
+            }
+        },
+        "sun": {
+            "direction": [
+                0.0,
+                0.0,
+                -1.0
+            ],
+            "dni_wm2": 1000.0,
+            "sunshape": {
+                "half_angle_mrad": 4.65,
+                "type": "pillbox"
+            }
+        }
+    },
+    "trace": {
+        "max_bounces": 8,
+        "max_paths_to_record": 500,
+        "n_primary_rays": 100000,
+        "record_paths": false,
+        "rng_seed": 42
+    }
+}

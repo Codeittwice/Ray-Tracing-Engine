@@ -2,7 +2,11 @@
 docs/generated/
 
 # Claude Code local settings
+.claude/
 .claude/settings.local.json
+
+# Local notes/editor state
+.obsidian/
 
 # Build
 build/
@@ -26,6 +30,8 @@ desktop.ini
 # Runtime outputs
 results/
 dist/
+/flux.csv
+/summary.csv
 *.log
 *.zip
 *.png
@@ -34,6 +40,8 @@ imgui.ini
 *.bak
 
 # Compiled
+__pycache__/
+*.pyc
 *.o
 *.obj
 *.exe
