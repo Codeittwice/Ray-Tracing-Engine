@@ -22,6 +22,66 @@
 
 namespace scrt::viz {
 
+namespace {
+
+void register_receiver_face_flux(const scene::ReceiverFace& face,
+                                 const tracer::FluxAccumulator& acc,
+                                 const std::string& mesh_name) {
+    const int nx = acc.nx(), ny = acc.ny();
+    const double hw = acc.half_width(), hh = acc.half_height();
+    const auto& xf = face.surface()->transform();
+    const auto& flux = acc.flux_map_wm2();
+
+    std::vector<std::array<double, 3>>        pv;
+    std::vector<std::array<std::uint32_t, 3>> pf;
+    std::vector<double>                        fvals;
+
+    pv.reserve(static_cast<std::size_t>((nx + 1) * (ny + 1)));
+    fvals.reserve(static_cast<std::size_t>((nx + 1) * (ny + 1)));
+
+    for (int j = 0; j <= ny; ++j) {
+        double v = -hh + j * (2.0 * hh / ny);
+        for (int i = 0; i <= nx; ++i) {
+            double u = -hw + i * (2.0 * hw / nx);
+            auto p = xf.point_to_world({u, v, 0.0});
+            pv.push_back({p.x, p.y, p.z});
+
+            double fval = 0.0;
+            int cnt = 0;
+            for (int dj : {-1, 0}) {
+                for (int di : {-1, 0}) {
+                    int bi = i + di;
+                    int bj = j + dj;
+                    if (bi >= 0 && bi < nx && bj >= 0 && bj < ny) {
+                        fval += flux[static_cast<std::size_t>(bj * nx + bi)];
+                        ++cnt;
+                    }
+                }
+            }
+            fvals.push_back(cnt > 0 ? fval / cnt : 0.0);
+        }
+    }
+
+    pf.reserve(static_cast<std::size_t>(2 * nx * ny));
+    for (int j = 0; j < ny; ++j) {
+        for (int i = 0; i < nx; ++i) {
+            auto v00 = static_cast<std::uint32_t>(j * (nx + 1) + i);
+            auto v10 = static_cast<std::uint32_t>(j * (nx + 1) + i + 1);
+            auto v01 = static_cast<std::uint32_t>((j + 1) * (nx + 1) + i);
+            auto v11 = static_cast<std::uint32_t>((j + 1) * (nx + 1) + i + 1);
+            pf.push_back({v00, v10, v11});
+            pf.push_back({v00, v11, v01});
+        }
+    }
+
+    auto* mesh = polyscope::registerSurfaceMesh(mesh_name, pv, pf);
+    auto* q = mesh->addVertexScalarQuantity("flux_Wm2", fvals);
+    q->setColorMap("viridis");
+    q->setEnabled(true);
+}
+
+} // namespace
+
 // ---- set_scene ---------------------------------------------------------------
 
 void Viewer::set_scene(scene::Scene* s) {
@@ -153,7 +213,12 @@ void Viewer::run_trace(std::size_t n_rays) {
     cfg_.n_primary_rays = n_rays;
 
     tracer::Tracer tracer(*scene_);
-    result_ = tracer.run(cfg_, *acc_);
+    if (recv->is_multi_face()) {
+        result_ = tracer.run(cfg_);
+        acc_ = std::make_unique<tracer::FluxAccumulator>(recv->accumulator());
+    } else {
+        result_ = tracer.run(cfg_, *acc_);
+    }
     traced_       = true;
     need_retrace_ = false;
 
@@ -177,59 +242,19 @@ void Viewer::register_scene() {
 // ---- update_receiver_flux ----------------------------------------------------
 
 void Viewer::update_receiver_flux() {
-    if (!scene_ || !scene_->receiver() || !acc_) return;
+    if (!scene_ || !scene_->receiver()) return;
 
-    auto* recv     = scene_->receiver();
-    const int nx   = acc_->nx(), ny = acc_->ny();
-    const double hw = acc_->half_width(), hh = acc_->half_height();
-    const auto& xf = recv->surface()->transform();
-    const auto& flux = acc_->flux_map_wm2();
-
-    // (nx+1)*(ny+1) vertex grid matching the flux bins
-    std::vector<std::array<double, 3>>        pv;
-    std::vector<std::array<std::uint32_t, 3>> pf;
-    std::vector<double>                        fvals;
-
-    pv.reserve(static_cast<std::size_t>((nx + 1) * (ny + 1)));
-    fvals.reserve(static_cast<std::size_t>((nx + 1) * (ny + 1)));
-
-    for (int j = 0; j <= ny; ++j) {
-        double v = -hh + j * (2.0 * hh / ny);
-        for (int i = 0; i <= nx; ++i) {
-            double u = -hw + i * (2.0 * hw / nx);
-            auto   p = xf.point_to_world({u, v, 0.0});
-            pv.push_back({p.x, p.y, p.z});
-
-            // Average of adjacent bins (corner interpolation)
-            double fval = 0.0; int cnt = 0;
-            for (int dj : {-1, 0})
-                for (int di : {-1, 0}) {
-                    int bi = i + di, bj = j + dj;
-                    if (bi >= 0 && bi < nx && bj >= 0 && bj < ny) {
-                        fval += flux[static_cast<std::size_t>(bj * nx + bi)];
-                        ++cnt;
-                    }
-                }
-            fvals.push_back(cnt > 0 ? fval / cnt : 0.0);
+    auto* recv = scene_->receiver();
+    if (recv->is_multi_face()) {
+        for (const auto& face : recv->faces()) {
+            register_receiver_face_flux(
+                *face, face->accumulator(), "receiver_" + face->name() + "_flux");
         }
+        return;
     }
 
-    pf.reserve(static_cast<std::size_t>(2 * nx * ny));
-    for (int j = 0; j < ny; ++j) {
-        for (int i = 0; i < nx; ++i) {
-            auto v00 = static_cast<std::uint32_t>( j      * (nx + 1) + i    );
-            auto v10 = static_cast<std::uint32_t>( j      * (nx + 1) + i + 1);
-            auto v01 = static_cast<std::uint32_t>((j + 1) * (nx + 1) + i    );
-            auto v11 = static_cast<std::uint32_t>((j + 1) * (nx + 1) + i + 1);
-            pf.push_back({v00, v10, v11});
-            pf.push_back({v00, v11, v01});
-        }
-    }
-
-    auto* mesh = polyscope::registerSurfaceMesh("receiver_flux", pv, pf);
-    auto* q    = mesh->addVertexScalarQuantity("flux_Wm2", fvals);
-    q->setColorMap("viridis");
-    q->setEnabled(true);
+    if (!acc_) return;
+    register_receiver_face_flux(*recv->faces().front(), *acc_, "receiver_flux");
 }
 
 // ---- draw_scene_browser ------------------------------------------------------

@@ -31,6 +31,11 @@ void FluxAccumulator::deposit(const core::Ray& r, const core::Hit& h) noexcept {
     power_sum_[static_cast<std::size_t>(iy * nx_ + ix)] += r.power;
 }
 
+void FluxAccumulator::clear() noexcept {
+    std::fill(power_sum_.begin(), power_sum_.end(), 0.0);
+    std::fill(flux_.begin(), flux_.end(), 0.0);
+}
+
 void FluxAccumulator::merge_from(const FluxAccumulator& other) noexcept {
     assert(power_sum_.size() == other.power_sum_.size());
     for (std::size_t i = 0; i < power_sum_.size(); ++i)

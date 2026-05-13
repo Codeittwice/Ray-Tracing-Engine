@@ -6,7 +6,10 @@
 #include <cstdint>
 #include <vector>
 
-namespace scrt::scene { class Scene; }
+namespace scrt::scene {
+class Receiver;
+class Scene;
+}
 
 namespace scrt::tracer {
 
@@ -34,10 +37,18 @@ class Tracer {
 public:
     explicit Tracer(const scene::Scene& s) : scene_(&s) {}
 
+    /// Trace into the scene receiver's own face accumulators.
+    TraceResult run(const TraceConfig& cfg) const;
+
+    /// Trace into a caller-provided single receiver accumulator.
     TraceResult run(const TraceConfig& cfg, FluxAccumulator& acc) const;
 
 private:
     void trace_one(core::Ray r, FluxAccumulator& acc, math::Rng& rng,
+                   std::vector<math::vec3>* path_out, int max_bounces,
+                   double power_cutoff, std::size_t& hit_count) const;
+
+    void trace_one(core::Ray r, scene::Receiver& acc, math::Rng& rng,
                    std::vector<math::vec3>* path_out, int max_bounces,
                    double power_cutoff, std::size_t& hit_count) const;
 

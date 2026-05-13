@@ -84,14 +84,36 @@ int main(int argc, char* argv[]) {
             std::cerr << "Scene has no receiver — nothing to trace.\n";
             return 1;
         }
-        const auto& ra = recv->accumulator();
-        scrt::tracer::FluxAccumulator acc(ra.half_width(), ra.half_height(), ra.nx(), ra.ny());
-
         scrt::tracer::Tracer tracer(*ls.scene);
-        auto result = tracer.run(ls.cfg, acc);
-
         std::filesystem::create_directories(out_dir);
         double dni = ls.scene->sun() ? ls.scene->sun()->dni() : 1000.0;
+
+        if (recv->is_multi_face()) {
+            auto result = tracer.run(ls.cfg);
+            scrt::io::export_receiver_flux_csvs(*recv, out_dir / "csv");
+            scrt::io::export_receiver_summary_json(*recv, result, dni, out_dir / "summary.json");
+
+            double absorbed = 0.0;
+            for (const auto& face : recv->faces()) {
+                if (face->mode() == scrt::scene::ReceiverFaceMode::RecordAbsorb)
+                    absorbed += face->accumulator().total_power_w();
+            }
+            std::cout << "Absorbed power : " << absorbed << " W\n";
+            for (const auto& face : recv->faces()) {
+                std::cout << face->name()
+                          << "  power=" << face->accumulator().total_power_w()
+                          << " W  peak=" << face->accumulator().peak_flux_wm2()
+                          << " W/m2\n";
+            }
+            std::cout << "Wall time      : " << result.wall_time_s << " s\n";
+            std::cout << "Results written to " << out_dir.string() << '\n';
+            return 0;
+        }
+
+        const auto& ra = recv->accumulator();
+        scrt::tracer::FluxAccumulator acc(ra.half_width(), ra.half_height(), ra.nx(), ra.ny());
+        auto result = tracer.run(ls.cfg, acc);
+
         scrt::io::export_flux_csv(acc, (out_dir / "flux.csv").string());
         scrt::io::export_summary_json(acc, result, dni, (out_dir / "summary.json").string());
 

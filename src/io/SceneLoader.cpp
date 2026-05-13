@@ -20,6 +20,7 @@
 #include "scrt/surfaces/Plane.hpp"
 #include "scrt/surfaces/Sphere.hpp"
 #include "scrt/surfaces/TriangleMesh.hpp"
+#include <cmath>
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
@@ -56,6 +57,16 @@ core::Transform parse_transform(const json& j) {
         return core::Transform::from_translation(t).compose(rot);
     }
     return rot;
+}
+
+core::Transform frame_transform(math::vec3 origin, math::vec3 x_axis,
+                                math::vec3 y_axis, math::vec3 z_axis) {
+    math::mat4 m(1.0);
+    m[0] = math::vec4(glm::normalize(x_axis), 0.0);
+    m[1] = math::vec4(glm::normalize(y_axis), 0.0);
+    m[2] = math::vec4(glm::normalize(z_axis), 0.0);
+    m[3] = math::vec4(origin, 1.0);
+    return core::Transform::from_matrix(m);
 }
 
 std::unique_ptr<surfaces::Surface> parse_surface(const json& sj,
@@ -259,6 +270,79 @@ LoadedScene load_scene(const std::filesystem::path& path) {
     require(s.contains("receiver"), "missing 'receiver'");
     {
         const json& rj = s["receiver"];
+        if (rj.value("type", std::string("plane")) == "box") {
+            double half_width = 0.15, half_height = 0.15, depth = 0.15;
+            if (rj.contains("surface")) {
+                half_width = rj["surface"].value("half_width", half_width);
+                half_height = rj["surface"].value("half_height", half_height);
+            }
+            depth = rj.value("depth", depth);
+
+            int nx = 64, ny = 64;
+            if (rj.contains("grid")) {
+                nx = rj["grid"].value("nx", nx);
+                ny = rj["grid"].value("ny", ny);
+            }
+            const double bin_x = (2.0 * half_width) / static_cast<double>(nx);
+            const double bin_y = (2.0 * half_height) / static_cast<double>(ny);
+            const double bin = 0.5 * (bin_x + bin_y);
+            const int depth_bins = std::max(1, static_cast<int>(std::lround(depth / bin)));
+
+            auto recv = std::make_unique<scene::Receiver>(half_width, half_height, nx, ny);
+            recv->mutable_faces().front()->set_name("glass_top");
+            recv->mutable_faces().front()->set_mode(scene::ReceiverFaceMode::RecordPass);
+
+            auto absorber = std::make_unique<materials::Absorber>();
+            const auto* absorber_ptr = absorber.get();
+            scene->add_material(std::move(absorber));
+
+            recv->mutable_faces().front()->surface()->set_material(absorber_ptr);
+            recv->mutable_faces().front()->set_transform(
+                frame_transform({0.0, 0.0, 0.0}, {1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}));
+
+            auto& bottom = recv->add_face("bottom", half_width, half_height, nx, ny,
+                                          scene::ReceiverFaceMode::RecordAbsorb);
+            bottom.surface()->set_material(absorber_ptr);
+            bottom.set_transform(
+                frame_transform({0.0, 0.0, -depth}, {1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}));
+
+            auto& north = recv->add_face("north_wall", half_width, depth * 0.5, nx, depth_bins,
+                                         scene::ReceiverFaceMode::RecordAbsorb);
+            north.surface()->set_material(absorber_ptr);
+            north.set_transform(
+                frame_transform({0.0, half_height, -depth * 0.5}, {1.0, 0.0, 0.0}, {0.0, 0.0, -1.0}, {0.0, 1.0, 0.0}));
+
+            auto& south = recv->add_face("south_wall", half_width, depth * 0.5, nx, depth_bins,
+                                         scene::ReceiverFaceMode::RecordAbsorb);
+            south.surface()->set_material(absorber_ptr);
+            south.set_transform(
+                frame_transform({0.0, -half_height, -depth * 0.5}, {1.0, 0.0, 0.0}, {0.0, 0.0, -1.0}, {0.0, -1.0, 0.0}));
+
+            auto& east = recv->add_face("east_wall", depth * 0.5, half_height, depth_bins, ny,
+                                        scene::ReceiverFaceMode::RecordAbsorb);
+            east.surface()->set_material(absorber_ptr);
+            east.set_transform(
+                frame_transform({half_width, 0.0, -depth * 0.5}, {0.0, 0.0, -1.0}, {0.0, 1.0, 0.0}, {1.0, 0.0, 0.0}));
+
+            auto& west = recv->add_face("west_wall", depth * 0.5, half_height, depth_bins, ny,
+                                        scene::ReceiverFaceMode::RecordAbsorb);
+            west.surface()->set_material(absorber_ptr);
+            west.set_transform(
+                frame_transform({-half_width, 0.0, -depth * 0.5}, {0.0, 0.0, -1.0}, {0.0, 1.0, 0.0}, {-1.0, 0.0, 0.0}));
+
+            auto top_mode = rj.value("top_mode", std::string("record_pass"));
+            if (top_mode != "record_pass")
+                throw std::runtime_error("SceneLoader: box receiver only supports top_mode='record_pass'");
+
+            auto base = core::Transform{};
+            if (rj.contains("transform"))
+                base = parse_transform(rj["transform"]);
+            for (auto& face : recv->mutable_faces()) {
+                const auto local = face->surface()->transform();
+                face->set_transform(base.compose(local));
+            }
+            scene->set_receiver(std::move(recv));
+        } else {
         int nx = 64, ny = 64;
         if (rj.contains("grid")) {
             nx = rj["grid"].value("nx", nx);
@@ -279,6 +363,7 @@ LoadedScene load_scene(const std::filesystem::path& path) {
         if (rj.contains("transform"))
             recv->set_transform(parse_transform(rj["transform"]));
         scene->set_receiver(std::move(recv));
+        }
     }
 
     // ---- Trace config -----------------------------------------------------

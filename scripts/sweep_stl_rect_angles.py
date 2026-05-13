@@ -20,6 +20,8 @@ SCRT_COMPARE = Path("build/debug/scrt_compare.exe")
 SCRT_APP = Path("build/debug/scrt_app.exe")
 OUT_DIR = Path("results/stl_rect_angle_sweep")
 DESIGN_OUT_DIR = Path("results/stl_rect_design_sweep")
+DESIGN_3_PANEL_OUT_DIR = Path("results/stl_rect_design_3_panels_sweep")
+ANALYTIC_SIZE_OUT_DIR = Path("results/stl_rect_60_65_70_size_sweep")
 OUT_CSV = OUT_DIR / "results.csv"
 OUT_TXT = OUT_DIR / "summary.txt"
 FLUX_CSV = OUT_DIR / "flux_comparison.csv"
@@ -58,6 +60,16 @@ def parse_args():
         "--design-sweep",
         action="store_true",
         help="Generate and evaluate baseline STL scenes with 0.3 m x 0.2 m edge extensions.",
+    )
+    parser.add_argument(
+        "--design-3-panel-sweep",
+        action="store_true",
+        help="Generate and evaluate baseline STL scenes with two chained edge-extension panels.",
+    )
+    parser.add_argument(
+        "--analytic-size-sweep",
+        action="store_true",
+        help="Generate and evaluate analytic 60/65/70 three-panel size and order candidates.",
     )
     parser.add_argument(
         "--top-offset-z",
@@ -277,55 +289,96 @@ def element_translation_for_angle(angle):
     return root["scene"]["elements"][0]["transform"]["translation"]
 
 
-def extra_panel_transform(azimuth_deg, primary_angle_deg, extension_angle_deg):
-    hinge_radius = (
-        BASELINE_PANEL_CENTER_RADIUS_M
-        + BASELINE_PANEL_HALF_HEIGHT_M * math.cos(math.radians(primary_angle_deg))
-    )
-    hinge_z = BASELINE_PANEL_HALF_HEIGHT_M * math.sin(math.radians(primary_angle_deg))
-    center_radius = hinge_radius + 0.5 * EXTRA_PANEL_HEIGHT_M * math.cos(math.radians(extension_angle_deg))
-    center_z = hinge_z + 0.5 * EXTRA_PANEL_HEIGHT_M * math.sin(math.radians(extension_angle_deg))
+def radial_panel_rotation(azimuth_deg, angle_deg):
+    if azimuth_deg == 0:
+        return [angle_deg, 0.0, 0.0]
+    if azimuth_deg == 90:
+        return [0.0, -angle_deg, -90.0]
+    if azimuth_deg == 180:
+        return [-angle_deg, 0.0, 180.0]
+    if azimuth_deg == 270:
+        return [0.0, angle_deg, 90.0]
+    raise ValueError(f"unsupported auxiliary panel azimuth: {azimuth_deg}")
+
+
+def radial_panel_translation(azimuth_deg, center_radius, center_z):
     theta = math.radians(azimuth_deg)
     x = center_radius * math.sin(theta)
     y = center_radius * math.cos(theta)
-    if azimuth_deg == 0:
-        rotation = [extension_angle_deg, 0.0, 0.0]
-    elif azimuth_deg == 90:
-        rotation = [0.0, -extension_angle_deg, -90.0]
-    elif azimuth_deg == 180:
-        rotation = [-extension_angle_deg, 0.0, 180.0]
-    elif azimuth_deg == 270:
-        rotation = [0.0, extension_angle_deg, 90.0]
-    else:
-        raise ValueError(f"unsupported auxiliary panel azimuth: {azimuth_deg}")
-    return rotation, [round(x, 7), round(y, 7), round(center_z, 7)]
+    return [round(x, 7), round(y, 7), round(center_z, 7)]
 
 
-def extra_panel_elements(primary_angle, top_angle):
+def radial_plane_element(name, azimuth_deg, angle_deg, center_radius, center_z, width_m, height_m):
+    return {
+        "material": "aluminum",
+        "name": name,
+        "surface": {
+            "half_width": round(width_m / 2.0, 7),
+            "half_height": round(height_m / 2.0, 7),
+            "type": "plane",
+        },
+        "transform": {
+            "rotation_euler_deg": radial_panel_rotation(azimuth_deg, angle_deg),
+            "translation": radial_panel_translation(azimuth_deg, center_radius, center_z),
+        },
+    }
+
+
+def baseline_outer_hinge(primary_angle):
+    hinge_radius = (
+        BASELINE_PANEL_CENTER_RADIUS_M
+        + BASELINE_PANEL_HALF_HEIGHT_M * math.cos(math.radians(primary_angle))
+    )
+    hinge_z = BASELINE_PANEL_HALF_HEIGHT_M * math.sin(math.radians(primary_angle))
+    return hinge_radius, hinge_z
+
+
+def advance_hinge(hinge_radius, hinge_z, panel_angle):
+    return (
+        hinge_radius + EXTRA_PANEL_HEIGHT_M * math.cos(math.radians(panel_angle)),
+        hinge_z + EXTRA_PANEL_HEIGHT_M * math.sin(math.radians(panel_angle)),
+    )
+
+
+def panel_center_from_hinge(hinge_radius, hinge_z, panel_angle):
+    return (
+        hinge_radius + 0.5 * EXTRA_PANEL_HEIGHT_M * math.cos(math.radians(panel_angle)),
+        hinge_z + 0.5 * EXTRA_PANEL_HEIGHT_M * math.sin(math.radians(panel_angle)),
+    )
+
+
+def extension_panel_elements(name_prefix, panel_angle, hinge_radius, hinge_z):
     half_width = EXTRA_PANEL_WIDTH_M / 2.0
     half_height = EXTRA_PANEL_HEIGHT_M / 2.0
+    center_radius, center_z = panel_center_from_hinge(hinge_radius, hinge_z, panel_angle)
     elements = []
     for azimuth in [0, 90, 180, 270]:
-        rotation, translation = extra_panel_transform(azimuth, primary_angle, top_angle)
         elements.append(
             {
                 "material": "aluminum",
-                "name": f"extra_panel_{azimuth}deg_{top_angle}deg",
+                "name": f"{name_prefix}_{azimuth}deg_{panel_angle}deg",
                 "surface": {
                     "half_width": half_width,
                     "half_height": half_height,
                     "type": "plane",
                 },
                 "transform": {
-                    "rotation_euler_deg": rotation,
-                    "translation": translation,
+                    "rotation_euler_deg": radial_panel_rotation(azimuth, panel_angle),
+                    "translation": radial_panel_translation(azimuth, center_radius, center_z),
                 },
             }
         )
     return elements
 
 
-def make_design_scene(label, primary_angle, top_angle=None, top_offset_z=0.0, extra_panel_radius=0.0):
+def make_design_scene(
+    label,
+    primary_angle,
+    top_angle=None,
+    final_angle=None,
+    top_offset_z=0.0,
+    extra_panel_radius=0.0,
+):
     root = base_scene_for_design(label, primary_angle)
     primary_translation = element_translation_for_angle(primary_angle)
     elements = [
@@ -337,7 +390,11 @@ def make_design_scene(label, primary_angle, top_angle=None, top_offset_z=0.0, ex
     ]
 
     if top_angle is not None:
-        elements.extend(extra_panel_elements(primary_angle, top_angle))
+        hinge_radius, hinge_z = baseline_outer_hinge(primary_angle)
+        elements.extend(extension_panel_elements("extra_panel", top_angle, hinge_radius, hinge_z))
+        if final_angle is not None:
+            hinge_radius, hinge_z = advance_hinge(hinge_radius, hinge_z, top_angle)
+            elements.extend(extension_panel_elements("final_panel", final_angle, hinge_radius, hinge_z))
 
     root["scene"]["elements"] = elements
     return root
@@ -373,6 +430,125 @@ def design_candidates(top_offset_z, extra_panel_radius):
     return candidates
 
 
+def design_3_panel_candidates(top_offset_z, extra_panel_radius):
+    candidates = []
+    for angle in DESIGN_PRIMARY_ANGLES:
+        candidates.append(
+            {
+                "label": f"baseline_{angle}deg",
+                "kind": "baseline",
+                "primary_angle": angle,
+                "top_angle": "",
+                "final_angle": "",
+                "scene": scene_path(angle),
+            }
+        )
+
+        for first_offset in DESIGN_FLAP_ANGLE_OFFSETS:
+            top_angle = angle + first_offset
+            for second_offset in DESIGN_FLAP_ANGLE_OFFSETS:
+                final_angle = top_angle + second_offset
+                candidates.append(
+                    {
+                        "label": f"baseline_{angle}deg_extra_{top_angle}deg_final_{final_angle}deg",
+                        "kind": "edge_extensions_3_panels",
+                        "primary_angle": angle,
+                        "top_angle": top_angle,
+                        "final_angle": final_angle,
+                        "scene": None,
+                        "extra_panel_width_m": EXTRA_PANEL_WIDTH_M,
+                        "extra_panel_height_m": EXTRA_PANEL_HEIGHT_M,
+                    }
+                )
+
+    return candidates
+
+
+def analytic_size_patterns():
+    return [
+        (0.30, 0.20, 0.20),
+        (0.30, 0.25, 0.20),
+        (0.25, 0.20, 0.20),
+        (0.25, 0.25, 0.25),
+        (0.35, 0.20, 0.15),
+        (0.25, 0.20, 0.25),
+        (0.20, 0.25, 0.25),
+    ]
+
+
+def angle_orders_60_65_70():
+    return [
+        (60, 65, 70),
+        (60, 70, 65),
+        (65, 60, 70),
+        (65, 70, 60),
+        (70, 60, 65),
+        (70, 65, 60),
+    ]
+
+
+def analytic_candidate_label(angles, width_m, heights):
+    angle_part = "_".join(str(a) for a in angles)
+    height_part = "_".join(f"h{int(round(h * 100)):02d}" for h in heights)
+    return f"analytic_a{angle_part}_w{int(round(width_m * 100)):02d}_{height_part}"
+
+
+def make_analytic_size_scene(label, angles, width_m, heights):
+    root = base_scene_for_design(label, 60)
+    elements = []
+    base_angle = angles[0]
+    base_height = heights[0]
+    hinge_radius = BASELINE_PANEL_CENTER_RADIUS_M - 0.5 * base_height * math.cos(math.radians(base_angle))
+    hinge_z = -0.5 * base_height * math.sin(math.radians(base_angle))
+
+    for panel_index, (angle, height) in enumerate(zip(angles, heights)):
+        center_radius = hinge_radius + 0.5 * height * math.cos(math.radians(angle))
+        center_z = hinge_z + 0.5 * height * math.sin(math.radians(angle))
+        for azimuth in [0, 90, 180, 270]:
+            elements.append(
+                radial_plane_element(
+                    f"panel_{panel_index}_{azimuth}deg_{angle}deg",
+                    azimuth,
+                    angle,
+                    center_radius,
+                    center_z,
+                    width_m,
+                    height,
+                )
+            )
+        hinge_radius += height * math.cos(math.radians(angle))
+        hinge_z += height * math.sin(math.radians(angle))
+
+    root["scene"]["elements"] = elements
+    root["scene"]["name"] = label
+    return root
+
+
+def analytic_size_candidates():
+    candidates = []
+    widths = [0.25, 0.30, 0.35]
+    for angles in angle_orders_60_65_70():
+        for width_m in widths:
+            for heights in analytic_size_patterns():
+                label = analytic_candidate_label(angles, width_m, heights)
+                candidates.append(
+                    {
+                        "label": label,
+                        "kind": "analytic_size_order",
+                        "primary_angle": angles[0],
+                        "top_angle": angles[1],
+                        "final_angle": angles[2],
+                        "angles": angles,
+                        "width_m": width_m,
+                        "base_height_m": heights[0],
+                        "mid_height_m": heights[1],
+                        "final_height_m": heights[2],
+                        "scene": None,
+                    }
+                )
+    return candidates
+
+
 def require_design_inputs(candidates):
     missing = []
     if not SCRT_APP.exists():
@@ -392,8 +568,8 @@ def require_design_inputs(candidates):
     return True
 
 
-def materialize_design_scenes(candidates, top_offset_z, extra_panel_radius):
-    scene_dir = DESIGN_OUT_DIR / "scenes"
+def materialize_design_scenes(candidates, top_offset_z, extra_panel_radius, output_dir):
+    scene_dir = output_dir / "scenes"
     if scene_dir.exists():
         shutil.rmtree(scene_dir)
     for c in candidates:
@@ -405,6 +581,7 @@ def materialize_design_scenes(candidates, top_offset_z, extra_panel_radius):
             label,
             c["primary_angle"],
             top_angle if isinstance(top_angle, int) else None,
+            c.get("final_angle") if isinstance(c.get("final_angle"), int) else None,
             top_offset_z,
             extra_panel_radius,
         )
@@ -413,8 +590,24 @@ def materialize_design_scenes(candidates, top_offset_z, extra_panel_radius):
         c["scene"] = path
 
 
-def candidate_out_dir(label, pass_name):
-    return DESIGN_OUT_DIR / pass_name / label
+def materialize_analytic_size_scenes(candidates, output_dir):
+    scene_dir = output_dir / "scenes"
+    if scene_dir.exists():
+        shutil.rmtree(scene_dir)
+    for c in candidates:
+        root = make_analytic_size_scene(
+            c["label"],
+            c["angles"],
+            c["width_m"],
+            (c["base_height_m"], c["mid_height_m"], c["final_height_m"]),
+        )
+        path = scene_dir / f"{c['label']}.json"
+        write_json(path, root)
+        c["scene"] = path
+
+
+def candidate_out_dir(label, pass_name, output_dir):
+    return output_dir / pass_name / label
 
 
 def write_design_comparison(records, csv_path, txt_path, rays, pass_name):
@@ -423,6 +616,7 @@ def write_design_comparison(records, csv_path, txt_path, rays, pass_name):
         "kind",
         "primary_angle",
         "top_angle",
+        "final_angle",
         "extra_panel_width_m",
         "extra_panel_height_m",
         "total_power_w",
@@ -464,10 +658,17 @@ def write_design_comparison(records, csv_path, txt_path, rays, pass_name):
     def geometry_label(record):
         if record["top_angle"] == "":
             return f"base {record['primary_angle']}deg"
+        if record.get("final_angle", "") != "":
+            return (
+                f"base {record['primary_angle']}deg + "
+                f"flaps {record['top_angle']}/{record['final_angle']}deg"
+            )
         return f"base {record['primary_angle']}deg + flap {record['top_angle']}deg"
 
+    candidate_width = max(34, max(len(r["label"]) for r in records))
+    geometry_width = max(25, max(len(geometry_label(r)) for r in records))
     header = (
-        f"{'Rank':>4}  {'Candidate':<34} {'Geometry':<25} "
+        f"{'Rank':>4}  {'Candidate':<{candidate_width}} {'Geometry':<{geometry_width}} "
         f"{'Power W':>10} {'dW vs 60':>10} {'Mean':>9} {'Peak':>9} "
         f"{'C/M %':>8} {'C/P %':>8} {'Peak xy m':>18} {'Status':<8}"
     )
@@ -478,7 +679,7 @@ def write_design_comparison(records, csv_path, txt_path, rays, pass_name):
         "=" * 78,
         f"Rays per candidate       : {rays:,}",
         f"Center warning threshold : center/mean < {CENTER_MEAN_WARN_PCT:.1f}%",
-        "Extra flap geometry      : 0.30 m wide x 0.20 m tall, attached to outer panel edge",
+        "Extra flap geometry      : 0.30 m wide x 0.20 m tall, attached edge-to-edge outward",
         "Ranking objective        : total captured power; center-starved candidates are flagged",
         "",
         f"Best raw power           : {best_power['label']} ({best_power['total_power_w']:.2f} W)",
@@ -503,7 +704,7 @@ def write_design_comparison(records, csv_path, txt_path, rays, pass_name):
         status = "WARN" if r["center_warning"] else "OK"
         peak_xy = f"({r['peak_x_m']:+.3f},{r['peak_y_m']:+.3f})"
         lines.append(
-            f"{rank:>4}  {r['label']:<34} {geometry_label(r):<25} "
+            f"{rank:>4}  {r['label']:<{candidate_width}} {geometry_label(r):<{geometry_width}} "
             f"{r['total_power_w']:>10.2f} {delta_w(r):>+10.2f} "
             f"{r['mean_flux_wm2']:>9.0f} {r['peak_flux_wm2']:>9.0f} "
             f"{r['center_to_mean_pct']:>8.2f} {r['center_to_peak_pct']:>8.2f} "
@@ -517,7 +718,7 @@ def write_design_comparison(records, csv_path, txt_path, rays, pass_name):
     for rank, r in enumerate(shortlist, start=1):
         peak_xy = f"({r['peak_x_m']:+.3f},{r['peak_y_m']:+.3f})"
         lines.append(
-            f"{rank:>4}  {r['label']:<34} {geometry_label(r):<25} "
+            f"{rank:>4}  {r['label']:<{candidate_width}} {geometry_label(r):<{geometry_width}} "
             f"{r['total_power_w']:>10.2f} {delta_w(r):>+10.2f} "
             f"{r['mean_flux_wm2']:>9.0f} {r['peak_flux_wm2']:>9.0f} "
             f"{r['center_to_mean_pct']:>8.2f} {r['center_to_peak_pct']:>8.2f} "
@@ -562,9 +763,9 @@ def run_shared_scale_maps(input_dir, output_dir):
         print(proc.stderr, file=sys.stderr, end="")
 
 
-def run_design_pass(candidates, rays, pass_name):
-    pass_dir = DESIGN_OUT_DIR / pass_name
-    maps_dir = DESIGN_OUT_DIR / f"{pass_name}_maps"
+def run_design_pass(candidates, rays, pass_name, output_dir):
+    pass_dir = output_dir / pass_name
+    maps_dir = output_dir / f"{pass_name}_maps"
     if pass_dir.exists():
         shutil.rmtree(pass_dir)
     if maps_dir.exists():
@@ -573,7 +774,7 @@ def run_design_pass(candidates, rays, pass_name):
     records = []
     for c in candidates:
         label = c["label"]
-        out_dir = candidate_out_dir(label, pass_name)
+        out_dir = candidate_out_dir(label, pass_name, output_dir)
         run_headless_flux(c["scene"], rays, out_dir)
         metrics = analyze_flux_file(label, c["scene"], out_dir)
         record = {
@@ -581,6 +782,7 @@ def run_design_pass(candidates, rays, pass_name):
             "kind": c["kind"],
             "primary_angle": c["primary_angle"],
             "top_angle": c["top_angle"],
+            "final_angle": c.get("final_angle", ""),
             "extra_panel_width_m": c.get("extra_panel_width_m", ""),
             "extra_panel_height_m": c.get("extra_panel_height_m", ""),
             "center_warning": metrics["center_to_mean_pct"] < CENTER_MEAN_WARN_PCT,
@@ -590,21 +792,25 @@ def run_design_pass(candidates, rays, pass_name):
 
     write_design_comparison(
         records,
-        DESIGN_OUT_DIR / f"{pass_name}_comparison.csv",
-        DESIGN_OUT_DIR / f"{pass_name}_comparison.txt",
+        output_dir / f"{pass_name}_comparison.csv",
+        output_dir / f"{pass_name}_comparison.txt",
         rays,
         pass_name,
     )
-    run_shared_scale_maps(DESIGN_OUT_DIR / pass_name, DESIGN_OUT_DIR / f"{pass_name}_maps")
+    run_shared_scale_maps(output_dir / pass_name, output_dir / f"{pass_name}_maps")
     return records
 
 
-def run_design_sweep(args):
-    candidates = design_candidates(args.top_offset_z, args.extra_panel_radius)
+def run_design_sweep(args, output_dir=DESIGN_OUT_DIR, three_panel=False):
+    candidates = (
+        design_3_panel_candidates(args.top_offset_z, args.extra_panel_radius)
+        if three_panel
+        else design_candidates(args.top_offset_z, args.extra_panel_radius)
+    )
     if not require_design_inputs(candidates):
         return 1
-    materialize_design_scenes(candidates, args.top_offset_z, args.extra_panel_radius)
-    screen_records = run_design_pass(candidates, args.design_screen_rays, "screen")
+    materialize_design_scenes(candidates, args.top_offset_z, args.extra_panel_radius, output_dir)
+    screen_records = run_design_pass(candidates, args.design_screen_rays, "screen", output_dir)
 
     if args.screen_only:
         return 0
@@ -620,7 +826,155 @@ def run_design_sweep(args):
 
     finalist_labels = {"baseline_60deg", *(r["label"] for r in viable)}
     finalists = [c for c in candidates if c["label"] in finalist_labels]
-    run_design_pass(finalists, args.design_finalist_rays, "finalists")
+    run_design_pass(finalists, args.design_finalist_rays, "finalists", output_dir)
+    return 0
+
+
+def write_analytic_size_summary(records, output_dir, rays):
+    csv_path = output_dir / "screen_comparison.csv"
+    txt_path = output_dir / "screen_comparison.txt"
+    fieldnames = [
+        "label",
+        "angles",
+        "width_m",
+        "base_height_m",
+        "mid_height_m",
+        "final_height_m",
+        "total_power_w",
+        "center_flux_wm2",
+        "peak_flux_wm2",
+        "mean_flux_wm2",
+        "min_flux_wm2",
+        "std_flux_wm2",
+        "center_to_mean_pct",
+        "center_to_peak_pct",
+        "center_percentile_pct",
+        "center_warning",
+        "peak_x_m",
+        "peak_y_m",
+        "scene",
+        "flux_csv",
+    ]
+    output_dir.mkdir(parents=True, exist_ok=True)
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(records)
+
+    baseline = next(
+        r for r in records
+        if r["angles"] == "60/65/70"
+        and abs(r["width_m"] - 0.30) < 1e-9
+        and abs(r["base_height_m"] - 0.30) < 1e-9
+        and abs(r["mid_height_m"] - 0.20) < 1e-9
+        and abs(r["final_height_m"] - 0.20) < 1e-9
+    )
+    ranked = sorted(records, key=lambda r: r["total_power_w"], reverse=True)
+    clean = [r for r in ranked if not r["center_warning"]]
+
+    def delta(record):
+        return record["total_power_w"] - baseline["total_power_w"]
+
+    header = (
+        f"{'Rank':>4}  {'Angles':<8} {'W':>5} {'Heights b/m/f':<15} "
+        f"{'Power W':>10} {'dW':>9} {'Mean':>8} {'Peak':>8} "
+        f"{'C/M %':>8} {'C/P %':>8} {'Peak xy m':>18} {'Status':<6}"
+    )
+    rule = "-" * len(header)
+    lines = [
+        "Analytic 60/65/70 size and order sweep",
+        "=" * 78,
+        f"Rays per candidate       : {rays:,}",
+        "Geometry                 : four radial stacks of three analytic rectangular panels",
+        "Panel order              : all permutations of 60, 65, 70 degrees",
+        "Width sweep              : 0.25, 0.30, 0.35 m",
+        "Height patterns          : compact set around 0.30 m base and 0.20 m flaps",
+        f"Center warning threshold : center/mean < {CENTER_MEAN_WARN_PCT:.1f}%",
+        f"Reference design         : 60/65/70, width 0.30 m, heights 0.30/0.20/0.20 m "
+        f"({baseline['total_power_w']:.2f} W)",
+        "",
+        f"Best raw power           : {ranked[0]['label']} ({ranked[0]['total_power_w']:.2f} W)",
+    ]
+    if clean:
+        lines.append(
+            f"Best no-warning candidate: {clean[0]['label']} "
+            f"({clean[0]['total_power_w']:.2f} W, center/mean {clean[0]['center_to_mean_pct']:.2f}%)"
+        )
+
+    lines.extend(["", "Top 25 Ranked Candidates", header, rule])
+    for rank, r in enumerate(ranked[:25], start=1):
+        status = "WARN" if r["center_warning"] else "OK"
+        heights = f"{r['base_height_m']:.2f}/{r['mid_height_m']:.2f}/{r['final_height_m']:.2f}"
+        peak_xy = f"({r['peak_x_m']:+.3f},{r['peak_y_m']:+.3f})"
+        lines.append(
+            f"{rank:>4}  {r['angles']:<8} {r['width_m']:>5.2f} {heights:<15} "
+            f"{r['total_power_w']:>10.2f} {delta(r):>+9.2f} "
+            f"{r['mean_flux_wm2']:>8.0f} {r['peak_flux_wm2']:>8.0f} "
+            f"{r['center_to_mean_pct']:>8.2f} {r['center_to_peak_pct']:>8.2f} "
+            f"{peak_xy:>18} {status:<6}"
+        )
+
+    lines.extend(["", "Top 10 No-Warning Candidates", header, rule])
+    for rank, r in enumerate(clean[:10], start=1):
+        heights = f"{r['base_height_m']:.2f}/{r['mid_height_m']:.2f}/{r['final_height_m']:.2f}"
+        peak_xy = f"({r['peak_x_m']:+.3f},{r['peak_y_m']:+.3f})"
+        lines.append(
+            f"{rank:>4}  {r['angles']:<8} {r['width_m']:>5.2f} {heights:<15} "
+            f"{r['total_power_w']:>10.2f} {delta(r):>+9.2f} "
+            f"{r['mean_flux_wm2']:>8.0f} {r['peak_flux_wm2']:>8.0f} "
+            f"{r['center_to_mean_pct']:>8.2f} {r['center_to_peak_pct']:>8.2f} "
+            f"{peak_xy:>18} {'OK':<6}"
+        )
+
+    lines.extend(
+        [
+            "",
+            "Notes",
+            "  This is an analytic sizing proxy for CAD, not an STL import.",
+            "  It does not include triangular side filler panels yet; those should be CAD-modeled or imported as meshes.",
+        ]
+    )
+    with open(txt_path, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    print(f"Analytic size comparison -> {csv_path}")
+    print(f"Analytic size summary    -> {txt_path}")
+
+
+def run_analytic_size_sweep(args):
+    candidates = analytic_size_candidates()
+    if not SCRT_APP.exists():
+        print(f"Missing required file: {SCRT_APP}", file=sys.stderr)
+        return 1
+    materialize_analytic_size_scenes(candidates, ANALYTIC_SIZE_OUT_DIR)
+
+    pass_dir = ANALYTIC_SIZE_OUT_DIR / "screen"
+    maps_dir = ANALYTIC_SIZE_OUT_DIR / "screen_maps"
+    if pass_dir.exists():
+        shutil.rmtree(pass_dir)
+    if maps_dir.exists():
+        shutil.rmtree(maps_dir)
+
+    records = []
+    for c in candidates:
+        out_dir = candidate_out_dir(c["label"], "screen", ANALYTIC_SIZE_OUT_DIR)
+        run_headless_flux(c["scene"], args.design_screen_rays, out_dir)
+        metrics = analyze_flux_file(c["label"], c["scene"], out_dir)
+        records.append(
+            {
+                "label": c["label"],
+                "angles": "/".join(str(a) for a in c["angles"]),
+                "width_m": c["width_m"],
+                "base_height_m": c["base_height_m"],
+                "mid_height_m": c["mid_height_m"],
+                "final_height_m": c["final_height_m"],
+                **metrics,
+                "center_warning": metrics["center_to_mean_pct"] < CENTER_MEAN_WARN_PCT,
+                "scene": str(c["scene"]),
+            }
+        )
+
+    write_analytic_size_summary(records, ANALYTIC_SIZE_OUT_DIR, args.design_screen_rays)
+    run_shared_scale_maps(ANALYTIC_SIZE_OUT_DIR / "screen", maps_dir)
     return 0
 
 
@@ -819,7 +1173,11 @@ def write_outputs(rows, angles, rays, dni):
 def main():
     args = parse_args()
     if args.design_sweep:
-        return run_design_sweep(args)
+        return run_design_sweep(args, DESIGN_OUT_DIR, three_panel=False)
+    if args.design_3_panel_sweep:
+        return run_design_sweep(args, DESIGN_3_PANEL_OUT_DIR, three_panel=True)
+    if args.analytic_size_sweep:
+        return run_analytic_size_sweep(args)
 
     angles = sorted(args.angles)
     if not require_inputs(angles):

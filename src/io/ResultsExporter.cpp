@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iomanip>
 #include <nlohmann/json.hpp>
+#include <numeric>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -93,6 +94,62 @@ void export_summary_json(const tracer::FluxAccumulator& acc,
     j["bin_width_m"]            = acc.bin_width_m();
     j["bin_height_m"]           = acc.bin_height_m();
 
+    f << j.dump(4) << '\n';
+}
+
+// ---- Multi-face receiver export -------------------------------------------
+
+void export_receiver_flux_csvs(const scene::Receiver& receiver,
+                               const std::filesystem::path& out_dir) {
+    std::filesystem::create_directories(out_dir);
+    for (const auto& face : receiver.faces()) {
+        export_flux_csv(face->accumulator(),
+                        out_dir / ("flux_" + face->name() + ".csv"));
+    }
+}
+
+void export_receiver_summary_json(const scene::Receiver& receiver,
+                                  const tracer::TraceResult& result,
+                                  double dni_wm2,
+                                  const std::filesystem::path& out) {
+    std::ofstream f(out);
+    if (!f)
+        throw std::runtime_error("export_receiver_summary_json: cannot open '" + out.string() + "'");
+
+    nlohmann::json j;
+    j["primary_rays_traced"] = result.primary_rays_traced;
+    j["total_hits"] = result.total_hits;
+    j["wall_time_s"] = result.wall_time_s;
+    j["faces"] = nlohmann::json::object();
+
+    double absorbed_power = 0.0;
+    double recorded_power = 0.0;
+    for (const auto& face : receiver.faces()) {
+        const auto& acc = face->accumulator();
+        const double area = 4.0 * acc.half_width() * acc.half_height();
+        const double mean_flux = area > 0.0 ? acc.total_power_w() / area : 0.0;
+        if (face->mode() == scene::ReceiverFaceMode::RecordAbsorb)
+            absorbed_power += acc.total_power_w();
+        recorded_power += acc.total_power_w();
+
+        nlohmann::json fj;
+        fj["mode"] = face->mode() == scene::ReceiverFaceMode::RecordPass
+                         ? "record_pass" : "record_absorb";
+        fj["total_power_w"] = acc.total_power_w();
+        fj["peak_flux_wm2"] = acc.peak_flux_wm2();
+        fj["mean_flux_wm2"] = mean_flux;
+        fj["concentration_ratio"] = acc.concentration_ratio(dni_wm2);
+        fj["grid_nx"] = acc.nx();
+        fj["grid_ny"] = acc.ny();
+        fj["half_width_m"] = acc.half_width();
+        fj["half_height_m"] = acc.half_height();
+        fj["bin_width_m"] = acc.bin_width_m();
+        fj["bin_height_m"] = acc.bin_height_m();
+        j["faces"][face->name()] = fj;
+    }
+
+    j["absorbed_power_w"] = absorbed_power;
+    j["recorded_power_w"] = recorded_power;
     f << j.dump(4) << '\n';
 }
 

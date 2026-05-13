@@ -47,7 +47,7 @@ def parse_args():
 
 
 def find_flux_files(input_dir):
-    return sorted(input_dir.glob("*deg/flux.csv"))
+    return sorted(input_dir.glob("*/flux.csv"))
 
 
 def load_maps(flux_files):

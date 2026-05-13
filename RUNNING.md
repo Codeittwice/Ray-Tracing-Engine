@@ -145,15 +145,66 @@ The main outputs are:
 - `results/stl_rect_design_sweep/screen_comparison.csv` - raw comparison table
 - `results/stl_rect_design_sweep/screen_maps/*.png` - shared-scale flux maps
 
+Run the three-panel version, which chains a second flap onto the outer edge of the first added
+flap. The final panel is the same `0.30 m x 0.20 m` size and always uses an angle larger than
+the preceding flap:
+
+```powershell
+python scripts\sweep_stl_rect_angles.py --design-3-panel-sweep --screen-only --design-screen-rays 1000000
+```
+
+The three-panel sweep writes to a separate folder so the two-panel results are not touched:
+
+- `results/stl_rect_design_3_panels_sweep/scenes/*.json`
+- `results/stl_rect_design_3_panels_sweep/screen_comparison.txt`
+- `results/stl_rect_design_3_panels_sweep/screen_comparison.csv`
+- `results/stl_rect_design_3_panels_sweep/screen_maps/*.png`
+
 Open the generated candidates in Polyscope:
 
 ```powershell
 .\build\debug\scrt_app.exe --examples-dir .\results\stl_rect_design_sweep\scenes
 ```
 
+For the three-panel sweep, point Polyscope at the separate generated-scene folder:
+
+```powershell
+.\build\debug\scrt_app.exe --examples-dir .\results\stl_rect_design_3_panels_sweep\scenes
+```
+
 The viewer's Scene Browser lists every generated candidate. Load them one at a time to verify
 that each flap is hinged to the outer panel edge and tilts radially outward from its parent
 panel.
+
+### Box receiver STL runs
+
+Box receiver runs write outside `results/`, under the top-level `box_results/` folder. The
+glass top records flux and passes rays through; the bottom and four walls record and absorb.
+Each run writes per-face CSVs under `csv/` and rendered maps under `images/`.
+
+Run the three-panel `60/65/70` STL with the indented box receiver:
+
+```powershell
+.\build\debug\scrt_app.exe examples\stl_rectangular_3floors_606570deg_box.json --headless --rays 1000000 --out box_results\box_receiver_606570_stl_1m
+python scripts\plot_box_flux_maps.py box_results\box_receiver_606570_stl_1m
+```
+
+Run the two-panel `60/65` STL with the same box receiver:
+
+```powershell
+.\build\debug\scrt_app.exe examples\stl_rectangular_2floors_6065deg_box.json --headless --rays 1000000 --out box_results\box_receiver_6065_stl_1m
+python scripts\plot_box_flux_maps.py box_results\box_receiver_6065_stl_1m
+```
+
+For 10M-ray finalist runs, use the same commands with `--rays 10000000` and folders such as
+`box_results\box_receiver_606570_stl_10m` or `box_results\box_receiver_6065_stl_10m`.
+
+Each run folder contains:
+
+- `summary.json`
+- `csv/flux_glass_top.csv`, `csv/flux_bottom.csv`, and one CSV per wall
+- `images/unfolded_box_flux.png`
+- `images/flux_glass_top.png`, `images/flux_bottom.png`, and one PNG per wall
 
 Run the original fixed-angle STL sweep:
 

@@ -16,6 +16,9 @@ public:
     /// Deposit ray power into the bin corresponding to hit.uv.
     void deposit(const core::Ray& r, const core::Hit& h) noexcept;
 
+    /// Reset accumulated power and finalized flux to zero.
+    void clear() noexcept;
+
     /// Add another accumulator's power_sum into this one (for parallel merge).
     void merge_from(const FluxAccumulator& other) noexcept;
 

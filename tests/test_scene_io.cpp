@@ -133,6 +133,30 @@ TEST_CASE("T11: all example scenes load without error") {
     }
 }
 
+TEST_CASE("T11: box receiver scene creates proportional receiver faces") {
+    auto path = std::filesystem::path(SCRT_SOURCE_DIR) / "examples" /
+                "stl_rectangular_3floors_606570deg_box.json";
+    REQUIRE(std::filesystem::exists(path));
+
+    scrt::io::LoadedScene ls = scrt::io::load_scene(path);
+    auto* recv = ls.scene->receiver();
+    REQUIRE(recv != nullptr);
+    REQUIRE(recv->faces().size() == 6);
+
+    CHECK(recv->faces()[0]->name() == "glass_top");
+    CHECK(recv->faces()[0]->accumulator().nx() == 64);
+    CHECK(recv->faces()[0]->accumulator().ny() == 64);
+    CHECK(recv->faces()[1]->name() == "bottom");
+    CHECK(recv->faces()[1]->accumulator().nx() == 64);
+    CHECK(recv->faces()[1]->accumulator().ny() == 64);
+    CHECK(recv->faces()[2]->name() == "north_wall");
+    CHECK(recv->faces()[2]->accumulator().nx() == 64);
+    CHECK(recv->faces()[2]->accumulator().ny() == 32);
+    CHECK(recv->faces()[4]->name() == "east_wall");
+    CHECK(recv->faces()[4]->accumulator().nx() == 32);
+    CHECK(recv->faces()[4]->accumulator().ny() == 64);
+}
+
 TEST_CASE("T11: export_flux_csv writes a readable file") {
     // Build minimal scene, trace, export.
     auto path = std::filesystem::path(SCRT_SOURCE_DIR) / "examples" / "parabolic_dish.json";

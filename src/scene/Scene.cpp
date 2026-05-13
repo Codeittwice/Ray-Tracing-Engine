@@ -57,9 +57,12 @@ bool Scene::intersect(const core::Ray& r, double t_min, double t_max,
     }
 
     if (receiver_) {
-        if (receiver_->surface()->intersect(r, t_min, t_best, tmp)) {
-            hit   = tmp;
-            found = true;
+        for (const auto& face : receiver_->faces()) {
+            if (face->surface()->intersect(r, t_min, t_best, tmp)) {
+                t_best = tmp.t;
+                hit    = tmp;
+                found  = true;
+            }
         }
     }
 

@@ -20,6 +20,16 @@ void export_summary_json(const tracer::FluxAccumulator& acc,
                          double dni_wm2,
                          const std::filesystem::path& out);
 
+/// Write one CSV per receiver face into out_dir.
+void export_receiver_flux_csvs(const scene::Receiver& receiver,
+                               const std::filesystem::path& out_dir);
+
+/// Write a JSON summary for a multi-face receiver.
+void export_receiver_summary_json(const scene::Receiver& receiver,
+                                  const tracer::TraceResult& result,
+                                  double dni_wm2,
+                                  const std::filesystem::path& out);
+
 /// Write tessellated scene geometry as a Wavefront OBJ file (for debugging in Blender).
 void export_scene_obj(const scene::Scene& scene, int nseg,
                       const std::filesystem::path& out);
