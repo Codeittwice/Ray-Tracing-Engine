@@ -157,6 +157,49 @@ TEST_CASE("T11: box receiver scene creates proportional receiver faces") {
     CHECK(recv->faces()[4]->accumulator().ny() == 64);
 }
 
+TEST_CASE("T11: box receiver can add an internal battery receiver face") {
+    nlohmann::json j;
+    j["scene"]["name"] = "box_with_battery";
+    j["scene"]["materials"] = nlohmann::json::array();
+    j["scene"]["sun"]["direction"] = {0.0, 0.0, -1.0};
+    j["scene"]["sun"]["dni_wm2"] = 1000.0;
+    j["scene"]["sun"]["sunshape"]["type"] = "pillbox";
+    j["scene"]["sun"]["sunshape"]["half_angle_mrad"] = 4.65;
+    j["scene"]["aperture"]["type"] = "disk";
+    j["scene"]["aperture"]["center"] = {0.0, 0.0, 1.0};
+    j["scene"]["aperture"]["normal"] = {0.0, 0.0, 1.0};
+    j["scene"]["aperture"]["radius"] = 0.5;
+    j["scene"]["receiver"]["type"] = "box";
+    j["scene"]["receiver"]["surface"]["type"] = "plane";
+    j["scene"]["receiver"]["surface"]["half_width"] = 0.15;
+    j["scene"]["receiver"]["surface"]["half_height"] = 0.15;
+    j["scene"]["receiver"]["depth"] = 0.15;
+    j["scene"]["receiver"]["battery"]["top_depth_m"] = 0.075;
+    j["scene"]["receiver"]["battery"]["half_width"] = 0.075;
+    j["scene"]["receiver"]["battery"]["half_height"] = 0.05;
+    j["scene"]["receiver"]["battery"]["nx"] = 32;
+    j["scene"]["receiver"]["battery"]["ny"] = 24;
+
+    const auto path = std::filesystem::temp_directory_path() / "scrt_box_with_battery.json";
+    {
+        std::ofstream f(path);
+        REQUIRE(f.is_open());
+        f << j.dump(4) << '\n';
+    }
+
+    scrt::io::LoadedScene ls = scrt::io::load_scene(path);
+    auto* recv = ls.scene->receiver();
+    REQUIRE(recv != nullptr);
+    REQUIRE(recv->faces().size() == 7);
+    CHECK(recv->faces()[6]->name() == "battery_top");
+    CHECK(recv->faces()[6]->accumulator().half_width() == doctest::Approx(0.075));
+    CHECK(recv->faces()[6]->accumulator().half_height() == doctest::Approx(0.05));
+    CHECK(recv->faces()[6]->accumulator().nx() == 32);
+    CHECK(recv->faces()[6]->accumulator().ny() == 24);
+
+    std::filesystem::remove(path);
+}
+
 TEST_CASE("T11: export_flux_csv writes a readable file") {
     // Build minimal scene, trace, export.
     auto path = std::filesystem::path(SCRT_SOURCE_DIR) / "examples" / "parabolic_dish.json";

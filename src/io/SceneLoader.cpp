@@ -330,6 +330,27 @@ LoadedScene load_scene(const std::filesystem::path& path) {
             west.set_transform(
                 frame_transform({-half_width, 0.0, -depth * 0.5}, {0.0, 0.0, -1.0}, {0.0, 1.0, 0.0}, {-1.0, 0.0, 0.0}));
 
+            if (rj.contains("battery")) {
+                const json& bj = rj["battery"];
+                const bool enabled = bj.value("enabled", true);
+                if (enabled) {
+                    const double battery_hw = bj.value("half_width", half_width * 0.5);
+                    const double battery_hh = bj.value("half_height", half_height * 0.5);
+                    const double top_depth = bj.value("top_depth_m", depth);
+                    require(top_depth > 0.0 && top_depth <= depth,
+                            "box battery top_depth_m must be in (0, depth]");
+                    const int battery_nx = bj.value("nx", nx);
+                    const int battery_ny = bj.value("ny", ny);
+                    auto& battery = recv->add_face("battery_top", battery_hw, battery_hh,
+                                                   battery_nx, battery_ny,
+                                                   scene::ReceiverFaceMode::RecordAbsorb);
+                    battery.surface()->set_material(absorber_ptr);
+                    battery.set_transform(
+                        frame_transform({0.0, 0.0, -top_depth}, {1.0, 0.0, 0.0},
+                                        {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}));
+                }
+            }
+
             auto top_mode = rj.value("top_mode", std::string("record_pass"));
             if (top_mode != "record_pass")
                 throw std::runtime_error("SceneLoader: box receiver only supports top_mode='record_pass'");

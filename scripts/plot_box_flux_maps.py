@@ -14,6 +14,16 @@ import numpy as np
 
 FACES = [
     "glass_top",
+    "battery_top",
+    "bottom",
+    "north_wall",
+    "south_wall",
+    "east_wall",
+    "west_wall",
+]
+
+REQUIRED_FACES = [
+    "glass_top",
     "bottom",
     "north_wall",
     "south_wall",
@@ -48,7 +58,7 @@ def load_faces(csv_dir: Path) -> dict[str, np.ndarray]:
         path = csv_dir / f"flux_{face}.csv"
         if path.exists():
             maps[face] = np.loadtxt(path, delimiter=",")
-    missing = [face for face in FACES if face not in maps]
+    missing = [face for face in REQUIRED_FACES if face not in maps]
     if missing:
         raise FileNotFoundError(
             f"missing box receiver CSVs in {csv_dir}: {', '.join(missing)}"
@@ -99,6 +109,7 @@ def save_unfolded(
     east = np.fliplr(maps["east_wall"])
     west = maps["west_wall"]
     top = maps["glass_top"]
+    battery = maps.get("battery_top")
 
     bottom_h, bottom_w = bottom.shape
     wall_depth = north.shape[0]
@@ -107,8 +118,11 @@ def save_unfolded(
 
     cross_h = wall_depth + bottom_h + south.shape[0]
     cross_w = side_depth + bottom_w + east.shape[1]
-    canvas_h = max(cross_h, top.shape[0])
-    canvas_w = cross_w + gap + top.shape[1]
+    extra_w = top.shape[1]
+    if battery is not None:
+        extra_w += gap + battery.shape[1]
+    canvas_h = max(cross_h, top.shape[0], 0 if battery is None else battery.shape[0])
+    canvas_w = cross_w + gap + extra_w
     canvas = np.full((canvas_h, canvas_w), np.nan)
 
     origin_r = wall_depth
@@ -118,7 +132,11 @@ def save_unfolded(
     paste(canvas, bottom, origin_r, origin_c)
     paste(canvas, east, origin_r, origin_c + bottom_w)
     paste(canvas, south, origin_r + bottom_h, origin_c)
-    paste(canvas, top, origin_r, cross_w + gap)
+    top_c = cross_w + gap
+    paste(canvas, top, origin_r, top_c)
+    battery_c = top_c + top.shape[1] + gap
+    if battery is not None:
+        paste(canvas, battery, origin_r, battery_c)
 
     fig, ax = plt.subplots(figsize=(9.0, 6.0), constrained_layout=True)
     im = ax.imshow(canvas, origin="upper", cmap=cmap, vmin=vmin, vmax=vmax)
@@ -132,8 +150,13 @@ def save_unfolded(
         "bottom": (origin_c + bottom_w / 2, origin_r + bottom_h / 2),
         "east_wall": (origin_c + bottom_w + east.shape[1] / 2, origin_r + bottom_h / 2),
         "south_wall": (origin_c + bottom_w / 2, origin_r + bottom_h + south.shape[0] / 2),
-        "glass_top": (cross_w + gap + top.shape[1] / 2, origin_r + top.shape[0] / 2),
+        "glass_top": (top_c + top.shape[1] / 2, origin_r + top.shape[0] / 2),
     }
+    if battery is not None:
+        labels["battery_top"] = (
+            battery_c + battery.shape[1] / 2,
+            origin_r + battery.shape[0] / 2,
+        )
     for label, (x, y) in labels.items():
         ax.text(
             x,

@@ -206,6 +206,34 @@ Each run folder contains:
 - `images/unfolded_box_flux.png`
 - `images/flux_glass_top.png`, `images/flux_bottom.png`, and one PNG per wall
 
+### scripts/fixed_box_analytic_optimization.py - fixed-width analytic box study
+
+Generates the fixed `0.30 m` box-width analytic optimization study. The study deliberately
+does not rank contenders against the `606570` or `6065` CAD/STL scenes because those include
+triangular side panels. The box interior is treated as matt-black absorbing receiver walls.
+
+Create the tidy folder tree, generated scenes, manifests, and reports without running the
+large ray sweep:
+
+```powershell
+python scripts\fixed_box_analytic_optimization.py --clean
+```
+
+Run the full 1M-ray screening pass:
+
+```powershell
+python scripts\fixed_box_analytic_optimization.py --clean --run-screen
+```
+
+Outputs are written under `results/fixed_box_analytic_optimization/`:
+
+- one route folder for each of the five tests, each with `scenes/`, `runs/`, `maps/`,
+  `tables/`, `manifest.json`, and `report.md`
+- `summary_report.md`, `summary_rankings.csv`, and `README.md` at the study root
+
+Use `--limit-route1 N` for quick smoke tests of the largest route before launching the full
+screening run.
+
 Run the original fixed-angle STL sweep:
 
 ```powershell
