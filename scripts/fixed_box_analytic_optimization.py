@@ -75,6 +75,11 @@ def parse_args() -> argparse.Namespace:
         default=0,
         help="Optional cap for route 1 screening candidates, useful for smoke tests.",
     )
+    parser.add_argument(
+        "--run-follow-up",
+        action="store_true",
+        help="Run the focused higher-angle follow-up sweep and 10M-ray finalist confirmations.",
+    )
     return parser.parse_args()
 
 
@@ -292,6 +297,25 @@ def route5_cases(seed_case: dict) -> list[dict]:
     return cases
 
 
+def follow_up_cases() -> list[dict]:
+    """Focused higher-angle sweep motivated by the first fixed-box screening pass."""
+    cases = []
+    height_sets = [
+        (0.25, 0.20, 0.25),
+        (0.30, 0.20, 0.20),
+    ]
+    for angles, heights in itertools.product(
+        itertools.product(range(62, 66), range(67, 71), range(72, 76)),
+        height_sets,
+    ):
+        label = (
+            f"r6_a{angles[0]}_{angles[1]}_{angles[2]}"
+            f"_h{int(heights[0] * 100):02d}_{int(heights[1] * 100):02d}_{int(heights[2] * 100):02d}"
+        )
+        cases.append({"route": "06", "label": label, "angles": angles, "heights": heights})
+    return cases
+
+
 def seed_case() -> dict:
     return {
         "angles": (60, 65, 70),
@@ -420,13 +444,18 @@ def face_center_to_mean(path: Path) -> float:
     return sum(center_cells) / len(center_cells) / mean_flux * 100.0
 
 
-def run_route(route_dir: Path, manifest_cases: list[dict], rays: int) -> list[dict]:
+def run_route(
+    route_dir: Path,
+    manifest_cases: list[dict],
+    rays: int,
+    render_maps: bool = True,
+) -> list[dict]:
     records = []
     for case in manifest_cases:
         scene = ROOT / case["scene"]
         run_dir = route_dir / "runs" / case["label"]
         run_headless_flux(scene, rays, run_dir)
-        if PLOT_BOX.exists():
+        if render_maps and PLOT_BOX.exists():
             subprocess.run(
                 [sys.executable, str(PLOT_BOX), str(run_dir)],
                 check=True,
@@ -548,8 +577,114 @@ def write_top_level(out_root: Path, all_records: list[dict]) -> None:
             writer.writerow({field: row.get(field, "") for field in fields})
 
 
+def write_follow_up_report(route_dir: Path, screen_records: list[dict], finalist_records: list[dict]) -> None:
+    lines = [
+        "# Focused Higher-Angle Follow-Up",
+        "",
+        "Box width: 0.30 m fixed.",
+        f"Interior wall finish: {INTERIOR_FINISH}.",
+        "Comparison policy: analytic/plane contenders only; CAD/STL 606570 and 6065 are not ranked here.",
+        "",
+        "Screening angle range: 62-65 deg / 67-70 deg / 72-75 deg.",
+        "Screening height patterns: 0.25/0.20/0.25 m and 0.30/0.20/0.20 m.",
+        f"Screening runs: {len(screen_records)} at 1M rays each.",
+        f"Finalist runs: {len(finalist_records)} at 10M rays each.",
+        "",
+        "## 1M-Ray Screen",
+        "",
+        "| Rank | Candidate | Battery W | Absorbed W | Top Entry W | Useful % | C/M % | Status |",
+        "|---:|---|---:|---:|---:|---:|---:|---|",
+    ]
+    ranked = sorted(screen_records, key=lambda r: r["battery_power_w"], reverse=True)
+    for idx, row in enumerate(ranked[:20], start=1):
+        status = "WARN" if row["center_warning"] else "OK"
+        lines.append(
+            f"| {idx} | `{row['label']}` | {row['battery_power_w']:.3f} | "
+            f"{row['absorbed_power_w']:.3f} | {row['top_entry_power_w']:.3f} | "
+            f"{row['useful_fraction_pct']:.2f} | {row['center_to_mean_pct']:.2f} | {status} |"
+        )
+
+    lines.extend([
+        "",
+        "## 10M-Ray Finalist Confirmation",
+        "",
+        "| Rank | Candidate | Battery W | Absorbed W | Top Entry W | Useful % | C/M % | Status |",
+        "|---:|---|---:|---:|---:|---:|---:|---|",
+    ])
+    finalist_ranked = sorted(finalist_records, key=lambda r: r["battery_power_w"], reverse=True)
+    for idx, row in enumerate(finalist_ranked, start=1):
+        status = "WARN" if row["center_warning"] else "OK"
+        lines.append(
+            f"| {idx} | `{row['label']}` | {row['battery_power_w']:.3f} | "
+            f"{row['absorbed_power_w']:.3f} | {row['top_entry_power_w']:.3f} | "
+            f"{row['useful_fraction_pct']:.2f} | {row['center_to_mean_pct']:.2f} | {status} |"
+        )
+    (route_dir / "report.md").write_text("\n".join(lines) + "\n")
+
+
+def run_follow_up(args: argparse.Namespace) -> int:
+    out_root = args.out_root.resolve()
+    route_dir = out_root / "06_focused_higher_angle_followup"
+    for child in ["scenes", "runs", "maps", "tables", "finalist_scenes", "finalist_runs"]:
+        path = route_dir / child
+        if path.exists():
+            shutil.rmtree(path)
+        path.mkdir(parents=True, exist_ok=True)
+
+    cases = generate_route(route_dir, follow_up_cases(), args.screen_rays, args.seed, args.dni)
+    write_manifest(route_dir, "Focused Higher-Angle Follow-Up", cases, args)
+
+    screen_records = run_route(route_dir, cases, args.screen_rays, render_maps=False)
+    for row in screen_records:
+        row["route"] = "06_focused_higher_angle_followup"
+    write_table(route_dir, screen_records)
+
+    finalist_cases = []
+    clean = [r for r in screen_records if not r["center_warning"]]
+    for row in sorted(clean, key=lambda r: r["battery_power_w"], reverse=True)[:4]:
+        case = next(c for c in cases if c["label"] == row["label"])
+        finalist_case = dict(case)
+        finalist_case["label"] = f"{case['label']}_10m"
+        finalist_cases.append(finalist_case)
+
+    finalist_manifest = []
+    finalist_scene_dir = route_dir / "finalist_scenes"
+    for case in finalist_cases:
+        root = case_scene(case, args.finalist_rays, args.seed, args.dni)
+        scene_path = finalist_scene_dir / f"{case['label']}.json"
+        write_json(scene_path, root)
+        finalist_manifest.append({**case, "scene": rel(scene_path)})
+
+    finalist_records = []
+    for case in finalist_manifest:
+        scene = ROOT / case["scene"]
+        run_dir = route_dir / "finalist_runs" / case["label"]
+        run_headless_flux(scene, args.finalist_rays, run_dir)
+        if PLOT_BOX.exists():
+            subprocess.run([sys.executable, str(PLOT_BOX), str(run_dir)], check=True, cwd=ROOT)
+        finalist_records.append(read_box_metrics(run_dir, scene, case))
+
+    if screen_records:
+        with (route_dir / "tables" / "screen_results.csv").open("w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=list(screen_records[0].keys()))
+            writer.writeheader()
+            writer.writerows(screen_records)
+    if finalist_records:
+        with (route_dir / "tables" / "finalist_10m_results.csv").open("w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=list(finalist_records[0].keys()))
+            writer.writeheader()
+            writer.writerows(finalist_records)
+
+    write_follow_up_report(route_dir, screen_records, finalist_records)
+    print(f"Focused follow-up written to {route_dir}")
+    return 0
+
+
 def main() -> int:
     args = parse_args()
+    if args.run_follow_up:
+        return run_follow_up(args)
+
     out_root = args.out_root.resolve()
     if args.clean and out_root.exists():
         shutil.rmtree(out_root)
