@@ -1,0 +1,60 @@
+{
+    "source_meshes": {
+        "entire_assembly": "assets\\meshes\\two_level_entire_assembly.stl",
+        "reflective_only": "assets\\meshes\\two_level_reflective_only.stl"
+    },
+    "triangle_counts": {
+        "entire_assembly": 18192,
+        "reflective_only": 3008,
+        "inner_aluminum": 526,
+        "outer_emergency_blanket": 2482,
+        "non_reflective": 15184
+    },
+    "raw_reflective_bounds": {
+        "min": [
+            -155.1687469482422,
+            59.97366714477539,
+            -125.62825012207031
+        ],
+        "max": [
+            589.4046020507812,
+            633.8900756835938,
+            618.945068359375
+        ]
+    },
+    "rotated_entire_bounds_m_before_translation": {
+        "min": [
+            -0.1551687469482422,
+            -0.618945068359375,
+            0.05097366714477539
+        ],
+        "max": [
+            0.5894046020507813,
+            0.12562825012207032,
+            0.6338900756835938
+        ]
+    },
+    "rotated_reflective_bounds_m_before_translation": {
+        "min": [
+            -0.1551687469482422,
+            -0.618945068359375,
+            0.059973667144775394
+        ],
+        "max": [
+            0.5894046020507813,
+            0.12562825012207032,
+            0.6338900756835938
+        ]
+    },
+    "mesh_rotation_euler_deg": [
+        90.0,
+        0.0,
+        0.0
+    ],
+    "rim_z_raw": 24.371749877929688,
+    "scene_mesh_translation_m": [
+        -0.21711792755126952,
+        0.24665840911865233,
+        -0.20097366714477538
+    ]
+}

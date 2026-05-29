@@ -1,0 +1,191 @@
+{
+    "scene": {
+        "name": "Final two-level CAD design with 2 PMMA panes",
+        "sun": {
+            "direction": [
+                0.0,
+                0.0,
+                -1.0
+            ],
+            "dni_wm2": 1000.0,
+            "sunshape": {
+                "type": "buie",
+                "chi": 0.05
+            }
+        },
+        "aperture": {
+            "type": "disk",
+            "center": [
+                0.0,
+                0.0,
+                1.0
+            ],
+            "normal": [
+                0.0,
+                0.0,
+                1.0
+            ],
+            "radius": 0.55
+        },
+        "materials": [
+            {
+                "id": "aluminum_sheet",
+                "type": "real_mirror",
+                "reflectance": 0.86,
+                "slope_error_mrad": 2.0
+            },
+            {
+                "id": "emergency_blanket",
+                "type": "real_mirror",
+                "reflectance": 0.8,
+                "slope_error_mrad": 5.0
+            },
+            {
+                "id": "non_reflective_absorber",
+                "type": "absorber"
+            },
+            {
+                "id": "pmma_pane",
+                "type": "thin_dielectric_pane",
+                "n": 1.49,
+                "thickness_m": 0.003,
+                "absorption_per_m": 1.0
+            }
+        ],
+        "elements": [
+            {
+                "name": "outer_emergency_blanket_reflectors",
+                "surface": {
+                    "type": "mesh",
+                    "path": "../meshes/two_level_outer_emergency_blanket_reflectors.stl",
+                    "scale_to_meters": 0.001
+                },
+                "transform": {
+                    "translation": [
+                        -0.21711792755126952,
+                        0.24665840911865233,
+                        -0.20097366714477538
+                    ],
+                    "rotation_euler_deg": [
+                        90.0,
+                        0.0,
+                        0.0
+                    ]
+                },
+                "material": "emergency_blanket"
+            },
+            {
+                "name": "inner_aluminum_reflectors",
+                "surface": {
+                    "type": "mesh",
+                    "path": "../meshes/two_level_inner_aluminum_reflectors.stl",
+                    "scale_to_meters": 0.001
+                },
+                "transform": {
+                    "translation": [
+                        -0.21711792755126952,
+                        0.24665840911865233,
+                        -0.20097366714477538
+                    ],
+                    "rotation_euler_deg": [
+                        90.0,
+                        0.0,
+                        0.0
+                    ]
+                },
+                "material": "aluminum_sheet"
+            },
+            {
+                "name": "non_reflective_assembly_occluders",
+                "surface": {
+                    "type": "mesh",
+                    "path": "../meshes/two_level_non_reflective_occluders.stl",
+                    "scale_to_meters": 0.001
+                },
+                "transform": {
+                    "translation": [
+                        -0.21711792755126952,
+                        0.24665840911865233,
+                        -0.20097366714477538
+                    ],
+                    "rotation_euler_deg": [
+                        90.0,
+                        0.0,
+                        0.0
+                    ]
+                },
+                "material": "non_reflective_absorber"
+            },
+            {
+                "name": "pmma_pane_1",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.15,
+                    "half_height": 0.15
+                },
+                "transform": {
+                    "translation": [
+                        0.0,
+                        0.0,
+                        0.004
+                    ]
+                },
+                "material": "pmma_pane"
+            },
+            {
+                "name": "pmma_pane_2",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.15,
+                    "half_height": 0.15
+                },
+                "transform": {
+                    "translation": [
+                        0.0,
+                        0.0,
+                        0.017
+                    ]
+                },
+                "material": "pmma_pane"
+            }
+        ],
+        "receiver": {
+            "type": "box",
+            "surface": {
+                "type": "plane",
+                "half_width": 0.15,
+                "half_height": 0.15
+            },
+            "depth": 0.15,
+            "top_mode": "record_pass",
+            "grid": {
+                "nx": 64,
+                "ny": 64
+            },
+            "transform": {
+                "translation": [
+                    0.0,
+                    0.0,
+                    0.0
+                ]
+            },
+            "battery": {
+                "enabled": true,
+                "half_width": 0.075,
+                "half_height": 0.075,
+                "height_m": 0.07,
+                "top_depth_m": 0.08,
+                "nx": 64,
+                "ny": 64
+            }
+        }
+    },
+    "trace": {
+        "n_primary_rays": 10000000,
+        "max_bounces": 16,
+        "power_cutoff_w": 1e-09,
+        "record_paths": false,
+        "max_paths_to_record": 500,
+        "rng_seed": 42
+    }
+}

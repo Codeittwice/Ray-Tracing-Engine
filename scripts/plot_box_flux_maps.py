@@ -15,6 +15,10 @@ import numpy as np
 FACES = [
     "glass_top",
     "battery_top",
+    "battery_north_wall",
+    "battery_south_wall",
+    "battery_east_wall",
+    "battery_west_wall",
     "bottom",
     "north_wall",
     "south_wall",
@@ -48,6 +52,11 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=None,
         help="Fixed color-scale maximum in W/m². Defaults to the run's own maximum.",
+    )
+    parser.add_argument(
+        "--image-dir-name",
+        default="images",
+        help="Output subdirectory name under the run directory.",
     )
     return parser.parse_args()
 
@@ -110,6 +119,10 @@ def save_unfolded(
     west = maps["west_wall"]
     top = maps["glass_top"]
     battery = maps.get("battery_top")
+    battery_north = maps.get("battery_north_wall")
+    battery_south = maps.get("battery_south_wall")
+    battery_east = maps.get("battery_east_wall")
+    battery_west = maps.get("battery_west_wall")
 
     bottom_h, bottom_w = bottom.shape
     wall_depth = north.shape[0]
@@ -118,10 +131,16 @@ def save_unfolded(
 
     cross_h = wall_depth + bottom_h + south.shape[0]
     cross_w = side_depth + bottom_w + east.shape[1]
+    battery_block_h = 0
+    battery_block_w = 0
+    if all(x is not None for x in [battery, battery_north, battery_south, battery_east, battery_west]):
+        battery_block_h = battery_north.shape[0] + battery.shape[0] + battery_south.shape[0]
+        battery_block_w = battery_west.shape[1] + battery.shape[1] + battery_east.shape[1]
+
     extra_w = top.shape[1]
-    if battery is not None:
-        extra_w += gap + battery.shape[1]
-    canvas_h = max(cross_h, top.shape[0], 0 if battery is None else battery.shape[0])
+    if battery_block_w > 0:
+        extra_w += gap + battery_block_w
+    canvas_h = max(cross_h, top.shape[0], battery_block_h)
     canvas_w = cross_w + gap + extra_w
     canvas = np.full((canvas_h, canvas_w), np.nan)
 
@@ -135,8 +154,15 @@ def save_unfolded(
     top_c = cross_w + gap
     paste(canvas, top, origin_r, top_c)
     battery_c = top_c + top.shape[1] + gap
-    if battery is not None:
-        paste(canvas, battery, origin_r, battery_c)
+    if battery_block_w > 0:
+        battery_origin_r = origin_r
+        battery_origin_c = battery_c + battery_west.shape[1]
+        paste(canvas, battery_north, battery_origin_r - battery_north.shape[0], battery_origin_c)
+        paste(canvas, battery_west, battery_origin_r, battery_c)
+        paste(canvas, battery, battery_origin_r, battery_origin_c)
+        paste(canvas, battery_east, battery_origin_r, battery_origin_c + battery.shape[1])
+        paste(canvas, np.flipud(battery_south),
+              battery_origin_r + battery.shape[0], battery_origin_c)
 
     fig, ax = plt.subplots(figsize=(9.0, 6.0), constrained_layout=True)
     im = ax.imshow(canvas, origin="upper", cmap=cmap, vmin=vmin, vmax=vmax)
@@ -152,10 +178,26 @@ def save_unfolded(
         "south_wall": (origin_c + bottom_w / 2, origin_r + bottom_h + south.shape[0] / 2),
         "glass_top": (top_c + top.shape[1] / 2, origin_r + top.shape[0] / 2),
     }
-    if battery is not None:
+    if battery_block_w > 0:
         labels["battery_top"] = (
-            battery_c + battery.shape[1] / 2,
+            battery_origin_c + battery.shape[1] / 2,
             origin_r + battery.shape[0] / 2,
+        )
+        labels["battery_north_wall"] = (
+            battery_origin_c + battery.shape[1] / 2,
+            battery_origin_r - battery_north.shape[0] / 2,
+        )
+        labels["battery_west_wall"] = (
+            battery_c + battery_west.shape[1] / 2,
+            battery_origin_r + battery.shape[0] / 2,
+        )
+        labels["battery_east_wall"] = (
+            battery_origin_c + battery.shape[1] + battery_east.shape[1] / 2,
+            battery_origin_r + battery.shape[0] / 2,
+        )
+        labels["battery_south_wall"] = (
+            battery_origin_c + battery.shape[1] / 2,
+            battery_origin_r + battery.shape[0] + battery_south.shape[0] / 2,
         )
     for label, (x, y) in labels.items():
         ax.text(
@@ -170,6 +212,7 @@ def save_unfolded(
         )
 
     fig.colorbar(im, ax=ax, label="Flux (W/m²)")
+    fig.savefig(image_dir / "unfolded_flux_map.png", dpi=dpi)
     fig.savefig(image_dir / "unfolded_box_flux.png", dpi=dpi)
     plt.close(fig)
 
@@ -177,7 +220,7 @@ def save_unfolded(
 def main() -> int:
     args = parse_args()
     csv_dir = args.run_dir / "csv"
-    image_dir = args.run_dir / "images"
+    image_dir = args.run_dir / args.image_dir_name
     image_dir.mkdir(parents=True, exist_ok=True)
 
     maps = load_faces(csv_dir)

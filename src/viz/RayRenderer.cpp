@@ -1,6 +1,9 @@
 #include "scrt/viz/RayRenderer.hpp"
+#include "scrt/materials/Material.hpp"
 #include "scrt/math/Constants.hpp"
 #include "scrt/scene/Aperture.hpp"
+#include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <string>
 #include <vector>
@@ -27,6 +30,22 @@ static void to_faces(const std::vector<std::uint32_t>& idx,
         out.push_back({idx[k], idx[k + 1], idx[k + 2]});
 }
 
+static std::string lower_copy(std::string s) {
+    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return s;
+}
+
+static bool is_transparent_lid_surface(const surfaces::Surface& surf) {
+    std::string name = lower_copy(surf.name());
+    const auto* material = surf.material();
+    if (material)
+        name += " " + lower_copy(material->name());
+    return name.find("pmma") != std::string::npos
+           || name.find("glass") != std::string::npos;
+}
+
 void RayRenderer::register_surfaces(int tess_segs) {
     int id = 0;
     for (const auto& surf : scene_->surfaces()) {
@@ -44,7 +63,11 @@ void RayRenderer::register_surfaces(int tess_segs) {
         std::string name = surf->name().empty()
                                ? "surface_" + std::to_string(id)
                                : surf->name();
-        polyscope::registerSurfaceMesh(name, pv, pf);
+        auto* mesh = polyscope::registerSurfaceMesh(name, pv, pf);
+        if (is_transparent_lid_surface(*surf)) {
+            mesh->setSurfaceColor({0.75f, 0.9f, 1.0f});
+            mesh->setTransparency(0.2f);
+        }
         ++id;
     }
 }

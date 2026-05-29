@@ -6,6 +6,7 @@
 #include "scrt/materials/Dielectric.hpp"
 #include "scrt/materials/PerfectMirror.hpp"
 #include "scrt/materials/RealMirror.hpp"
+#include "scrt/materials/ThinDielectricPane.hpp"
 #include "scrt/math/Constants.hpp"
 #include "scrt/math/Vec.hpp"
 #include "scrt/scene/Aperture.hpp"
@@ -201,6 +202,11 @@ LoadedScene load_scene(const std::filesystem::path& path) {
                     di->set_alpha_spectrum(std::move(spec));
                 }
                 mat = std::move(di);
+            } else if (type == "thin_dielectric_pane") {
+                const double n = mj.value("n", 1.49);
+                const double thickness = mj.value("thickness_m", 0.003);
+                const double alpha = mj.value("absorption_per_m", 0.0);
+                mat = std::make_unique<materials::ThinDielectricPane>(n, thickness, alpha);
             } else if (type == "absorber") {
                 mat = std::make_unique<materials::Absorber>();
             } else {
@@ -337,10 +343,22 @@ LoadedScene load_scene(const std::filesystem::path& path) {
                     const double battery_hw = bj.value("half_width", half_width * 0.5);
                     const double battery_hh = bj.value("half_height", half_height * 0.5);
                     const double top_depth = bj.value("top_depth_m", depth);
+                    const double battery_height = bj.value("height_m",
+                                                           bj.value("height", depth - top_depth));
                     require(top_depth > 0.0 && top_depth <= depth,
                             "box battery top_depth_m must be in (0, depth]");
+                    require(battery_height > 0.0 && top_depth + battery_height <= depth + 1.0e-12,
+                            "box battery height_m must keep the battery inside the box depth");
                     const int battery_nx = bj.value("nx", nx);
                     const int battery_ny = bj.value("ny", ny);
+                    const double battery_bin_x =
+                        (2.0 * battery_hw) / static_cast<double>(battery_nx);
+                    const double battery_bin_y =
+                        (2.0 * battery_hh) / static_cast<double>(battery_ny);
+                    const double battery_bin = 0.5 * (battery_bin_x + battery_bin_y);
+                    const int battery_height_bins =
+                        std::max(1, static_cast<int>(std::lround(battery_height / battery_bin)));
+
                     auto& battery = recv->add_face("battery_top", battery_hw, battery_hh,
                                                    battery_nx, battery_ny,
                                                    scene::ReceiverFaceMode::RecordAbsorb);
@@ -348,6 +366,43 @@ LoadedScene load_scene(const std::filesystem::path& path) {
                     battery.set_transform(
                         frame_transform({0.0, 0.0, -top_depth}, {1.0, 0.0, 0.0},
                                         {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}));
+
+                    const double side_z = -(top_depth + battery_height * 0.5);
+                    auto& battery_north =
+                        recv->add_face("battery_north_wall", battery_hw, battery_height * 0.5,
+                                       battery_nx, battery_height_bins,
+                                       scene::ReceiverFaceMode::RecordAbsorb);
+                    battery_north.surface()->set_material(absorber_ptr);
+                    battery_north.set_transform(
+                        frame_transform({0.0, battery_hh, side_z}, {1.0, 0.0, 0.0},
+                                        {0.0, 0.0, -1.0}, {0.0, 1.0, 0.0}));
+
+                    auto& battery_south =
+                        recv->add_face("battery_south_wall", battery_hw, battery_height * 0.5,
+                                       battery_nx, battery_height_bins,
+                                       scene::ReceiverFaceMode::RecordAbsorb);
+                    battery_south.surface()->set_material(absorber_ptr);
+                    battery_south.set_transform(
+                        frame_transform({0.0, -battery_hh, side_z}, {1.0, 0.0, 0.0},
+                                        {0.0, 0.0, -1.0}, {0.0, -1.0, 0.0}));
+
+                    auto& battery_east =
+                        recv->add_face("battery_east_wall", battery_height * 0.5, battery_hh,
+                                       battery_height_bins, battery_ny,
+                                       scene::ReceiverFaceMode::RecordAbsorb);
+                    battery_east.surface()->set_material(absorber_ptr);
+                    battery_east.set_transform(
+                        frame_transform({battery_hw, 0.0, side_z}, {0.0, 0.0, -1.0},
+                                        {0.0, 1.0, 0.0}, {1.0, 0.0, 0.0}));
+
+                    auto& battery_west =
+                        recv->add_face("battery_west_wall", battery_height * 0.5, battery_hh,
+                                       battery_height_bins, battery_ny,
+                                       scene::ReceiverFaceMode::RecordAbsorb);
+                    battery_west.surface()->set_material(absorber_ptr);
+                    battery_west.set_transform(
+                        frame_transform({-battery_hw, 0.0, side_z}, {0.0, 0.0, -1.0},
+                                        {0.0, 1.0, 0.0}, {-1.0, 0.0, 0.0}));
                 }
             }
 

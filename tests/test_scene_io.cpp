@@ -175,6 +175,7 @@ TEST_CASE("T11: box receiver can add an internal battery receiver face") {
     j["scene"]["receiver"]["surface"]["half_height"] = 0.15;
     j["scene"]["receiver"]["depth"] = 0.15;
     j["scene"]["receiver"]["battery"]["top_depth_m"] = 0.075;
+    j["scene"]["receiver"]["battery"]["height_m"] = 0.05;
     j["scene"]["receiver"]["battery"]["half_width"] = 0.075;
     j["scene"]["receiver"]["battery"]["half_height"] = 0.05;
     j["scene"]["receiver"]["battery"]["nx"] = 32;
@@ -190,12 +191,18 @@ TEST_CASE("T11: box receiver can add an internal battery receiver face") {
     scrt::io::LoadedScene ls = scrt::io::load_scene(path);
     auto* recv = ls.scene->receiver();
     REQUIRE(recv != nullptr);
-    REQUIRE(recv->faces().size() == 7);
+    REQUIRE(recv->faces().size() == 11);
     CHECK(recv->faces()[6]->name() == "battery_top");
     CHECK(recv->faces()[6]->accumulator().half_width() == doctest::Approx(0.075));
     CHECK(recv->faces()[6]->accumulator().half_height() == doctest::Approx(0.05));
     CHECK(recv->faces()[6]->accumulator().nx() == 32);
     CHECK(recv->faces()[6]->accumulator().ny() == 24);
+    CHECK(recv->faces()[7]->name() == "battery_north_wall");
+    CHECK(recv->faces()[8]->name() == "battery_south_wall");
+    CHECK(recv->faces()[9]->name() == "battery_east_wall");
+    CHECK(recv->faces()[10]->name() == "battery_west_wall");
+    CHECK(recv->faces()[7]->accumulator().half_height() == doctest::Approx(0.025));
+    CHECK(recv->faces()[9]->accumulator().half_width() == doctest::Approx(0.025));
 
     std::filesystem::remove(path);
 }

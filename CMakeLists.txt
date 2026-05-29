@@ -67,6 +67,7 @@ target_sources(scrt_core PRIVATE
     src/optics/Paraxial.cpp
     src/materials/Dielectric.cpp
     src/materials/RealMirror.cpp
+    src/materials/ThinDielectricPane.cpp
 )
 
 # ---------- Phase 4 sources ----------
