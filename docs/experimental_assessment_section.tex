@@ -1,0 +1,61 @@
+\section{Experimental Assessment of the Built Cooker}
+\label{sec:experimental_assessment}
+
+After construction, the simulated optical performance should be checked with a small set of
+repeatable outdoor tests.  The measurements should follow the spirit of ASAE S580.1 solar
+cooker testing, as used in Solar Cookers International's Performance Evaluation Process,
+which reports water-heating power from measured temperature rise, solar irradiance, ambient
+temperature, and wind speed.\footnote{\url{https://www.solarcookers.org/files/7814/2422/1265/ASAE-standard-s-5801-aug13.pdf};
+\url{https://www.solarcookers.org/resources/results}.}  Each test should record the date,
+location, ambient temperature, direct solar irradiance, wind speed, tracking interval, lid
+configuration, and initial load temperature.
+
+\subsection{Stagnation Temperature}
+
+The first test is a no-load stagnation run.  The cooker is aligned toward the sun with the
+chosen lid installed and no water or cooking load inside.  Thermocouples are placed on the
+matte bottom plate, on the thermal battery top, and on the inner air space.  The maximum
+steady temperature indicates the upper thermal potential of the design and can be reported
+with the box-cooker first figure of merit,
+\begin{equation}
+  F_1 = \frac{T_\mathrm{stag} - T_a}{G},
+\end{equation}
+where $T_\mathrm{stag}$ is the stagnation temperature, $T_a$ is ambient temperature, and
+$G$ is the measured solar irradiance.
+
+\subsection{Water Heating and Boiling}
+
+The main performance test uses a blackened vessel containing a known mass of water.  A
+standard practical load for this prototype is $1.0$ L of water, although an ASAE-style load
+scaled by cooker intercept area may also be reported.  Water temperature is logged every
+5--10 min until boiling or until the temperature plateaus.  The useful heating power over each
+time interval is
+\begin{equation}
+  P_i = \frac{m_w c_p (T_{w,2}-T_{w,1})}{\Delta t},
+\end{equation}
+with $c_p = 4186$ J kg$^{-1}$ K$^{-1}$.  To compare tests taken under different sunlight,
+the interval power is normalized to 700 W m$^{-2}$,
+\begin{equation}
+  P_s = P_i \frac{700}{G_i}.
+\end{equation}
+The report should include the time to reach 60, 80, 95, and 100 $^\circ$C, the peak water
+temperature, the average standardized cooking power, and whether a rolling boil was reached.
+
+\subsection{Design Comparison Tests}
+
+The same water-heating test should be repeated for the main build variants: single-pane PMMA,
+double-pane PMMA, and, if available, equivalent glass lids.  This directly measures the
+trade-off between optical transmission losses and reduced thermal losses through the opening.
+The thermal battery should also be instrumented during these runs, with sensors on the top and
+four side walls, so the measured heating pattern can be compared against the ray-tracing flux
+maps.
+
+\subsection{Retention and Usability}
+
+After a heating run, the cooker should be shaded or closed and allowed to cool while water,
+battery, bottom-plate, and air temperatures are logged.  This cooldown curve estimates heat
+retention and post-sun cooking usefulness.  A final practical check should cook a simple
+repeatable food load, such as rice or potatoes, using the same tracking schedule expected in
+normal use.  Results should be summarized in a compact table containing the lid type,
+irradiance range, wind speed, peak temperatures, time to boil 1 L, standardized cooking power,
+and cooldown time from 90 to 60 $^\circ$C.
