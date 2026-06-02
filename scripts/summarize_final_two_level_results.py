@@ -68,6 +68,8 @@ def main() -> int:
     for name, label, _summary in summaries:
         out.append(f"- {label}: `finalized_designs/results/{name}/images/*.png`\n")
         out.append(f"- {label} shared scale: `finalized_designs/results/{name}/images_shared_scale/*.png`\n")
+        out.append(f"- {label} per-face scale: `finalized_designs/results/{name}/images_per_face_scale/*.png`\n")
+        out.append(f"- {label} log scale: `finalized_designs/results/{name}/images_log_scale/*.png`\n")
 
     (RESULTS_DIR / "final_power_flux_summary.md").write_text("".join(out), encoding="utf-8")
     print(f"Wrote {RESULTS_DIR / 'final_power_flux_summary.md'}")

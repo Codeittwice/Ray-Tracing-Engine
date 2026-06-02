@@ -7,7 +7,9 @@ import argparse
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
+from matplotlib.colors import LogNorm
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -51,12 +53,23 @@ def parse_args() -> argparse.Namespace:
         "--vmax",
         type=float,
         default=None,
-        help="Fixed color-scale maximum in W/m². Defaults to the run's own maximum.",
+        help="Fixed color-scale maximum in W/m^2. Defaults to the run's own maximum.",
     )
     parser.add_argument(
         "--image-dir-name",
         default="images",
         help="Output subdirectory name under the run directory.",
+    )
+    parser.add_argument(
+        "--scale",
+        choices=["linear", "log"],
+        default="linear",
+        help="Color scaling for generated maps.",
+    )
+    parser.add_argument(
+        "--per-face-scale",
+        action="store_true",
+        help="Use each face's own color maximum for separate face PNGs.",
     )
     return parser.parse_args()
 
@@ -80,6 +93,17 @@ def shared_limits(maps: dict[str, np.ndarray], fixed_vmax: float | None) -> tupl
     return 0.0, vmax if vmax > 0.0 else 1.0
 
 
+def image_kwargs(scale: str, vmin: float, vmax: float) -> dict:
+    if scale == "log":
+        floor = max(vmax * 1.0e-4, 1.0e-3)
+        return {"norm": LogNorm(vmin=floor, vmax=max(vmax, 1.0e-3))}
+    return {"vmin": vmin, "vmax": vmax}
+
+
+def colorbar_label(scale: str) -> str:
+    return "Flux (W/m^2, log scale)" if scale == "log" else "Flux (W/m^2)"
+
+
 def save_face_images(
     maps: dict[str, np.ndarray],
     image_dir: Path,
@@ -87,14 +111,19 @@ def save_face_images(
     dpi: int,
     vmin: float,
     vmax: float,
+    scale: str,
+    per_face_scale: bool,
 ) -> None:
     for face, data in maps.items():
+        face_vmax = float(np.nanmax(data)) if per_face_scale else vmax
+        face_vmax = face_vmax if face_vmax > 0.0 else 1.0
         fig, ax = plt.subplots(figsize=(5.0, 4.0), constrained_layout=True)
-        im = ax.imshow(data, origin="lower", cmap=cmap, vmin=vmin, vmax=vmax)
-        ax.set_title(face)
+        im = ax.imshow(data, origin="lower", cmap=cmap,
+                       **image_kwargs(scale, vmin, face_vmax))
+        ax.set_title(f"{face} (peak {face_vmax:.1f} W/m^2)")
         ax.set_xlabel("u bin")
         ax.set_ylabel("v bin")
-        fig.colorbar(im, ax=ax, label="Flux (W/m²)")
+        fig.colorbar(im, ax=ax, label=colorbar_label(scale))
         fig.savefig(image_dir / f"flux_{face}.png", dpi=dpi)
         plt.close(fig)
 
@@ -111,6 +140,7 @@ def save_unfolded(
     dpi: int,
     vmin: float,
     vmax: float,
+    scale: str,
 ) -> None:
     bottom = maps["bottom"]
     north = maps["north_wall"]
@@ -165,8 +195,9 @@ def save_unfolded(
               battery_origin_r + battery.shape[0], battery_origin_c)
 
     fig, ax = plt.subplots(figsize=(9.0, 6.0), constrained_layout=True)
-    im = ax.imshow(canvas, origin="upper", cmap=cmap, vmin=vmin, vmax=vmax)
-    ax.set_title("Unfolded box receiver flux")
+    im = ax.imshow(canvas, origin="upper", cmap=cmap,
+                   **image_kwargs(scale, vmin, vmax))
+    ax.set_title("Unfolded box receiver flux" + (" (log scale)" if scale == "log" else ""))
     ax.set_xticks([])
     ax.set_yticks([])
 
@@ -211,7 +242,7 @@ def save_unfolded(
             bbox={"facecolor": "black", "alpha": 0.35, "edgecolor": "none", "pad": 2},
         )
 
-    fig.colorbar(im, ax=ax, label="Flux (W/m²)")
+    fig.colorbar(im, ax=ax, label=colorbar_label(scale))
     fig.savefig(image_dir / "unfolded_flux_map.png", dpi=dpi)
     fig.savefig(image_dir / "unfolded_box_flux.png", dpi=dpi)
     plt.close(fig)
@@ -225,8 +256,9 @@ def main() -> int:
 
     maps = load_faces(csv_dir)
     vmin, vmax = shared_limits(maps, args.vmax)
-    save_face_images(maps, image_dir, args.cmap, args.dpi, vmin, vmax)
-    save_unfolded(maps, image_dir, args.cmap, args.dpi, vmin, vmax)
+    save_face_images(maps, image_dir, args.cmap, args.dpi, vmin, vmax,
+                     args.scale, args.per_face_scale)
+    save_unfolded(maps, image_dir, args.cmap, args.dpi, vmin, vmax, args.scale)
     print(f"Wrote box receiver images to {image_dir}")
     return 0
 

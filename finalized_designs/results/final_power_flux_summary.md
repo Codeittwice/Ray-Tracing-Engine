@@ -28,5 +28,9 @@ DNI: 1000 W/m^2. Ray count: 10,000,000 per PMMA scenario.
 
 - Single PMMA: `finalized_designs/results/single_pmma_10m/images/*.png`
 - Single PMMA shared scale: `finalized_designs/results/single_pmma_10m/images_shared_scale/*.png`
+- Single PMMA per-face scale: `finalized_designs/results/single_pmma_10m/images_per_face_scale/*.png`
+- Single PMMA log scale: `finalized_designs/results/single_pmma_10m/images_log_scale/*.png`
 - Double PMMA: `finalized_designs/results/double_pmma_10m/images/*.png`
 - Double PMMA shared scale: `finalized_designs/results/double_pmma_10m/images_shared_scale/*.png`
+- Double PMMA per-face scale: `finalized_designs/results/double_pmma_10m/images_per_face_scale/*.png`
+- Double PMMA log scale: `finalized_designs/results/double_pmma_10m/images_log_scale/*.png`
