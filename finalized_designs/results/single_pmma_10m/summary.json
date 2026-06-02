@@ -1,152 +1,152 @@
 {
-    "absorbed_power_w": 202.54900936330048,
+    "absorbed_power_w": 277.95295047511433,
     "faces": {
         "battery_east_wall": {
             "bin_height_m": 0.00234375,
             "bin_width_m": 0.0023333333333333335,
-            "concentration_ratio": 0.33989630546815425,
+            "concentration_ratio": 0.33995513057565985,
             "grid_nx": 30,
             "grid_ny": 64,
             "half_height_m": 0.075,
             "half_width_m": 0.035,
-            "mean_flux_wm2": 10.80121046193385,
+            "mean_flux_wm2": 11.514671729712878,
             "mode": "record_absorb",
-            "peak_flux_wm2": 339.89630546815425,
-            "total_power_w": 0.11341270985030544
+            "peak_flux_wm2": 339.95513057565984,
+            "total_power_w": 0.12090405316198523
         },
         "battery_north_wall": {
             "bin_height_m": 0.0023333333333333335,
             "bin_width_m": 0.00234375,
-            "concentration_ratio": 0.30663951958968305,
+            "concentration_ratio": 0.3317942516277536,
             "grid_nx": 64,
             "grid_ny": 30,
             "half_height_m": 0.035,
             "half_width_m": 0.075,
-            "mean_flux_wm2": 11.123887138615755,
+            "mean_flux_wm2": 11.76728970562233,
             "mode": "record_absorb",
-            "peak_flux_wm2": 306.63951958968306,
-            "total_power_w": 0.11680081495546543
+            "peak_flux_wm2": 331.7942516277536,
+            "total_power_w": 0.12355654190903448
         },
         "battery_south_wall": {
             "bin_height_m": 0.0023333333333333335,
             "bin_width_m": 0.00234375,
-            "concentration_ratio": 0.3273465270225236,
+            "concentration_ratio": 0.34141927911365516,
             "grid_nx": 64,
             "grid_ny": 30,
             "half_height_m": 0.035,
             "half_width_m": 0.075,
-            "mean_flux_wm2": 11.523884568481657,
+            "mean_flux_wm2": 12.106476139010988,
             "mode": "record_absorb",
-            "peak_flux_wm2": 327.3465270225236,
-            "total_power_w": 0.1210007879690574
+            "peak_flux_wm2": 341.41927911365514,
+            "total_power_w": 0.12711799945961538
         },
         "battery_top": {
             "bin_height_m": 0.00234375,
             "bin_width_m": 0.00234375,
-            "concentration_ratio": 3.2592053937856877,
+            "concentration_ratio": 3.5035520971534577,
             "grid_nx": 64,
             "grid_ny": 64,
             "half_height_m": 0.075,
             "half_width_m": 0.075,
-            "mean_flux_wm2": 2147.892036811563,
+            "mean_flux_wm2": 2320.0776356598835,
             "mode": "record_absorb",
-            "peak_flux_wm2": 3259.2053937856876,
-            "total_power_w": 48.327570828260164
+            "peak_flux_wm2": 3503.552097153458,
+            "total_power_w": 52.20174680234738
         },
         "battery_west_wall": {
             "bin_height_m": 0.00234375,
             "bin_width_m": 0.0023333333333333335,
-            "concentration_ratio": 0.3273801009822669,
+            "concentration_ratio": 0.314774042502101,
             "grid_nx": 30,
             "grid_ny": 64,
             "half_height_m": 0.075,
             "half_width_m": 0.035,
-            "mean_flux_wm2": 11.579943860658146,
+            "mean_flux_wm2": 12.349753127295864,
             "mode": "record_absorb",
-            "peak_flux_wm2": 327.38010098226687,
-            "total_power_w": 0.12158941053691054
+            "peak_flux_wm2": 314.774042502101,
+            "total_power_w": 0.12967240783660658
         },
         "bottom": {
             "bin_height_m": 0.0046875,
             "bin_width_m": 0.0046875,
-            "concentration_ratio": 0.0,
+            "concentration_ratio": 1.168742060668063,
             "grid_nx": 64,
             "grid_ny": 64,
             "half_height_m": 0.15,
             "half_width_m": 0.15,
-            "mean_flux_wm2": 0.0,
+            "mean_flux_wm2": 695.5627204132298,
             "mode": "record_absorb",
-            "peak_flux_wm2": 0.0,
-            "total_power_w": 0.0
+            "peak_flux_wm2": 1168.742060668063,
+            "total_power_w": 62.600644837190686
         },
         "east_wall": {
             "bin_height_m": 0.0046875,
             "bin_width_m": 0.0046875,
-            "concentration_ratio": 1.3133993162850368,
+            "concentration_ratio": 1.3348475367606012,
             "grid_nx": 32,
             "grid_ny": 64,
             "half_height_m": 0.15,
             "half_width_m": 0.075,
-            "mean_flux_wm2": 841.4289720430693,
+            "mean_flux_wm2": 890.1499188844061,
             "mode": "record_absorb",
-            "peak_flux_wm2": 1313.3993162850368,
-            "total_power_w": 37.864303741938116
+            "peak_flux_wm2": 1334.847536760601,
+            "total_power_w": 40.056746349798274
         },
         "glass_top": {
             "bin_height_m": 0.0046875,
             "bin_width_m": 0.0046875,
-            "concentration_ratio": 4.114985694708625,
+            "concentration_ratio": 4.175026809636869,
             "grid_nx": 64,
             "grid_ny": 64,
             "half_height_m": 0.15,
             "half_width_m": 0.15,
-            "mean_flux_wm2": 2953.3782918694374,
+            "mean_flux_wm2": 3063.4871852859187,
             "mode": "record_pass",
-            "peak_flux_wm2": 4114.985694708625,
-            "total_power_w": 265.80404626824935
+            "peak_flux_wm2": 4175.026809636868,
+            "total_power_w": 275.71384667573267
         },
         "north_wall": {
             "bin_height_m": 0.0046875,
             "bin_width_m": 0.0046875,
-            "concentration_ratio": 1.3273038363275134,
+            "concentration_ratio": 1.3596523838256105,
             "grid_nx": 64,
             "grid_ny": 32,
             "half_height_m": 0.075,
             "half_width_m": 0.15,
-            "mean_flux_wm2": 841.0054935635845,
+            "mean_flux_wm2": 889.7515155376083,
             "mode": "record_absorb",
-            "peak_flux_wm2": 1327.3038363275134,
-            "total_power_w": 37.8452472103613
+            "peak_flux_wm2": 1359.6523838256105,
+            "total_power_w": 40.03881819919237
         },
         "south_wall": {
             "bin_height_m": 0.0046875,
             "bin_width_m": 0.0046875,
-            "concentration_ratio": 1.3582785232200483,
+            "concentration_ratio": 1.3837741120465206,
             "grid_nx": 64,
             "grid_ny": 32,
             "half_height_m": 0.075,
             "half_width_m": 0.15,
-            "mean_flux_wm2": 892.1306018838475,
+            "mean_flux_wm2": 943.4090791886408,
             "mode": "record_absorb",
-            "peak_flux_wm2": 1358.2785232200483,
-            "total_power_w": 40.14587708477313
+            "peak_flux_wm2": 1383.7741120465205,
+            "total_power_w": 42.453408563488836
         },
         "west_wall": {
             "bin_height_m": 0.0046875,
             "bin_width_m": 0.0046875,
-            "concentration_ratio": 1.3299772378947248,
+            "concentration_ratio": 1.3167097209755958,
             "grid_nx": 32,
             "grid_ny": 64,
             "half_height_m": 0.15,
             "half_width_m": 0.075,
-            "mean_flux_wm2": 842.0712616590239,
+            "mean_flux_wm2": 891.1185493495448,
             "mode": "record_absorb",
-            "peak_flux_wm2": 1329.9772378947248,
-            "total_power_w": 37.89320677465607
+            "peak_flux_wm2": 1316.7097209755957,
+            "total_power_w": 40.100334720729514
         }
     },
     "primary_rays_traced": 10000000,
-    "recorded_power_w": 468.35305563154986,
-    "total_hits": 16992535,
-    "wall_time_s": 70.5527431
+    "recorded_power_w": 553.666797150847,
+    "total_hits": 17322047,
+    "wall_time_s": 147.9034772
 }

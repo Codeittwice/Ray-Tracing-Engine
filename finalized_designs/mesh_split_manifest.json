@@ -56,5 +56,6 @@
         -0.21711792755126952,
         0.24665840911865233,
         -0.20097366714477538
-    ]
+    ],
+    "optical_model_note": "The non-reflective assembly mesh is exported for CAD reference but omitted from the optical scenes so the analytic receiver faces record flux on the box bottom, box walls, battery top, and battery side walls."
 }

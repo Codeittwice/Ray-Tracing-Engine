@@ -194,12 +194,6 @@ def scene(pane_count: int, translation: list[float]) -> dict:
             "aluminum_sheet",
             translation,
         ),
-        mesh_element(
-            "non_reflective_assembly_occluders",
-            "two_level_non_reflective_occluders.stl",
-            "non_reflective_absorber",
-            translation,
-        ),
     ]
 
     pane_top_z = 0.004
@@ -225,7 +219,6 @@ def scene(pane_count: int, translation: list[float]) -> dict:
             "materials": [
                 material("aluminum_sheet", "real_mirror", reflectance=0.86, slope_error_mrad=2.0),
                 material("emergency_blanket", "real_mirror", reflectance=0.80, slope_error_mrad=5.0),
-                material("non_reflective_absorber", "absorber"),
                 material(
                     "pmma_pane",
                     "thin_dielectric_pane",
@@ -334,6 +327,11 @@ def main() -> int:
         "mesh_rotation_euler_deg": MESH_ROTATION_EULER_DEG,
         "rim_z_raw": rim_z_raw,
         "scene_mesh_translation_m": translation,
+        "optical_model_note": (
+            "The non-reflective assembly mesh is exported for CAD reference but omitted "
+            "from the optical scenes so the analytic receiver faces record flux on the "
+            "box bottom, box walls, battery top, and battery side walls."
+        ),
     }
     (FINAL_DIR / "mesh_split_manifest.json").write_text(
         json.dumps(manifest, indent=4) + "\n",

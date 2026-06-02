@@ -41,10 +41,6 @@
                 "slope_error_mrad": 5.0
             },
             {
-                "id": "non_reflective_absorber",
-                "type": "absorber"
-            },
-            {
                 "id": "pmma_pane",
                 "type": "thin_dielectric_pane",
                 "n": 1.49,
@@ -94,27 +90,6 @@
                     ]
                 },
                 "material": "aluminum_sheet"
-            },
-            {
-                "name": "non_reflective_assembly_occluders",
-                "surface": {
-                    "type": "mesh",
-                    "path": "../meshes/two_level_non_reflective_occluders.stl",
-                    "scale_to_meters": 0.001
-                },
-                "transform": {
-                    "translation": [
-                        -0.21711792755126952,
-                        0.24665840911865233,
-                        -0.20097366714477538
-                    ],
-                    "rotation_euler_deg": [
-                        90.0,
-                        0.0,
-                        0.0
-                    ]
-                },
-                "material": "non_reflective_absorber"
             },
             {
                 "name": "pmma_pane_1",
