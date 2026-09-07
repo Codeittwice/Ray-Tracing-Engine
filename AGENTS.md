@@ -20,7 +20,36 @@ Follow `docs/plans/SolarCookerRayTracer_Plan.md` exactly. That document specifie
 - If unsure about a design decision, ask the user before coding.
 
 ## Current phase
-Phase 7 — Complete. All phases done.
+Research tool: Phases 1-7 complete.
+
+App track (`feat/interactive-app`) — turning the research tool into a shippable interactive app.
+Scope: runtime model import, free placement with a gizmo, axis lock/centering, object scaling, a real
+object outliner with selection highlight, sun off zenith (azimuth/elevation), scene save, and an
+AI scene-generation helper. Optical results only.
+
+- [ ] Wave 0 — Foundation & safety net (BVH empty-build fix, regression corpus, golden-flux baseline)
+- [ ] Wave 1 — Sun & aperture physics ∥ Scale & surface geometry
+- [ ] Wave 2 — SceneDocument & JSON writer (the pivot everything downstream hangs off)
+- [ ] Wave 3 — SceneEditor & mutation ∥ Viewer decomposition + outliner
+- [ ] Wave 4 — ImGuizmo & transform UI ∥ model import & units
+- [ ] Wave 5 — Async trace, save UI, polish, packaging
+- [ ] Wave 6 — AI helper
+
+Out of scope on this track: thermal model, lat/lon geographic sun, TMY weather, day-integrated Wh.
+
+## Agent orchestration
+For large parallelizable work, deploy a two-layer agent hierarchy:
+- Fable commands. Opus agents lead major independent workstreams. Sonnet subagents do bounded
+  implementation work with explicit file lists and acceptance criteria.
+- **Waves are sequential; within a wave, file ownership is strictly disjoint.** Every affected file has
+  exactly one owner. Cross-wave reuse is fine because waves never overlap in time.
+- `CMakeLists.txt` and `vcpkg.json` are never owned by a workstream — leads report the lines they need and
+  the wave integrator applies them.
+- **Workers never self-certify.** Every completion claim must cite build output and named tests. "Done"
+  without a green `ctest` line is rejected and re-issued.
+- Important diffs get an independent Opus auditor that reads them cold, without the implementer's reasoning.
+- The commander performs final integration and QA by re-deriving from the diff, build and test output —
+  not by accepting agent reports.
 
 ## Platform
 Windows 10/11, MSVC (VS 2025, v18) x64, CMake 4.x, Ninja generator, vcpkg at C:\dev\vcpkg in manifest mode. CMakePresets.json encodes MSVC/SDK paths (INCLUDE, LIB, PATH, compiler) so cmake --preset debug works from any shell without needing a Developer Command Prompt.
