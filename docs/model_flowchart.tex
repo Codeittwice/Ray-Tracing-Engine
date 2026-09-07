@@ -1,0 +1,72 @@
+% Two-row pipeline: RT model (row 1) → Heat model (row 2)
+% Apply-equations box hangs below the iteration nodes with bidirectional arrows.
+% Uses only: tikz, arrows.meta, positioning, shapes.geometric, fit (all already loaded)
+\begin{figure}[H]
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+  node distance=5mm and 7mm,
+  proc/.style={rectangle, draw, rounded corners=2pt,
+               minimum height=8mm, minimum width=24mm,
+               text centered, font=\small, fill=blue!6},
+  io/.style={trapezium, trapezium left angle=75, trapezium right angle=105,
+             draw, minimum height=8mm, minimum width=24mm,
+             text centered, font=\small, fill=orange!10},
+  arr/.style={->, >=Stealth, thick},
+  every node/.append style={align=center}
+]
+
+%── Row 1: Ray-tracing model ──────────────────────────────────────────────
+\node[io]                    (json)    {Scene\\JSON};
+\node[proc, right=of json]   (sample)  {Sample\\primary rays};
+\node[proc, right=of sample] (trace)   {Trace \&\\intersect};
+\node[proc, right=of trace]  (deposit) {Deposit\\power};
+\node[proc, right=of deposit](accum)   {Accumulate\\flux stats};
+\node[io,   right=of accum]  (csv)     {Flux-map\\CSV};
+
+%── Row 2: Heat model ─────────────────────────────────────────────────────
+\node[io,   below=16mm of json]      (settings) {Settings \&\\parameters};
+\node[proc, right=of settings]       (charging) {Charging\\iterations};
+\node[proc, right=of charging]       (cooking)  {Cooking\\iterations};
+\node[io,   right=of cooking]        (tvst)     {Temperature\\vs.\ time plot};
+
+%── Apply equations box (below the two iteration nodes) ───────────────────
+\node[fit=(charging)(cooking), inner sep=0pt, draw=none] (iterfit) {};
+\node[proc, below=7mm of iterfit,
+      minimum width=52mm, minimum height=8mm]             (apply)
+  {Apply equations: middle nodes, walls, corners};
+
+%── Row 1 arrows ─────────────────────────────────────────────────────────
+\foreach \a/\b in {json/sample, sample/trace, trace/deposit,
+                   deposit/accum, accum/csv}
+  \draw[arr] (\a) -- (\b);
+
+%── Connector row 1 → row 2 (csv bends down-left into charging) ───────────
+\draw[arr] (csv.south) -- ++(0,-4mm) -| (charging.north);
+
+%── Row 2 arrows ─────────────────────────────────────────────────────────
+\draw[arr] (settings.east) -- (charging.west);
+\draw[arr] (charging)      -- (cooking);
+\draw[arr] (cooking)       -- (tvst);
+
+%── Bidirectional arrows: iterations ↔ apply ─────────────────────────────
+\draw[{Stealth}-{Stealth}, thick]
+  (charging.south) -- (charging.south |- apply.north);
+\draw[{Stealth}-{Stealth}, thick]
+  (cooking.south)  -- (cooking.south  |- apply.north);
+
+%── Group labels ─────────────────────────────────────────────────────────
+\node[fit=(json)(sample)(trace)(deposit)(accum)(csv),
+      inner sep=0pt, draw=none] (rtfit) {};
+\node[above=3pt of rtfit, font=\small\itshape] {Ray-tracing model};
+
+\node[fit=(settings)(charging)(cooking)(tvst),
+      inner sep=0pt, draw=none] (hmfit) {};
+\node[above=3pt of hmfit, font=\small\itshape] {Heat model};
+
+\end{tikzpicture}%
+}
+\caption{Simulation pipeline: the ray-tracing model (top) exports a flux-map CSV, which
+the heat model (bottom) uses to compute a temperature-vs.-time prediction.}
+\label{fig:model_flowchart}
+\end{figure}

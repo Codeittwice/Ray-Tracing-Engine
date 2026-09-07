@@ -1,0 +1,61 @@
+\section{Centered 65/70/73 Degree STL Box-Receiver Result}
+
+The new STL file
+\texttt{panels\_only\_rectangular\_3floors\_250200250\_657073deg.stl} was first tested
+using the same transform as the older \texttt{606570} STL.  That first result was too low
+and strongly asymmetric, indicating that the new mesh had a different CAD origin.  After
+checking the mesh bounds, the reflector was recentered over the box receiver using the
+translation
+\[
+    \mathbf{t} =
+    \begin{bmatrix}
+        -0.2005135 \\
+        -0.3374645 \\
+        -0.2801248
+    \end{bmatrix}
+    \mathrm{m}.
+\]
+The corrected scene was then rerun with \SI{10000000} rays, DNI
+\SI{1000}{W.m^{-2}}, mirror reflectance 0.85, slope error \SI{2}{mrad}, and the fixed
+\SI{0.30}{m} wide box receiver.
+
+\begin{table}[h]
+\centering
+\caption{Centered 10M-ray result for the 250/200/250 mm, 65/70/73 degree STL.}
+\begin{tabular}{lrr}
+\toprule
+Face & Power (W) & Peak flux (\si{W.m^{-2}}) \\
+\midrule
+Glass top & 361.113 & 8977.013 \\
+Bottom / battery proxy & 324.676 & 5205.449 \\
+North wall & 9.099 & 1283.669 \\
+South wall & 9.122 & 1250.704 \\
+East wall & 9.101 & 1263.920 \\
+West wall & 9.115 & 1273.035 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The centered run gives a total absorbed power of
+\[
+    P_{\mathrm{abs}} = \SI{361.113}{W},
+\]
+with
+\[
+    P_{\mathrm{bottom}} = \SI{324.676}{W}
+\]
+absorbed on the bottom face, which is used here as the battery proxy.  This means
+approximately
+\[
+    \frac{324.676}{361.113}\times 100\% \approx 89.91\%
+\]
+of the absorbed power reaches the intended battery-facing surface.  The nearly equal wall
+powers, all about \SI{9.1}{W}, confirm that the corrected STL placement is well centered.
+
+\begin{figure}[h]
+    \centering
+    % Replace this placeholder with the rendered flux map when compiling the final report.
+    \includegraphics[width=0.95\linewidth]{images/unfolded_box_flux.png}
+    \caption{Placeholder for the unfolded flux map of the centered 10M-ray run.}
+    \label{fig:centered-657073-flux}
+\end{figure}

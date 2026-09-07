@@ -1,0 +1,62 @@
+\section*{List of Symbols}
+\label{section:symbols}
+
+The following symbols are used repeatedly throughout the ray-tracing model and results
+discussion. \autoref{symbollist} summarizes the most important optical and geometric
+quantities, their units, and their unit abbreviations.
+
+\begin{table}[H]
+\rowcolors{2}{gray!10}{white}
+\centering
+\caption{List of Symbols}
+\label{symbollist}
+\begin{tabular}[t]{m{0.18\textwidth}m{0.34\textwidth}m{0.24\textwidth}m{0.16\textwidth}}
+\toprule
+\textbf{Symbol} & \textbf{Meaning} & \textbf{Unit} & \textbf{Unit abbreviation} \\
+\midrule
+$G_\mathrm{DNI}$ & Direct normal irradiance incident from the sun & Watts per square metre & W\,m$^{-2}$ \\
+$\Phi$ & Irradiance or receiver flux & Watts per square metre & W\,m$^{-2}$ \\
+$\Phi_\mathrm{peak}$ & Maximum receiver flux over all receiver grid cells & Watts per square metre & W\,m$^{-2}$ \\
+$C_\mathrm{peak}$, CR & Peak concentration ratio, $\Phi_\mathrm{peak}/G_\mathrm{DNI}$ & Dimensionless & - \\
+$\eta_\mathrm{opt}$ & Optical efficiency, $P_\mathrm{abs}/(G_\mathrm{DNI}A_\mathrm{ap})$ & Dimensionless & - \\
+$P$ & Optical power carried by a ray & Watts & W \\
+$P_\mathrm{ray}$ & Initial power assigned to one primary ray & Watts & W \\
+$P_\mathrm{abs}$ & Total power absorbed by the receiver & Watts & W \\
+$A_\mathrm{ap}$ & Aperture area from which primary rays are sampled & Square metres & m$^2$ \\
+$N$ & Number of primary rays in a trace & Dimensionless count & - \\
+$\mathbf{x}$ & Position along a ray & Metres & m \\
+$\mathbf{d}$ & Unit ray direction vector & Dimensionless & - \\
+$\mathbf{n}$ & Unit surface normal vector & Dimensionless & - \\
+$f$ & Paraboloid or lens focal length & Metres & m \\
+$D_{90}$ & Diameter enclosing 90\% of absorbed receiver power & Metres & m \\
+$\theta_s$ & Solar half-angle used by the pillbox sun model & Radians & rad \\
+$\rho$ & Mirror reflectance & Dimensionless & - \\
+$n$ & Refractive index of an optical material & Dimensionless & - \\
+$R$ & Fresnel reflectance & Dimensionless & - \\
+$T$ & Fresnel transmittance, $1-R$ & Dimensionless & - \\
+$\alpha$ & Absorption coefficient in Beer--Lambert attenuation & Per metre & m$^{-1}$ \\
+$\lambda$ & Wavelength used for spectral material properties & Nanometres & nm \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Abbreviations of recurring model and reporting terms are introduced in
+\autoref{abbreviationlist}.
+
+\begin{table}[H]
+\rowcolors{2}{gray!10}{white}
+\centering
+\caption{List of Abbreviations}
+\label{abbreviationlist}
+\begin{tabular}[t]{m{0.2\textwidth}m{0.28\textwidth}m{0.2\textwidth}m{0.24\textwidth}}
+\toprule
+\textbf{Abbreviation} & \textbf{Meaning} & \textbf{Abbreviation} & \textbf{Meaning} \\
+\midrule
+DNI & Direct Normal Irradiance & CR & Concentration Ratio \\
+MC & Monte Carlo & TIR & Total Internal Reflection \\
+BVH & Bounding Volume Hierarchy & CAD & Computer-Aided Design \\
+CSV & Comma-Separated Values & JSON & JavaScript Object Notation \\
+RMS & Root Mean Square & SEM & Standard Error of the Mean \\
+\bottomrule
+\end{tabular}
+\end{table}

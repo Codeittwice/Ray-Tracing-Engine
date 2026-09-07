@@ -1,0 +1,158 @@
+The solar cooker performance is predicted by two sequential models, summarised in
+Figure~\ref{fig:model_flowchart}.  A Monte Carlo \textit{ray-tracing model} first computes
+the absorbed flux distribution on the receiver, which is exported as a CSV file.  That
+flux map is then used as the thermal input to a \textit{heat model}, which solves the
+transient energy balance and produces a temperature-versus-time prediction for the cooking
+vessel.
+
+\input{model_flowchart}
+
+\section{Ray-Tracing Model}
+\label{sec:ray_tracing_model}
+
+\subsection{Model Scope}
+
+The simulator estimates optical performance by Monte Carlo ray tracing.  A solar source emits
+many independent rays through a user-defined aperture, each ray carries a fraction of the
+incident direct normal irradiance (DNI), and surfaces transform that ray by reflection,
+refraction, absorption, or splitting.  The main outputs are absorbed receiver power, receiver
+flux in W/m$^2$, peak concentration ratio, and encircled-power spot size.  All geometric and
+optical calculations are performed in SI units with double-precision vectors.
+
+Each ray is represented parametrically as
+\begin{equation}
+  \mathbf{x}(t) = \mathbf{o} + t\mathbf{d}, \qquad
+  \|\mathbf{d}\| = 1, \qquad t > 0 ,
+\end{equation}
+where $\mathbf{o}$ is the origin, $\mathbf{d}$ is the propagation direction, and the ray also
+carries optical power $P$ in watts.  For $N$ primary rays sampled over an aperture of area
+$A_\mathrm{ap}$ under irradiance $G_\mathrm{DNI}$, the initial ray power is
+\begin{equation}
+  P_\mathrm{ray} = \frac{G_\mathrm{DNI} A_\mathrm{ap}}{N}.
+  \label{eq:ray_power}
+\end{equation}
+Thus the sum of deposited ray powers is a Monte Carlo estimate of total absorbed power.
+
+\subsection{Solar Source and Primary Sampling}
+
+Primary ray origins are sampled uniformly over a disk aperture.  The default ``pillbox'' sun
+model samples directions uniformly inside the solar cone of half-angle
+$\theta_s = 4.65$ mrad:
+\begin{equation}
+  \theta = \theta_s \sqrt{\xi_1}, \qquad
+  \phi = 2\pi \xi_2 ,
+\end{equation}
+where $\xi_1,\xi_2 \sim U(0,1)$.  The square root gives a uniform solid-angle density within
+the small solar disk.  The Buie sunshape extends this by sampling from an angular radiance
+profile with a disk region and a circumsolar tail.  In solid-angle form the sampled density is
+proportional to
+\begin{equation}
+  p(\theta) \propto L(\theta)\sin\theta ,
+\end{equation}
+where $L(\theta)$ is the Buie radiance profile parameterized by circumsolar ratio $\chi$.
+
+\begin{figure}[h]
+  \centering
+  \fbox{\parbox[c][1.15in][c]{0.88\linewidth}{\centering
+  Placeholder: aperture disk, sun cone, sampled primary rays, and receiver}}
+  \caption{Primary rays are sampled on an aperture and aimed according to the selected sunshape.}
+\end{figure}
+
+\subsection{Geometry and Intersections}
+
+Surfaces are intersected in local coordinates after applying the inverse surface transform.
+For a general implicit surface $F(\mathbf{x})=0$, substituting the ray gives
+$F(\mathbf{o}+t\mathbf{d})=0$; the smallest valid positive root is the first hit.  The
+surface normal is the normalized gradient
+\begin{equation}
+  \mathbf{n} = \frac{\nabla F(\mathbf{x})}{\|\nabla F(\mathbf{x})\|},
+\end{equation}
+oriented against the incoming ray.  For the parabolic reflector used in the dish examples,
+\begin{equation}
+  F(x,y,z) = x^2+y^2-4fz = 0 ,
+  \qquad
+  \nabla F = (2x,\,2y,\,-4f),
+\end{equation}
+where $f$ is focal length.  Ideal parallel rays along the optical axis reflect through the
+focus $(0,0,f)$, which is also used as a validation check.
+
+\subsection{Optical Interactions}
+
+Specular reflection uses the standard vector law
+\begin{equation}
+  \mathbf{d}_r = \mathbf{d} - 2(\mathbf{d}\cdot\mathbf{n})\mathbf{n}.
+  \label{eq:reflection}
+\end{equation}
+A perfect mirror preserves power, while a real mirror with reflectance $\rho$ returns
+\begin{equation}
+  P_r = \rho P_\mathrm{in}.
+\end{equation}
+Optional mirror slope error perturbs the surface normal by a Gaussian angular error before
+applying Eq.~\eqref{eq:reflection}, modeling imperfect alignment or roughness.
+
+Refraction follows Snell's law,
+\begin{equation}
+  n_1\sin\theta_i = n_2\sin\theta_t ,
+\end{equation}
+with vector transmitted direction
+\begin{equation}
+  \mathbf{d}_t =
+  \eta\mathbf{d} + \left(\eta\cos\theta_i-\cos\theta_t\right)\mathbf{n},
+  \qquad
+  \eta=\frac{n_1}{n_2}.
+\end{equation}
+If $\eta^2(1-\cos^2\theta_i)\ge 1$, total internal reflection occurs and the ray is reflected.
+Otherwise, unpolarized Fresnel equations split power between reflected and transmitted rays:
+\begin{align}
+  R_s &=
+  \left(\frac{n_1\cos\theta_i-n_2\cos\theta_t}
+             {n_1\cos\theta_i+n_2\cos\theta_t}\right)^2, \\
+  R_p &=
+  \left(\frac{n_2\cos\theta_i-n_1\cos\theta_t}
+             {n_2\cos\theta_i+n_1\cos\theta_t}\right)^2, \\
+  R &= \frac{1}{2}(R_s+R_p), \qquad T=1-R .
+\end{align}
+The dielectric model uses deterministic splitting, so the reflected child ray receives $RP$
+and the transmitted child ray receives $TP$.  Absorption inside glass follows Beer--Lambert
+attenuation,
+\begin{equation}
+  P(d) = P_0 e^{-\alpha d},
+\end{equation}
+where $\alpha$ is the absorption coefficient in m$^{-1}$ and $d$ is path length in the
+material.  When dispersion is enabled, the refractive index can vary with wavelength using a
+Sellmeier form,
+\begin{equation}
+  n^2(\lambda) = 1 + \sum_{k=1}^{3}\frac{B_k\lambda^2}{\lambda^2-C_k}.
+\end{equation}
+
+\subsection{Monte Carlo Estimator and Receiver Flux}
+
+Tracing continues until the ray escapes, is absorbed, exceeds the bounce limit, or drops below
+a power cutoff.  When a ray hits an absorbing receiver, its power is deposited into a grid bin.
+For receiver bin $j$ with area $\Delta A_j$, the flux estimate is
+\begin{equation}
+  \Phi_j = \frac{1}{\Delta A_j}\sum_{i\in j} P_i
+  \qquad [\mathrm{W/m^2}].
+\end{equation}
+The total absorbed power, peak flux, and concentration ratio are then
+\begin{equation}
+  P_\mathrm{abs} = \sum_j \Phi_j \Delta A_j
+  = \sum_i P_i,\qquad
+  \Phi_\mathrm{peak} = \max_j \Phi_j,\qquad
+  C_\mathrm{peak} = \frac{\Phi_\mathrm{peak}}{G_\mathrm{DNI}} .
+\end{equation}
+Spot size is reported by sorting receiver bins by radius from the target center and finding
+the diameter enclosing a chosen fraction of total power, for example $D_{90}$.
+
+\begin{figure}[h]
+  \centering
+  \fbox{\parbox[c][1.05in][c]{0.88\linewidth}{\centering
+  Placeholder: receiver heat map with peak flux, $D_{90}$ contour, and profile slices}}
+  \caption{Deposited ray power is converted to a receiver flux map and concentration metrics.}
+\end{figure}
+
+The model is therefore energy based: apart from explicitly modeled mirror losses and material
+absorption, ray power is conserved through reflection, refraction, and Fresnel splitting.  As
+$N$ increases, random sampling error decreases with the usual Monte Carlo rate
+$O(N^{-1/2})$, while deterministic physics equations define how each sampled ray transports
+power through the solar cooker geometry.

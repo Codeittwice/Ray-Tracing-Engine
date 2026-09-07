@@ -194,7 +194,9 @@ def save_unfolded(
         paste(canvas, np.flipud(battery_south),
               battery_origin_r + battery.shape[0], battery_origin_c)
 
-    fig, ax = plt.subplots(figsize=(9.0, 6.0), constrained_layout=True)
+    fig_w = 9.0
+    fig_h = max(3.0, min(8.0, fig_w * canvas_h / canvas_w + 0.5))
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h), constrained_layout=True)
     im = ax.imshow(canvas, origin="upper", cmap=cmap,
                    **image_kwargs(scale, vmin, vmax))
     ax.set_title("Unfolded box receiver flux" + (" (log scale)" if scale == "log" else ""))
@@ -242,7 +244,13 @@ def save_unfolded(
             bbox={"facecolor": "black", "alpha": 0.35, "edgecolor": "none", "pad": 2},
         )
 
-    fig.colorbar(im, ax=ax, label=colorbar_label(scale))
+    # Match colorbar height to the actual image height within the axes.
+    # imshow uses equal aspect so the image may not fill the full axes height;
+    # shrinking the colorbar by the ratio of image height to axes height corrects this.
+    fig.canvas.draw()
+    _ax_bb = ax.get_window_extent(fig.canvas.get_renderer())
+    _shrink = min(1.0, (canvas_h / canvas_w) / (_ax_bb.height / _ax_bb.width))
+    fig.colorbar(im, ax=ax, label=colorbar_label(scale), shrink=_shrink)
     fig.savefig(image_dir / "unfolded_flux_map.png", dpi=dpi)
     fig.savefig(image_dir / "unfolded_box_flux.png", dpi=dpi)
     plt.close(fig)
