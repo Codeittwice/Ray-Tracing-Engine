@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Solar Cooker Ray Tracer</title>
+<meta name="description" content="A Monte Carlo ray tracer for solar cookers and concentrators. Load a dish, box, trough or STL, set the sun, and read the flux on the receiver.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+  :root {
+    --bg: #F1F3F6;
+    --ink: #16202E;
+    --muted: #55637A;
+    --line: #CFD7E2;
+    --accent: #9A5208;
+    --accent-ink: #FFFFFF;
+    --code-bg: #E9EDF3;
+    --demo-bg: #0C1422;
+    --demo-ink: #DCE4F0;
+    --demo-muted: #7C8BA3;
+    --demo-line: #2A3750;
+    --ray: #FFB84D;
+    --font-display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+    --font-body: "IBM Plex Sans", "Segoe UI", Roboto, sans-serif;
+    --font-code: ui-monospace, Consolas, "Cascadia Mono", Menlo, monospace;
+    --measure: 62ch;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #101826;
+      --ink: #E8EDF5;
+      --muted: #93A0B5;
+      --line: #2A3750;
+      --accent: #FFB84D;
+      --accent-ink: #16202E;
+      --code-bg: #0C1422;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #101826;
+    --ink: #E8EDF5;
+    --muted: #93A0B5;
+    --line: #2A3750;
+    --accent: #FFB84D;
+    --accent-ink: #16202E;
+    --code-bg: #0C1422;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 17px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-underline-offset: 0.15em; }
+  a:hover { text-decoration-thickness: 2px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    line-height: 1.08;
+    margin: 0;
+    text-wrap: balance;
+  }
+  h1 { font-size: clamp(2.3rem, 4.6vw, 3.9rem); }
+  h2 { font-size: clamp(1.6rem, 2.6vw, 2.2rem); margin-bottom: 1.2rem; }
+  h3 { font-size: 1.2rem; letter-spacing: -0.01em; margin-bottom: 0.35rem; }
+  p { margin: 0; max-width: var(--measure); }
+  p + p { margin-top: 0.9em; }
+  code { font-family: var(--font-code); font-size: 0.92em; }
+  pre {
+    margin: 0;
+    padding: 1rem 1.2rem;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow-x: auto;
+    font-family: var(--font-code);
+    font-size: 0.86rem;
+    line-height: 1.5;
+    tab-size: 2;
+  }
+  pre .c { color: var(--muted); }
+
+  .skip {
+    position: absolute; left: 1rem; top: -3rem;
+    background: var(--accent); color: var(--accent-ink);
+    padding: 0.5rem 0.8rem; border-radius: 6px; text-decoration: none;
+  }
+  .skip:focus { top: 1rem; z-index: 10; }
+
+  .wrap { width: min(1160px, 100% - 2.5rem); margin-inline: auto; }
+
+  .top {
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    padding-block: 1.1rem;
+  }
+  .mark {
+    display: flex; align-items: baseline; gap: 0.6rem;
+    color: var(--ink); text-decoration: none;
+    font-family: var(--font-display); font-weight: 600; font-size: 1.25rem; letter-spacing: -0.01em;
+  }
+  .mark span { font-family: var(--font-body); font-weight: 400; font-size: 0.95rem; color: var(--muted); }
+  .top nav { display: flex; gap: 1.4rem; flex-wrap: wrap; }
+  .top nav a { color: var(--ink); text-decoration: none; font-size: 0.95rem; padding: 0.4rem 0; }
+  .top nav a:hover { color: var(--accent); }
+  @media (max-width: 640px) { .mark span { display: none; } }
+
+  .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: clamp(2rem, 5vw, 4.5rem);
+    align-items: center;
+    padding-block: clamp(2rem, 6vw, 5rem) clamp(3rem, 7vw, 6rem);
+  }
+  @media (max-width: 900px) { .hero { grid-template-columns: 1fr; } }
+  .hero p.lead { font-size: 1.15rem; margin-top: 1.3rem; color: var(--muted); max-width: 46ch; }
+  .cta { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 2rem; }
+  .btn {
+    display: inline-flex; align-items: center; min-height: 44px;
+    padding: 0.55rem 1.15rem; border-radius: 6px;
+    font-family: var(--font-body); font-size: 1rem; font-weight: 500;
+    text-decoration: none; border: 1px solid transparent; cursor: pointer;
+  }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.secondary { color: var(--ink); border-color: var(--line); background: transparent; }
+  .btn.secondary:hover { border-color: var(--ink); }
+  .fine { margin-top: 1rem; font-size: 0.9rem; color: var(--muted); }
+
+  .demo { margin: 0; min-width: 0; }
+  .viewport {
+    position: relative;
+    background: var(--demo-bg);
+    border-radius: 8px;
+    overflow: hidden;
+    aspect-ratio: 4 / 3;
+    border: 1px solid var(--line);
+  }
+  .viewport canvas { display: block; width: 100%; height: 100%; }
+  .viewport .restart {
+    position: absolute; right: 0.6rem; top: 0.6rem;
+    min-height: 32px; padding: 0.2rem 0.7rem; font-size: 0.85rem;
+    background: var(--demo-bg); background: color-mix(in srgb, var(--demo-bg) 70%, transparent);
+    color: var(--demo-ink); border: 1px solid var(--demo-line); border-radius: 5px;
+    cursor: pointer; font-family: var(--font-body);
+  }
+  .viewport .restart:hover { border-color: var(--ray); color: var(--ray); }
+  .readout {
+    display: flex; flex-wrap: wrap; gap: 0.4rem 1.6rem;
+    margin-top: 0.8rem; font-size: 0.9rem; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .readout b { color: var(--ink); font-weight: 500; }
+  .controls {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.9rem 1.4rem; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--line);
+  }
+  .controls label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.88rem; color: var(--muted); }
+  .controls label output { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .controls input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; min-height: 24px; }
+  .controls select {
+    font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+    border-radius: 5px; padding: 0.25rem 0.5rem; min-height: 32px;
+  }
+  .demo figcaption { margin-top: 0.9rem; font-size: 0.88rem; color: var(--muted); max-width: 70ch; }
+
+  section.block { padding-block: clamp(2.5rem, 6vw, 4.5rem); border-top: 1px solid var(--line); scroll-margin-top: 1rem; }
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 2.5rem 4rem; align-items: start; }
+  @media (max-width: 820px) { .two { grid-template-columns: 1fr; } }
+
+  .results {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.5rem 2rem;
+    margin: 0; padding: 0;
+  }
+  @media (max-width: 720px) { .results { grid-template-columns: repeat(2, 1fr); } }
+  .results div { border-left: 2px solid var(--line); padding-left: 1rem; }
+  .results dt { font-size: 0.88rem; color: var(--muted); }
+  .results dd {
+    margin: 0.15rem 0 0; font-family: var(--font-display); font-weight: 500;
+    font-size: clamp(1.6rem, 3vw, 2.3rem); letter-spacing: -0.02em; line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+  .results dd small { font-family: var(--font-body); font-size: 0.55em; font-weight: 400; color: var(--muted); letter-spacing: 0; margin-left: 0.15em; }
+  .results-note { margin-top: 1.4rem; font-size: 0.9rem; color: var(--muted); }
+
+  .features { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2.2rem 3rem; }
+  @media (max-width: 720px) { .features { grid-template-columns: 1fr; } }
+  .features p { color: var(--muted); max-width: 44ch; }
+  .features ul { margin: 0.5rem 0 0; padding-left: 1.1rem; color: var(--muted); }
+  .features li { margin: 0.15rem 0; }
+
+  .tests-row { margin-top: 3rem; }
+  .tests { margin: 1.2rem 0 0; padding: 0; list-style: none; display: grid; gap: 0.35rem; font-size: 0.95rem; color: var(--muted); }
+  .tests li { display: grid; grid-template-columns: 4.5rem 1fr; gap: 0.6rem; }
+  .tests li span:first-child { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+  .steps { display: grid; gap: 1.6rem; }
+  .steps h3 { margin-bottom: 0.5rem; }
+
+  footer { border-top: 1px solid var(--line); padding-block: 1.6rem 2.4rem; font-size: 0.9rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 0.5rem 2rem; }
+  footer a { color: var(--muted); }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="wrap top">
+  <a class="mark" href="#">scrt <span>Solar Cooker Ray Tracer</span></a>
+  <nav aria-label="Site">
+    <a href="#results">Results</a>
+    <a href="#features">Features</a>
+    <a href="#scene">Scene format</a>
+    <a href="#start">Get started</a>
+  </nav>
+</header>
+
+<main id="main" class="wrap">
+  <section class="hero" aria-labelledby="h-hero">
+    <div class="hero-copy">
+      <h1 id="h-hero">Know where the sun lands before you cut the mirror.</h1>
+      <p class="lead">A Monte Carlo ray tracer for solar cookers and concentrators. Load a dish, a box, a trough or your own STL, set the sun, and read the flux on the receiver in watts per square metre.</p>
+      <div class="cta">
+        <a class="btn primary" href="https://github.com/Codeittwice/Ray-Tracing-Engine/releases">Download for Windows</a>
+        <a class="btn secondary" href="#scene">Read the scene format</a>
+      </div>
+      <p class="fine">Version 1.1.0, 64-bit Windows build. Source on GitHub under the same link.</p>
+    </div>
+
+    <figure class="demo">
+      <div class="viewport">
+        <canvas id="trace" role="img" aria-label="Live two-dimensional ray trace: sun rays reflect off a parabolic dish onto a small receiver at the focus, building a flux profile."></canvas>
+        <button class="restart" type="button" id="restart">Trace again</button>
+      </div>
+      <div class="readout" aria-live="off">
+        <span>Rays traced <b id="r-n">0</b></span>
+        <span>On receiver <b id="r-hit">0%</b></span>
+        <span>Shaded by receiver <b id="r-blk">0%</b></span>
+        <span>90% of energy within <b id="r-w">–</b></span>
+        <span>Peak line concentration <b id="r-c">–</b></span>
+      </div>
+      <div class="controls">
+        <label>Mirror slope error σ <output id="o-sigma">2.0 mrad</output>
+          <input type="range" id="sigma" min="0" max="8" step="0.25" value="2">
+        </label>
+        <label>Focal length f <output id="o-f">0.60 m</output>
+          <input type="range" id="f" min="0.35" max="0.9" step="0.01" value="0.6">
+        </label>
+        <label>Sunshape
+          <select id="shape">
+            <option value="pillbox">Pillbox, 4.65 mrad</option>
+            <option value="buie">Buie 2003</option>
+          </select>
+        </label>
+        <label id="chi-wrap" hidden>Circumsolar ratio χ <output id="o-chi">0.05</output>
+          <input type="range" id="chi" min="0.02" max="0.10" step="0.01" value="0.05">
+        </label>
+      </div>
+      <figcaption>A 2-D cross-section of the parabolic dish example: 1 m aperture, 100 mm receiver at the focus, 1000 W/m² direct normal irradiance. The desktop app traces the full 3-D scene with hundreds of thousands of rays.</figcaption>
+    </figure>
+  </section>
+
+  <section class="block" id="results" aria-labelledby="h-results">
+    <div class="two">
+      <div>
+        <h2 id="h-results">Four numbers you actually need.</h2>
+        <p>Every trace ends in a summary: how much power reached the receiver, how hot the hottest spot is, and how well the optics concentrate. The full flux map goes to CSV or NumPy for your own plots.</p>
+      </div>
+      <div>
+        <dl class="results">
+          <div><dt>Total power on receiver</dt><dd>664.2<small>W</small></dd></div>
+          <div><dt>Peak flux</dt><dd>9.09<small>MW/m²</small></dd></div>
+          <div><dt>Concentration</dt><dd>9087<small>×</small></dd></div>
+          <div><dt>Wall time</dt><dd>0.72<small>s</small></dd></div>
+        </dl>
+        <p class="results-note">Parabolic dish example: 1 m paraboloid, f = 600 mm, aluminium mirror with 0.85 reflectance and 2 mrad slope error, 100 × 100 mm receiver, 500 000 rays at 1000 W/m².</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="features" aria-labelledby="h-features">
+    <h2 id="h-features">Built for the parts of a cooker that matter.</h2>
+    <div class="features">
+      <div>
+        <h3>Optics</h3>
+        <p>Analytic paraboloids, spheres, planes and general quadrics for clean designs. Cylindrical paraboloids for troughs. Triangle meshes from STL or OBJ for anything you drew in CAD, with a scale factor for millimetre files.</p>
+      </div>
+      <div>
+        <h3>Materials</h3>
+        <p>Perfect mirrors for reference, real mirrors with reflectance and Gaussian slope error, dielectrics with a Fresnel split, Beer–Lambert absorption and Sellmeier dispersion for BK7 or fused silica, and absorbers.</p>
+      </div>
+      <div>
+        <h3>Sun</h3>
+        <p>A uniform pillbox disc, or the Buie 2003 sunshape with a circumsolar ratio between 0.02 and 0.10 for realistic aureole. Direct normal irradiance in W/m², and any sun direction.</p>
+      </div>
+      <div>
+        <h3>Output</h3>
+        <p>An interactive 3-D view with sampled ray paths and a heatmap on the receiver, plus a flux analysis panel with line plots. Or run headless from the command line and get a CSV flux map, a JSON summary and an OBJ of the scene.</p>
+      </div>
+    </div>
+    <div class="two tests-row">
+      <div>
+        <h3>Checked against physics, not screenshots</h3>
+        <p>Twelve validation tests run on every build. A few of them:</p>
+      </div>
+      <ul class="tests">
+        <li><span>T5</span><span>Rays reflected by a paraboloid converge within 0.1 mm of the focus.</span></li>
+        <li><span>T6</span><span>A perfect mirror conserves energy to better than 1%.</span></li>
+        <li><span>T8</span><span>The BVH returns the same hit as brute force on 200 random scenes.</span></li>
+        <li><span>T9</span><span>Reflected plus transmitted energy equals one at every incidence angle, to 1e-12.</span></li>
+        <li><span>T10</span><span>Focal spot size matches the analytic formula within 5%.</span></li>
+        <li><span>T12</span><span>A scene file survives a save-and-load round trip byte for byte.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="block" id="scene" aria-labelledby="h-scene">
+    <div class="two">
+      <div>
+        <h2 id="h-scene">A scene is one JSON file.</h2>
+        <p>Materials, elements, receiver and sun in plain text. Version it with your design, share it with a colleague, or generate a hundred variants from a script and trace them headless overnight.</p>
+        <p>Units are metres, watts and degrees throughout. Wavelengths, when you need them, are in nanometres.</p>
+      </div>
+<pre><code>{
+  "scene": {
+    "name": "Parabolic dish",
+    "sun": {
+      "direction": [0, 0, -1],
+      "dni_wm2": 1000,
+      "sunshape": { "type": "buie", "chi": 0.05 }
+    },
+    "materials": [
+      { "id": "alu", "type": "real_mirror",
+        "reflectance": 0.85, "slope_error_mrad": 2.0 }
+    ],
+    "elements": [
+      { "name": "dish", "material": "alu",
+        "surface": { "type": "paraboloid",
+                     "focal_length_m": 0.6,
+                     "aperture_radius_m": 0.5 } }
+    ],
+    "receiver": {
+      "surface": { "type": "plane",
+                   "half_width": 0.05, "half_height": 0.05 },
+      "grid": { "nx": 64, "ny": 64 },
+      "transform": { "translation": [0, 0, 0.6] }
+    }
+  },
+  "trace": { "n_primary_rays": 500000, "max_bounces": 8 }
+}</code></pre>
+    </div>
+  </section>
+
+  <section class="block" id="start" aria-labelledby="h-start">
+    <div class="two">
+      <div>
+        <h2 id="h-start">Get started.</h2>
+        <p>Download the zip, unpack it anywhere, and open an example scene. The interactive window needs a desktop session. Headless mode runs anywhere, including a CI job.</p>
+        <p class="fine">Building from source needs Visual Studio 2025, CMake 4, Ninja and vcpkg. The first configure compiles Polyscope and Assimp and takes a while.</p>
+      </div>
+      <div class="steps">
+        <div>
+          <h3>Open a scene in the viewer</h3>
+<pre><code>scrt_app.exe examples\parabolic_dish.json</code></pre>
+        </div>
+        <div>
+          <h3>Trace headless and export</h3>
+<pre><code>scrt_app.exe examples\parabolic_dish.json --headless --rays 500000 --out results\</code></pre>
+        </div>
+        <div>
+          <h3>Build from source</h3>
+<pre><code>cmake --preset release
+cmake --build --preset release --parallel
+ctest --test-dir build/release --output-on-failure</code></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">
+  <span>Solar Cooker Ray Tracer, C++20.</span>
+  <a href="https://github.com/Codeittwice/Ray-Tracing-Engine">Source and issues on GitHub</a>
+  <a href="https://github.com/Codeittwice/Ray-Tracing-Engine/releases">Releases</a>
+</footer>
+
+<script>
+(function () {
+  var canvas = document.getElementById('trace');
+  var ctx = canvas.getContext('2d');
+  var layer = document.createElement('canvas');
+  var lctx = layer.getContext('2d');
+
+  var R = 0.5, RECV = 0.05, NB = 100, MAX = 6000, PER_FRAME = 28;
+  var Y_TOP = 0.86, Y_BOT = -0.05, X_HALF = 0.66;
+  var state = { f: 0.6, sigma: 2.0, shape: 'pillbox', chi: 0.05 };
+  var hist = new Float64Array(NB), total = 0, hit = 0, blocked = 0;
+  var W = 0, H = 0, dpr = 1, s = 1, ox = 0, oyBase = 0, raf = null, tok = null;
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+  var visible = true;
+
+  var el = {
+    n: document.getElementById('r-n'), hit: document.getElementById('r-hit'),
+    blk: document.getElementById('r-blk'), w: document.getElementById('r-w'), c: document.getElementById('r-c'),
+    sigma: document.getElementById('sigma'), oSigma: document.getElementById('o-sigma'),
+    f: document.getElementById('f'), oF: document.getElementById('o-f'),
+    shape: document.getElementById('shape'), chi: document.getElementById('chi'),
+    oChi: document.getElementById('o-chi'), chiWrap: document.getElementById('chi-wrap'),
+    restart: document.getElementById('restart')
+  };
+
+  function tokens() {
+    var cs = getComputedStyle(canvas);
+    function g(n) { return cs.getPropertyValue(n).trim(); }
+    return { bg: g('--demo-bg'), ink: g('--demo-ink'), muted: g('--demo-muted'), line: g('--demo-line'), ray: g('--ray') };
+  }
+
+  // Inferno colormap, 6th-order polynomial fit (Zucker).
+  function inferno(t) {
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    var r = 0.0002189403691192265 + t * (0.1065134194856116 + t * (11.60249308247187 + t * (-41.70399613139459 + t * (77.162935699427 + t * (-71.31942824499214 + t * 25.13112622477341)))));
+    var g = 0.001651004631001012 + t * (0.5639564367884091 + t * (-3.972853965665698 + t * (17.43639888205313 + t * (-33.40235894210092 + t * (32.62606426397723 + t * -12.24266895238567)))));
+    var b = -0.01948089843709184 + t * (3.932712388889277 + t * (-15.9423941062914 + t * (44.35414519872511 + t * (-81.80730925738993 + t * (73.20951985803202 + t * -23.07032500287172)))));
+    return 'rgb(' + Math.round(255 * Math.min(1, Math.max(0, r))) + ',' + Math.round(255 * Math.min(1, Math.max(0, g))) + ',' + Math.round(255 * Math.min(1, Math.max(0, b))) + ')';
+  }
+
+  function gauss() {
+    var u = 1 - Math.random(), v = Math.random();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  }
+  function sunAngle() {
+    var core = 4.65e-3;
+    if (state.shape === 'buie' && Math.random() < state.chi) return (Math.random() * 2 - 1) * 43.6e-3;
+    return (Math.random() * 2 - 1) * core;
+  }
+
+  function X(x) { return ox + x * s; }
+  function Y(y) { return oyBase - (y - Y_BOT) * s; }
+
+  function resize() {
+    var r = canvas.getBoundingClientRect();
+    if (r.width === 0) return;
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = Math.round(r.width * dpr); H = Math.round(r.height * dpr);
+    canvas.width = W; canvas.height = H; layer.width = W; layer.height = H;
+    s = Math.min(W / (2 * X_HALF), H / (Y_TOP - Y_BOT));
+    ox = W / 2;
+    oyBase = H - (H - (Y_TOP - Y_BOT) * s) / 2;
+  }
+
+  function trace() {
+    var th = sunAngle(), dx = Math.sin(th), dy = -Math.cos(th);
+    var x0 = (Math.random() * 2 - 1) * R, y0 = Y_TOP, f = state.f;
+    // Receiver shadows the dish: rays passing through y = f within the receiver stop there.
+    var xs = x0 + dx * (f - y0) / dy;
+    if (Math.abs(xs) <= RECV) return { blocked: true, pts: [[x0, y0], [xs, f]] };
+    var a = dx * dx / (4 * f), b = (2 * x0 * dx) / (4 * f) - dy, c = x0 * x0 / (4 * f) - y0, t;
+    if (Math.abs(a) < 1e-12) { t = -c / b; }
+    else {
+      var disc = b * b - 4 * a * c; if (disc < 0) return null;
+      var q = Math.sqrt(disc), t1 = (-b - q) / (2 * a), t2 = (-b + q) / (2 * a);
+      t = Math.min(t1, t2) > 0 ? Math.min(t1, t2) : Math.max(t1, t2);
+    }
+    var xh = x0 + t * dx, yh = y0 + t * dy;
+    if (Math.abs(xh) > R) return { pts: [[x0, y0], [x0 + dx * (Y_BOT - y0) / dy, Y_BOT]] };
+    var nx = -xh / (2 * f), ny = 1, nl = Math.hypot(nx, ny); nx /= nl; ny /= nl;
+    var e = gauss() * state.sigma * 1e-3, ce = Math.cos(e), se = Math.sin(e);
+    var n2x = nx * ce - ny * se, n2y = nx * se + ny * ce;
+    var d = dx * n2x + dy * n2y, rx = dx - 2 * d * n2x, ry = dy - 2 * d * n2y;
+    var pts = [[x0, y0], [xh, yh]], captured = false, xr = null;
+    if (ry > 1e-9) {
+      var tr = (f - yh) / ry; xr = xh + tr * rx;
+      if (Math.abs(xr) <= RECV) { captured = true; pts.push([xr, f]); }
+      else { var tt = (Y_TOP - yh) / ry; pts.push([xh + tt * rx, Y_TOP]); }
+    } else { pts.push([xh + rx * 0.4, yh + ry * 0.4]); }
+    return { captured: captured, xr: xr, pts: pts };
+  }
+
+  function drawRay(pts, alpha) {
+    lctx.globalAlpha = alpha;
+    lctx.strokeStyle = tok.ray;
+    lctx.lineWidth = 1 * dpr;
+    lctx.beginPath();
+    lctx.moveTo(X(pts[0][0]), Y(pts[0][1]));
+    for (var i = 1; i < pts.length; i++) lctx.lineTo(X(pts[i][0]), Y(pts[i][1]));
+    lctx.stroke();
+  }
+
+  function one() {
+    var r = trace(); if (!r) return;
+    total++;
+    if (r.blocked) { blocked++; drawRay(r.pts, 0.06); return; }
+    if (r.captured) {
+      hit++;
+      var bi = Math.min(NB - 1, Math.floor((r.xr + RECV) / (2 * RECV) * NB));
+      hist[bi]++;
+    }
+    drawRay(r.pts, 0.07);
+  }
+
+  function stats() {
+    var mass = 0, i, j; for (i = 0; i < NB; i++) mass += hist[i];
+    var best = NB;
+    if (mass > 0) {
+      for (i = 0; i < NB; i++) {
+        var acc = 0;
+        for (j = i; j < NB; j++) { acc += hist[j]; if (acc >= 0.9 * mass) { if (j - i + 1 < best) best = j - i + 1; break; } }
+      }
+    }
+    var mx = 0; for (i = 0; i < NB; i++) if (hist[i] > mx) mx = hist[i];
+    var binW = 2 * RECV / NB;
+    var conc = total ? (mx / binW) / (total / (2 * R)) : 0;
+    return { mass: mass, width: best * binW, max: mx, conc: conc };
+  }
+
+  function draw() {
+    var f = state.f, i;
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = tok.bg; ctx.fillRect(0, 0, W, H);
+    ctx.font = (11 * dpr) + 'px ' + getComputedStyle(canvas).getPropertyValue('--font-body');
+    ctx.textBaseline = 'middle';
+
+    // Optical axis and sun direction
+    ctx.strokeStyle = tok.line; ctx.lineWidth = 1 * dpr; ctx.setLineDash([4 * dpr, 6 * dpr]);
+    ctx.beginPath(); ctx.moveTo(X(0), Y(Y_TOP)); ctx.lineTo(X(0), Y(Y_BOT)); ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.drawImage(layer, 0, 0);
+
+    // Dish
+    ctx.strokeStyle = tok.ink; ctx.lineWidth = 2.5 * dpr; ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (i = 0; i <= 80; i++) { var x = -R + (2 * R) * i / 80, y = x * x / (4 * f); if (i === 0) ctx.moveTo(X(x), Y(y)); else ctx.lineTo(X(x), Y(y)); }
+    ctx.stroke();
+
+    // Receiver heat strip
+    var st = stats();
+    var x1 = X(-RECV), x2 = X(RECV), yr = Y(f), bw = (x2 - x1) / NB;
+    ctx.fillStyle = tok.line; ctx.fillRect(x1 - 1 * dpr, yr - 6 * dpr, (x2 - x1) + 2 * dpr, 12 * dpr);
+    for (i = 0; i < NB; i++) {
+      ctx.fillStyle = inferno(st.max ? hist[i] / st.max : 0);
+      ctx.fillRect(x1 + i * bw, yr - 5 * dpr, bw + 0.6, 10 * dpr);
+    }
+
+    // Labels
+    ctx.fillStyle = tok.muted; ctx.textAlign = 'left';
+    ctx.fillText('receiver, 100 mm', x2 + 10 * dpr, yr);
+    ctx.fillText('dish, 1 m', X(R) + 8 * dpr, Y(R * R / (4 * f)));
+    ctx.fillText('sun', X(-R) - 0, Y(Y_TOP) + 12 * dpr);
+
+    // Flux profile, top-right
+    var pw = Math.min(W * 0.28, 200 * dpr), ph = 56 * dpr, px = W - pw - 14 * dpr, py = 16 * dpr;
+    ctx.fillStyle = tok.muted; ctx.textAlign = 'left';
+    ctx.fillText('flux across receiver', px, py - 0 + ph + 12 * dpr);
+    ctx.strokeStyle = tok.line; ctx.lineWidth = 1 * dpr;
+    ctx.beginPath(); ctx.moveTo(px, py + ph); ctx.lineTo(px + pw, py + ph); ctx.stroke();
+    if (st.max) {
+      var cw = pw / NB;
+      for (i = 0; i < NB; i++) {
+        var h = (hist[i] / st.max) * ph;
+        ctx.fillStyle = inferno(hist[i] / st.max);
+        ctx.fillRect(px + i * cw, py + ph - h, cw + 0.6, h);
+      }
+    }
+    ctx.fillStyle = tok.muted; ctx.textAlign = 'left';
+    ctx.fillText('−50', px, py + ph + 24 * dpr);
+    ctx.textAlign = 'right';
+    ctx.fillText('+50 mm', px + pw, py + ph + 24 * dpr);
+
+    el.n.textContent = total.toLocaleString();
+    el.hit.textContent = total ? (100 * hit / total).toFixed(1) + '%' : '0%';
+    el.blk.textContent = total ? (100 * blocked / total).toFixed(1) + '%' : '0%';
+    el.w.textContent = st.mass ? (st.width * 1000).toFixed(0) + ' mm' : '–';
+    el.c.textContent = st.mass ? Math.round(st.conc) + '×' : '–';
+  }
+
+  function step() {
+    raf = null;
+    for (var k = 0; k < PER_FRAME && total < MAX; k++) one();
+    draw();
+    if (total < MAX && visible) raf = requestAnimationFrame(step);
+  }
+
+  function restart() {
+    if (raf) { cancelAnimationFrame(raf); raf = null; }
+    resize();
+    tok = tokens();
+    hist = new Float64Array(NB); total = 0; hit = 0; blocked = 0;
+    lctx.clearRect(0, 0, W, H);
+    // Draw a first burst synchronously so the page's resting frame already shows the trace.
+    var burst = reduced.matches ? 3000 : 600;
+    for (var i = 0; i < burst; i++) one();
+    draw();
+    if (!reduced.matches) raf = requestAnimationFrame(step);
+  }
+
+  el.sigma.addEventListener('input', function () { state.sigma = +this.value; el.oSigma.textContent = state.sigma.toFixed(2) + ' mrad'; restart(); });
+  el.f.addEventListener('input', function () { state.f = +this.value; el.oF.textContent = state.f.toFixed(2) + ' m'; restart(); });
+  el.shape.addEventListener('change', function () { state.shape = this.value; el.chiWrap.hidden = state.shape !== 'buie'; restart(); });
+  el.chi.addEventListener('input', function () { state.chi = +this.value; el.oChi.textContent = state.chi.toFixed(2); restart(); });
+  el.restart.addEventListener('click', restart);
+
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(function (entries) {
+      visible = entries[0].isIntersecting;
+      if (visible && !raf && total < MAX && !reduced.matches) raf = requestAnimationFrame(step);
+    }).observe(canvas);
+  }
+  // The viewport is single-theme (dark, like the app's 3-D view), so only a real size change restarts it.
+  var lastW = 0, lastH = 0, resizeTimer = null;
+  function onSize() {
+    var r = canvas.getBoundingClientRect();
+    var w = Math.round(r.width), h = Math.round(r.height);
+    if (w === lastW && h === lastH) return;
+    lastW = w; lastH = h;
+    clearTimeout(resizeTimer); resizeTimer = setTimeout(restart, 120);
+  }
+  if ('ResizeObserver' in window) new ResizeObserver(onSize).observe(canvas);
+  else window.addEventListener('resize', onSize);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { if (tok) draw(); });
+
+  onSize();
+  if (!lastW) restart();
+})();
+</script>
+</body>
+</html>
