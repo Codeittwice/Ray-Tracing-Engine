@@ -30,6 +30,10 @@ int TriangleMesh::build_tri(int begin, int end) {
     int idx = static_cast<int>(tri_nodes_.size());
     tri_nodes_.emplace_back();
     TriNode& node = tri_nodes_[idx];
+    // `node` stays valid across the recursive calls below only because the
+    // constructor reserved 2*n capacity up front, guaranteeing tri_nodes_
+    // never reallocates. This assert enforces that invariant.
+    assert(tri_nodes_.capacity() >= 2 * tri_order_.size());
 
     for (int i = begin; i < end; ++i) {
         int t = tri_order_[i];

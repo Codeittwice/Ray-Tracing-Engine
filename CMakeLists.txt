@@ -133,6 +133,7 @@ target_sources(scrt_tests PRIVATE
     tests/test_dielectric_spectrum.cpp
     tests/test_fresnel_zone_lens.cpp
     tests/test_compare.cpp
+    tests/test_regression_corpus.cpp
 )
 
 target_compile_definitions(scrt_tests PRIVATE

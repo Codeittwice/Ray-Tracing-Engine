@@ -6,14 +6,17 @@
 namespace scrt::accel {
 
 void BVH::build(const std::vector<std::unique_ptr<surfaces::Surface>>& surfaces) {
+    // Always clear first: a rebuild with no surfaces must leave the BVH
+    // genuinely empty, not retain stale prims_/nodes_ from a previous build
+    // (which would otherwise dangle once the old surfaces are freed).
+    prims_.clear();
+    nodes_.clear();
     if (surfaces.empty()) return;
 
-    prims_.clear();
     prims_.reserve(surfaces.size());
     for (const auto& s : surfaces)
         prims_.push_back(s.get());
 
-    nodes_.clear();
     nodes_.reserve(2 * prims_.size());
     build_recursive(0, static_cast<int>(prims_.size()));
 }
@@ -24,6 +27,10 @@ int BVH::build_recursive(int begin, int end) {
     int idx = static_cast<int>(nodes_.size());
     nodes_.emplace_back();
     Node& node = nodes_[idx];
+    // `node` stays valid across the recursive calls below only because
+    // build() reserved 2*prims_.size() capacity up front, guaranteeing
+    // nodes_ never reallocates. This assert enforces that invariant.
+    assert(nodes_.capacity() >= 2 * prims_.size());
 
     // Compute union AABB of all primitives in [begin, end)
     for (int i = begin; i < end; ++i)

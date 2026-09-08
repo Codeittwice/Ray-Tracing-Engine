@@ -117,21 +117,9 @@ TEST_CASE("T11: fresnel_lens_cooker traces without crash") {
     CHECK(acc.total_power_w() >= 0.0);
 }
 
-TEST_CASE("T11: all example scenes load without error") {
-    const char* files[] = {
-        "parabolic_dish.json",
-        "fresnel_lens_cooker.json",
-        "box_cooker.json",
-        "scheffler_reflector.json",
-    };
-    for (const char* name : files) {
-        auto path = std::filesystem::path(SCRT_SOURCE_DIR) / "examples" / name;
-        REQUIRE_MESSAGE(std::filesystem::exists(path), name);
-        // Should not throw.
-        scrt::io::LoadedScene ls = scrt::io::load_scene(path);
-        CHECK_MESSAGE(ls.scene != nullptr, name);
-    }
-}
+// "T11: all example scenes load without error" was superseded by the runtime
+// std::filesystem sweep in tests/test_regression_corpus.cpp, which covers the
+// whole committed scene corpus rather than four hardcoded filenames.
 
 TEST_CASE("T11: box receiver scene creates proportional receiver faces") {
     auto path = std::filesystem::path(SCRT_SOURCE_DIR) / "examples" /

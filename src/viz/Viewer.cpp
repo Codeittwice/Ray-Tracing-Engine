@@ -335,40 +335,42 @@ void Viewer::draw_gui() {
 
     // ---- Scene --
     if (ImGui::CollapsingHeader("Scene", ImGuiTreeNodeFlags_DefaultOpen)) {
-        for (auto& mat_ptr : scene_->mutable_materials()) {
-            ImGui::PushID(mat_ptr.get());
-            ImGui::Text("%s", mat_ptr->name().c_str());
-            bool changed = false;
+        if (scene_) {
+            for (auto& mat_ptr : scene_->mutable_materials()) {
+                ImGui::PushID(mat_ptr.get());
+                ImGui::Text("%s", mat_ptr->name().c_str());
+                bool changed = false;
 
-            if (auto* rm = dynamic_cast<materials::RealMirror*>(mat_ptr.get())) {
-                float rho = static_cast<float>(rm->reflectance());
-                float se  = static_cast<float>(rm->slope_error());
-                ImGui::Indent();
-                if (ImGui::SliderFloat("Reflectance##rm", &rho, 0.0f, 1.0f))
-                    { rm->set_reflectance(rho); changed = true; }
-                if (ImGui::SliderFloat("Slope err (mrad)", &se, 0.0f, 10.0f))
-                    { rm->set_slope_error_mrad(se); changed = true; }
-                ImGui::Unindent();
-            } else if (auto* di = dynamic_cast<materials::Dielectric*>(mat_ptr.get())) {
-                float n     = static_cast<float>(di->n());
-                float alpha = static_cast<float>(di->absorption());
-                ImGui::Indent();
-                if (ImGui::SliderFloat("n##di", &n, 1.0f, 3.0f))
-                    { di->set_n(n); changed = true; }
-                if (ImGui::SliderFloat("Absorb (1/m)", &alpha, 0.0f, 50.0f))
-                    { di->set_absorption(alpha); changed = true; }
-                ImGui::Unindent();
+                if (auto* rm = dynamic_cast<materials::RealMirror*>(mat_ptr.get())) {
+                    float rho = static_cast<float>(rm->reflectance());
+                    float se  = static_cast<float>(rm->slope_error());
+                    ImGui::Indent();
+                    if (ImGui::SliderFloat("Reflectance##rm", &rho, 0.0f, 1.0f))
+                        { rm->set_reflectance(rho); changed = true; }
+                    if (ImGui::SliderFloat("Slope err (mrad)", &se, 0.0f, 10.0f))
+                        { rm->set_slope_error_mrad(se); changed = true; }
+                    ImGui::Unindent();
+                } else if (auto* di = dynamic_cast<materials::Dielectric*>(mat_ptr.get())) {
+                    float n     = static_cast<float>(di->n());
+                    float alpha = static_cast<float>(di->absorption());
+                    ImGui::Indent();
+                    if (ImGui::SliderFloat("n##di", &n, 1.0f, 3.0f))
+                        { di->set_n(n); changed = true; }
+                    if (ImGui::SliderFloat("Absorb (1/m)", &alpha, 0.0f, 50.0f))
+                        { di->set_absorption(alpha); changed = true; }
+                    ImGui::Unindent();
+                }
+
+                if (changed) need_retrace_ = true;
+                ImGui::PopID();
+                ImGui::Separator();
             }
-
-            if (changed) need_retrace_ = true;
-            ImGui::PopID();
-            ImGui::Separator();
         }
     }
 
     // ---- Sun --
     if (ImGui::CollapsingHeader("Sun", ImGuiTreeNodeFlags_DefaultOpen)) {
-        if (scene_->sun()) {
+        if (scene_ && scene_->sun()) {
             float dni = static_cast<float>(scene_->sun()->dni());
             if (ImGui::SliderFloat("DNI (W/m²)", &dni, 500.0f, 1500.0f)) {
                 const_cast<sources::SunSource*>(scene_->sun())->set_dni(dni);
@@ -409,7 +411,7 @@ void Viewer::draw_gui() {
             ImGui::Text("Peak flux   : %.1f W/m²", acc_->peak_flux_wm2());
             ImGui::Text("Concentration : %.1f×",
                         acc_->concentration_ratio(
-                            scene_->sun() ? scene_->sun()->dni() : 1000.0));
+                            (scene_ && scene_->sun()) ? scene_->sun()->dni() : 1000.0));
             ImGui::Text("Wall time   : %.2f s", result_.wall_time_s);
             ImGui::Text("Rays/s      : %.1f k",
                         result_.primary_rays_traced / result_.wall_time_s / 1e3);
