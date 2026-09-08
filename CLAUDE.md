@@ -27,8 +27,8 @@ Scope: runtime model import, free placement with a gizmo, axis lock/centering, o
 object outliner with selection highlight, sun off zenith (azimuth/elevation), scene save, and an
 AI scene-generation helper. Optical results only.
 
-- [ ] Wave 0 — Foundation & safety net (BVH empty-build fix, regression corpus, golden-flux baseline)
-- [ ] Wave 1 — Sun & aperture physics ∥ Scale & surface geometry
+- [x] Wave 0 — Foundation & safety net (BVH empty-build fix, regression corpus, golden-flux baseline)
+- [x] Wave 1 — Sun & aperture physics ∥ Scale & surface geometry
 - [ ] Wave 2 — SceneDocument & JSON writer (the pivot everything downstream hangs off)
 - [ ] Wave 3 — SceneEditor & mutation ∥ Viewer decomposition + outliner
 - [ ] Wave 4 — ImGuizmo & transform UI ∥ model import & units
@@ -36,6 +36,33 @@ AI scene-generation helper. Optical results only.
 - [ ] Wave 6 — AI helper
 
 Out of scope on this track: thermal model, lat/lon geographic sun, TMY weather, day-integrated Wh.
+
+### Open findings from Audit A1 (deferred, none blocking)
+Wire into Wave 2 (W3) unless noted:
+- `Aperture::mode` and `margin`, `SunAngles`, `auto_fit`/`covers`, `Scene::world_bounds()`,
+  `ScaleSupport` and the parameter setters have **no production call site** - referenced only from
+  tests. `mode` is a public field that currently does nothing. Wire them into SceneLoader/Tracer,
+  or drop the field until a consumer exists.
+- A below-horizon sun (`elevation < 0`) is accepted silently: a fixed +Z aperture yields 0 W with
+  no diagnostic, and `auto_fit` happily lights the cooker from underground. Reject or warn.
+- `orthonormal_frame`'s "byte-identical" comment is **false** - it re-normalizes an already-unit
+  vector, which differs in the last bit for ~15% of directions. Harmless today (all 94 scenes have
+  direction exactly [0,0,-1], where the frames agree bitwise) but the comment must be corrected.
+- A fourth un-collapsed copy of the same heuristic remains in `src/materials/RealMirror.cpp:17-20`.
+- `Paraboloid`/`CylindricalParaboloid` `local_bounds()` return an inverted AABB for negative focal
+  length (`depth = r^2/4f < 0`). `world_bounds()` still sorts via `expand()`, so nothing breaks
+  today, but `local_bounds()` is now public API and `AABB` has no normalizing constructor.
+- New parameter setters change `local_bounds()` with no BVH-invalidation hook, unlike
+  `set_transform` which the Viewer pairs with `need_rebuild_`. Couple them in Wave 3/4.
+- `ImplicitSDF`'s `hit_eps_` and its central-difference `eps = 1e-5` are absolute local lengths,
+  so effective world tolerance scales with the object. No `ImplicitSDF` coverage in test_scale.cpp.
+- `angles_from_direction({0,0,0})` returns NaN; uses `glm::normalize`, not `math::safe_normalize`.
+- `auto_fit` does not validate `margin < 0` and produces inf/NaN on an inside-out AABB.
+- `scripts/sweep.py:223` and `scripts/sweep_stl_rect_angles.py:1096` compute efficiency as
+  `power / (DNI * aperture_area)`, valid only while `cos_ap == 1`. They become wrong by `1/cos`
+  once the cosine is reachable from JSON.
+- Reasoned risk, not demonstrated: the TriangleMesh epsilon loosening admits grazing hits that the
+  fixed 1e-6 world ray offset may not clear, so watch for shadow acne on mesh scenes.
 
 ## Agent orchestration
 For large parallelizable work, deploy a two-layer agent hierarchy:
