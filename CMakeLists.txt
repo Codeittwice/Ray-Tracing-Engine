@@ -103,6 +103,7 @@ target_sources(scrt_core PRIVATE
 # ---------- Phase 7 sources ----------
 target_sources(scrt_core PRIVATE
     src/sources/Buie.cpp
+    src/sources/SunSource.cpp
 )
 
 # ---------- Item 1: CylindricalParaboloid ----------
@@ -134,6 +135,7 @@ target_sources(scrt_tests PRIVATE
     tests/test_fresnel_zone_lens.cpp
     tests/test_compare.cpp
     tests/test_regression_corpus.cpp
+    tests/test_scale.cpp
 )
 
 target_compile_definitions(scrt_tests PRIVATE
