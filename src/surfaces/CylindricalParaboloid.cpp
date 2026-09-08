@@ -34,9 +34,16 @@ bool CylindricalParaboloid::intersect(const core::Ray& r, double t_min, double t
 
     double t_hit = -1.0;
 
-    if (std::abs(a) < 1e-14) {
+    // a = dx² is the quadratic leading coefficient, in units of |d|², which is 1/s² under
+    // a scale of s. Referencing it to |d|² makes the test scale-free: it fires exactly
+    // when the ray has (almost) no x-component and the quadratic degenerates to linear.
+    const double a_ref = glm::dot(lr.direction, lr.direction);
+    if (std::abs(a) < 1e-14 * a_ref) {
         // Ray direction has no x-component: linear equation in t.
-        if (std::abs(b) < 1e-14)
+        // b mixes lengths (ox, 4f) with a direction; its natural magnitude — and the
+        // scale at which its two terms cancel — is the sum of the terms' magnitudes.
+        const double b_ref = 2.0 * std::abs(ox * dx) + std::abs(f4 * dz);
+        if (std::abs(b) <= 1e-14 * b_ref)
             return false;
         double t_lin = -c / b;
         if (t_lin >= t_min && t_lin <= t_max) {
@@ -81,17 +88,11 @@ bool CylindricalParaboloid::intersect(const core::Ray& r, double t_min, double t
     return true;
 }
 
-core::AABB CylindricalParaboloid::world_bounds() const {
+core::AABB CylindricalParaboloid::local_bounds() const {
     const double hw    = aperture_half_width_;
     const double hl    = aperture_half_length_;
     const double depth = hw * hw / (4.0 * focal_length_);
-    core::AABB box;
-    for (int sx : {-1, 1})
-        for (int sy : {-1, 1}) {
-            box.expand(xform_.point_to_world({sx * hw, sy * hl, 0.0}));
-            box.expand(xform_.point_to_world({sx * hw, sy * hl, depth}));
-        }
-    return box;
+    return core::AABB{ {-hw, -hl, 0.0}, {hw, hl, depth} };
 }
 
 void CylindricalParaboloid::tessellate(int nseg, std::vector<math::vec3>& verts,

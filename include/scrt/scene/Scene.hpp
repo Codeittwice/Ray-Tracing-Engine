@@ -41,6 +41,9 @@ public:
           sources::SunSource* sun()        { return sun_.get(); }
     const Aperture&      aperture()  const { return aperture_; }
 
+    /// World-space AABB over every surface AND every receiver face; empty scene -> zero box.
+    core::AABB world_bounds() const;
+
     /// World-space closest-hit across all surfaces + receiver.
     bool intersect(const core::Ray& r, double t_min, double t_max,
                    core::Hit& hit) const;

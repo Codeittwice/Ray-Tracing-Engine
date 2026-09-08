@@ -9,8 +9,11 @@ Plane::Plane(double half_width, double half_height) : hw_(half_width), hh_(half_
 bool Plane::intersect(const core::Ray& r, double t_min, double t_max, core::Hit& hit) const {
     core::Ray lr = xform_.ray_to_local(r);
 
-    // Local plane is z=0; skip if ray is parallel
-    if (std::abs(lr.direction.z) < 1e-14)
+    // Local plane is z=0; skip if ray is parallel. lr.direction is deliberately not
+    // renormalised, so its length is 1/s under a scale of s. Comparing the z-component
+    // against |lr.direction| turns this into the scale-free test |cos(d, z_hat)| < 1e-14,
+    // which is what "parallel to the plane" actually means.
+    if (std::abs(lr.direction.z) < 1e-14 * glm::length(lr.direction))
         return false;
 
     double t = -lr.origin.z / lr.direction.z;
@@ -34,18 +37,9 @@ bool Plane::intersect(const core::Ray& r, double t_min, double t_max, core::Hit&
     return true;
 }
 
-core::AABB Plane::world_bounds() const {
-    core::AABB box;
-    // Transform all 4 corners of the local rectangle
-    const double zeps = 1e-4;
-    for (double sx : {-hw_, hw_}) {
-        for (double sy : {-hh_, hh_}) {
-            for (double sz : {-zeps, zeps}) {
-                box.expand(xform_.point_to_world({sx, sy, sz}));
-            }
-        }
-    }
-    return box;
+core::AABB Plane::local_bounds() const {
+    // z-epsilon de-degenerates the flat box for the BVH
+    return core::AABB{ {-hw_, -hh_, -1e-4}, {hw_, hh_, 1e-4} };
 }
 
 void Plane::tessellate(int /*nseg*/, std::vector<math::vec3>& verts,

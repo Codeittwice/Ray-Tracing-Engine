@@ -92,7 +92,15 @@ bool TriangleMesh::moller_trumbore(int tri_idx, const core::Ray& r,
     math::vec3 h  = glm::cross(r.direction, e2);
     double     a  = glm::dot(e1, h);
 
-    if (std::abs(a) < math::EPSILON_T)
+    // a = e1 . (d x e2) is a scalar triple product, so |a| <= |e1|*|e2|*|d| and it
+    // scales with both the triangle size and the local ray-direction length (which is
+    // 1/s under a scale of s, because ray_to_local does not renormalise). An absolute
+    // guard therefore silently drops small triangles under an upscale: 1 mm triangles at
+    // 100x give a ~ 1e-8, below the old 1e-6 threshold. Compare against the natural
+    // magnitude of the product instead, so the test measures only how parallel the ray
+    // is to the triangle plane.
+    const double scale_ref = glm::length(e1) * glm::length(e2) * glm::length(r.direction);
+    if (std::abs(a) < 1e-12 * scale_ref)
         return false;
 
     double     f  = 1.0 / a;
@@ -159,18 +167,8 @@ bool TriangleMesh::intersect(const core::Ray& r, double t_min, double t_max,
     return true;
 }
 
-core::AABB TriangleMesh::world_bounds() const {
-    core::AABB box;
-    const math::vec3 bmin = bounds_.min();
-    const math::vec3 bmax = bounds_.max();
-    for (double x : {bmin.x, bmax.x}) {
-        for (double y : {bmin.y, bmax.y}) {
-            for (double z : {bmin.z, bmax.z}) {
-                box.expand(xform_.point_to_world({x, y, z}));
-            }
-        }
-    }
-    return box;
+core::AABB TriangleMesh::local_bounds() const {
+    return bounds_;
 }
 
 void TriangleMesh::tessellate(int /*nseg*/, std::vector<math::vec3>& verts,

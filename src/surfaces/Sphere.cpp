@@ -41,21 +41,8 @@ bool Sphere::intersect(const core::Ray& r, double t_min, double t_max, core::Hit
     return true;
 }
 
-core::AABB Sphere::world_bounds() const {
-    core::AABB box;
-    math::vec3 r3{radius_, radius_, radius_};
-    box.expand(xform_.point_to_world(-r3));
-    box.expand(xform_.point_to_world( r3));
-    // Expand 8 corners to handle rotated transforms
-    for (int sx : {-1, 1}) {
-        for (int sy : {-1, 1}) {
-            for (int sz : {-1, 1}) {
-                box.expand(xform_.point_to_world(
-                    {sx * radius_, sy * radius_, sz * radius_}));
-            }
-        }
-    }
-    return box;
+core::AABB Sphere::local_bounds() const {
+    return core::AABB{ {-radius_, -radius_, -radius_}, {radius_, radius_, radius_} };
 }
 
 void Sphere::tessellate(int nseg, std::vector<math::vec3>& verts,

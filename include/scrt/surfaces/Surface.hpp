@@ -12,6 +12,13 @@ namespace scrt::materials { class Material; }
 
 namespace scrt::surfaces {
 
+/// How much of a scaling transform a surface stays physically meaningful under.
+enum class ScaleSupport {
+    Free,         ///< Any invertible scale, including non-uniform, is still the same surface.
+    UniformOnly,  ///< Non-uniform scale traces, but destroys the defining optical property.
+    None          ///< Scale is not supported at all.
+};
+
 /// Abstract optical surface; geometry defined in local canonical frame, placed via Transform.
 class Surface {
 public:
@@ -25,8 +32,22 @@ public:
     virtual bool intersect(const core::Ray& r, double t_min, double t_max,
                            core::Hit& hit) const = 0;
 
-    /// World-space AABB for BVH construction.
-    virtual core::AABB world_bounds() const = 0;
+    /// Local-frame AABB enclosing the surface's own geometry.
+    virtual core::AABB local_bounds() const = 0;
+
+    /// Which scaling transforms keep this surface physically meaningful.
+    virtual ScaleSupport scale_support() const { return ScaleSupport::Free; }
+
+    /// World-space AABB for BVH construction: the 8 transformed corners of local_bounds().
+    core::AABB world_bounds() const {
+        const core::AABB lb = local_bounds();
+        core::AABB box;
+        for (double x : {lb.min().x, lb.max().x})
+            for (double y : {lb.min().y, lb.max().y})
+                for (double z : {lb.min().z, lb.max().z})
+                    box.expand(xform_.point_to_world({x, y, z}));
+        return box;
+    }
 
     /// Triangulation for visualization; appends to verts/indices.
     virtual void tessellate(int nseg, std::vector<math::vec3>& verts,

@@ -20,11 +20,21 @@ bool ImplicitSDF::intersect(const core::Ray& r, double t_min, double t_max,
     if (t_start >= t_end)
         return false;
 
-    double t_cur  = t_start;
-    double d_prev = fn_(lr.origin + t_cur * lr.direction);
+    // Sphere marching steps by the SDF value, which is an arc length, so the marching
+    // parameter must be arc length too. lr.direction is deliberately NOT renormalised by
+    // ray_to_local (that is what keeps t affine-invariant across every other surface), so
+    // march along the unit local direction and convert back at the end: s = t * |d_local|.
+    const double d_len = glm::length(lr.direction);
+    if (d_len <= 0.0)
+        return false;
+    const math::vec3 u = lr.direction / d_len;
+    const double s_end = t_end * d_len;
+
+    double s_cur  = t_start * d_len;
+    double d_prev = fn_(lr.origin + s_cur * u);
 
     for (int i = 0; i < max_iter_; ++i) {
-        math::vec3 p = lr.origin + t_cur * lr.direction;
+        math::vec3 p = lr.origin + s_cur * u;
         double     d = fn_(p);
 
         if (std::abs(d) < hit_eps_) {
@@ -40,7 +50,9 @@ bool ImplicitSDF::intersect(const core::Ray& r, double t_min, double t_max,
             bool       front   = glm::dot(lr.direction, outward) < 0.0;
             math::vec3 n_local = front ? outward : -outward;
 
-            hit.t          = t_cur;
+            // Back to the shared parameterisation: t measures the same world distance
+            // here as it does for every other surface.
+            hit.t          = s_cur / d_len;
             hit.position   = xform_.point_to_world(p);
             hit.normal     = xform_.normal_to_world(n_local);
             hit.uv         = {p.x, p.y};
@@ -51,33 +63,24 @@ bool ImplicitSDF::intersect(const core::Ray& r, double t_min, double t_max,
 
         // Sign change → overshoot; bisect once to get closer.
         if (d * d_prev < 0.0) {
-            t_cur  -= d;   // step back by the overshoot amount
+            s_cur  -= d;   // step back by the overshoot amount (an arc length)
             d_prev  = d;
             continue;
         }
 
         // Advance by the SDF value (sphere-march step).
-        t_cur += std::abs(d);
+        s_cur += std::abs(d);
         d_prev = d;
 
-        if (t_cur > t_end)
+        if (s_cur > s_end)
             return false;
     }
 
     return false;
 }
 
-core::AABB ImplicitSDF::world_bounds() const {
-    core::AABB box;
-    for (int sx : {0, 1})
-        for (int sy : {0, 1})
-            for (int sz : {0, 1}) {
-                math::vec3 corner{sx ? bounds_.max().x : bounds_.min().x,
-                                  sy ? bounds_.max().y : bounds_.min().y,
-                                  sz ? bounds_.max().z : bounds_.min().z};
-                box.expand(xform_.point_to_world(corner));
-            }
-    return box;
+core::AABB ImplicitSDF::local_bounds() const {
+    return bounds_;
 }
 
 void ImplicitSDF::tessellate(int /*nseg*/, std::vector<math::vec3>& /*verts*/,

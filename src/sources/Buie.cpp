@@ -48,11 +48,9 @@ core::Ray Buie::sample_ray(const scene::Aperture& ap, math::Rng& rng) const {
     double cos_t = std::cos(theta);
 
     // Orthonormal frame: sun_direction_ as cone axis
-    math::vec3 axis  = glm::normalize(sun_direction_);
-    math::vec3 ref   = (std::abs(axis.x) < 0.9) ? math::vec3{1.0, 0.0, 0.0}
-                                                 : math::vec3{0.0, 1.0, 0.0};
-    math::vec3 perp1 = glm::normalize(glm::cross(axis, ref));
-    math::vec3 perp2 = glm::cross(axis, perp1);
+    math::vec3 axis = glm::normalize(sun_direction_);
+    math::vec3 perp1, perp2;
+    scene::orthonormal_frame(axis, perp1, perp2);
 
     math::vec3 direction = math::safe_normalize(
         cos_t * axis + sin_t * (std::cos(phi) * perp1 + std::sin(phi) * perp2));

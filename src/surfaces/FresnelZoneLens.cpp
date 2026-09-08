@@ -9,8 +9,12 @@ FresnelZoneLens::FresnelZoneLens(double focal_length, double inner_radius,
                                  double pitch, int n_zones, double n_lens)
     : focal_length_(focal_length), inner_radius_(inner_radius),
       pitch_(pitch), n_zones_(n_zones), n_lens_(n_lens) {
-    sin_alpha_.resize(static_cast<std::size_t>(n_zones));
-    cos_alpha_.resize(static_cast<std::size_t>(n_zones));
+    rebuild_zones();
+}
+
+void FresnelZoneLens::rebuild_zones() {
+    sin_alpha_.resize(static_cast<std::size_t>(n_zones_));
+    cos_alpha_.resize(static_cast<std::size_t>(n_zones_));
 
     // Precompute the tilted facet normal for each zone.
     // Derivation: we want optics::refract(d_i=(0,0,-1), n_f, eta=1/n_lens) to produce
@@ -19,11 +23,11 @@ FresnelZoneLens::FresnelZoneLens(double focal_length, double inner_radius,
     //   n_raw = n_lens * d_i - d_t  (unnormalised)
     // where d_i=(0,-1) and d_t=normalise(-r_mid, -f) in r-z coords.
     // This gives: n_raw_r = n_lens * r_mid / L,  n_raw_z = n_lens * f / L - 1.
-    for (int i = 0; i < n_zones; ++i) {
-        double r_mid = inner_radius + (i + 0.5) * pitch;
-        double L     = std::sqrt(r_mid * r_mid + focal_length * focal_length);
-        double nr    = n_lens * r_mid / L;
-        double nz    = n_lens * focal_length / L - 1.0;
+    for (int i = 0; i < n_zones_; ++i) {
+        double r_mid = inner_radius_ + (i + 0.5) * pitch_;
+        double L     = std::sqrt(r_mid * r_mid + focal_length_ * focal_length_);
+        double nr    = n_lens_ * r_mid / L;
+        double nz    = n_lens_ * focal_length_ / L - 1.0;
         double len   = std::sqrt(nr * nr + nz * nz);
         sin_alpha_[static_cast<std::size_t>(i)] = nr / len;
         cos_alpha_[static_cast<std::size_t>(i)] = nz / len;
@@ -34,8 +38,10 @@ bool FresnelZoneLens::intersect(const core::Ray& r, double t_min, double t_max,
                                 core::Hit& hit) const {
     core::Ray lr = xform_.ray_to_local(r);
 
-    // Plane z=0 intersection: t = -oz / dz
-    if (std::abs(lr.direction.z) < 1e-14)
+    // Plane z=0 intersection: t = -oz / dz. As in Plane, the local direction is not
+    // renormalised (its length is 1/s under a scale of s), so the parallel test must be
+    // the scale-free ratio |d_z| / |d| rather than |d_z| against an absolute epsilon.
+    if (std::abs(lr.direction.z) < 1e-14 * glm::length(lr.direction))
         return false;
     double t = -lr.origin.z / lr.direction.z;
     if (t < t_min || t > t_max)
@@ -57,8 +63,10 @@ bool FresnelZoneLens::intersect(const core::Ray& r, double t_min, double t_max,
     double sa = sin_alpha_[static_cast<std::size_t>(zone)];
     double ca = cos_alpha_[static_cast<std::size_t>(zone)];
 
+    // radius is a local length, so the on-axis guard must be relative to the lens's own
+    // size rather than an absolute metre value.
     math::vec3 r_hat;
-    if (radius > 1e-14)
+    if (radius > 1e-14 * outer_radius())
         r_hat = {p.x / radius, p.y / radius, 0.0};
     else
         r_hat = {1.0, 0.0, 0.0};
@@ -77,13 +85,10 @@ bool FresnelZoneLens::intersect(const core::Ray& r, double t_min, double t_max,
     return true;
 }
 
-core::AABB FresnelZoneLens::world_bounds() const {
+core::AABB FresnelZoneLens::local_bounds() const {
+    // Flat in z on purpose: no z-epsilon, that would change the bounds.
     double r = outer_radius();
-    core::AABB box;
-    for (int sx : {-1, 1})
-        for (int sy : {-1, 1})
-            box.expand(xform_.point_to_world({sx * r, sy * r, 0.0}));
-    return box;
+    return core::AABB{ {-r, -r, 0.0}, {r, r, 0.0} };
 }
 
 void FresnelZoneLens::tessellate(int nseg, std::vector<math::vec3>& verts,

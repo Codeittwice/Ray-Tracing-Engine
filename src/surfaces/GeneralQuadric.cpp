@@ -43,10 +43,24 @@ bool GeneralQuadric::intersect(const core::Ray& r, double t_min, double t_max,
 
     double qc = eval(lr.origin);
 
+    // Reference magnitudes: the sum of each polynomial's own terms taken in absolute
+    // value. That is simultaneously the units scale (qa goes as [coeff]·|d|², and |d| is
+    // 1/s under a scale of s) and the cancellation scale of the signed sum, so the tests
+    // below ask "is this coefficient negligible against its own terms?" rather than
+    // "is it small in metres?".
+    const double qa_ref = std::abs(c.A*dx*dx) + std::abs(c.B*dy*dy) + std::abs(c.C*dz*dz)
+                        + std::abs(c.D*dx*dy) + std::abs(c.E*dx*dz) + std::abs(c.F*dy*dz);
+
     // Solve qa*t² + qb*t + qc = 0
     double t_hit = -1.0;
-    if (std::abs(qa) < 1e-14) {
-        if (std::abs(qb) < 1e-14)
+    if (std::abs(qa) <= 1e-14 * qa_ref) {
+        const double qb_ref = 2.0*std::abs(c.A*ox*dx) + 2.0*std::abs(c.B*oy*dy)
+                            + 2.0*std::abs(c.C*oz*dz)
+                            + std::abs(c.D*ox*dy) + std::abs(c.D*oy*dx)
+                            + std::abs(c.E*ox*dz) + std::abs(c.E*oz*dx)
+                            + std::abs(c.F*oy*dz) + std::abs(c.F*oz*dy)
+                            + std::abs(c.G*dx)    + std::abs(c.H*dy) + std::abs(c.I*dz);
+        if (std::abs(qb) <= 1e-14 * qb_ref)
             return false;
         double t_lin = -qc / qb;
         if (t_lin >= t_min && t_lin <= t_max) {
@@ -82,7 +96,12 @@ bool GeneralQuadric::intersect(const core::Ray& r, double t_min, double t_max,
     math::vec3 p       = lr.origin + t_hit * lr.direction;
     math::vec3 g       = grad(p);
     double     g_len   = glm::length(g);
-    if (g_len < 1e-14)
+    // The gradient carries units of [coeff]·length, so "the surface has no well-defined
+    // normal here" must be judged against the size of the terms that built it.
+    const math::vec3 g_terms{std::abs(2.0*c.A*p.x) + std::abs(c.D*p.y) + std::abs(c.E*p.z) + std::abs(c.G),
+                             std::abs(2.0*c.B*p.y) + std::abs(c.D*p.x) + std::abs(c.F*p.z) + std::abs(c.H),
+                             std::abs(2.0*c.C*p.z) + std::abs(c.E*p.x) + std::abs(c.F*p.y) + std::abs(c.I)};
+    if (g_len <= 1e-14 * glm::length(g_terms))
         return false;
     math::vec3 outward = g / g_len;
     bool       front   = (glm::dot(lr.direction, outward) < 0.0);
@@ -97,18 +116,8 @@ bool GeneralQuadric::intersect(const core::Ray& r, double t_min, double t_max,
     return true;
 }
 
-core::AABB GeneralQuadric::world_bounds() const {
-    // Conservative: transform all 8 corners of the local clip box.
-    core::AABB box;
-    for (int sx : {0, 1})
-        for (int sy : {0, 1})
-            for (int sz : {0, 1}) {
-                math::vec3 corner{sx ? clip_.max().x : clip_.min().x,
-                                  sy ? clip_.max().y : clip_.min().y,
-                                  sz ? clip_.max().z : clip_.min().z};
-                box.expand(xform_.point_to_world(corner));
-            }
-    return box;
+core::AABB GeneralQuadric::local_bounds() const {
+    return clip_;
 }
 
 void GeneralQuadric::tessellate(int nseg, std::vector<math::vec3>& verts,

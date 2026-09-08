@@ -34,6 +34,29 @@ std::span<std::unique_ptr<surfaces::Surface>> Scene::mutable_surfaces() {
     return surfaces_;
 }
 
+core::AABB Scene::world_bounds() const {
+    core::AABB box;  // Inside-out until something expands it.
+    bool any = false;
+
+    for (const auto& s : surfaces_) {
+        box.expand(s->world_bounds());
+        any = true;
+    }
+
+    // Receiver faces are intersected directly in intersect(), not through the BVH, so
+    // walking surfaces_ alone would under-size the bounds for box-cooker scenes.
+    if (receiver_) {
+        for (const auto& face : receiver_->faces()) {
+            box.expand(face->surface()->world_bounds());
+            any = true;
+        }
+    }
+
+    if (!any)
+        return core::AABB(math::vec3{0.0}, math::vec3{0.0});
+    return box;
+}
+
 bool Scene::intersect(const core::Ray& r, double t_min, double t_max,
                       core::Hit& hit) const {
     bool   found  = false;

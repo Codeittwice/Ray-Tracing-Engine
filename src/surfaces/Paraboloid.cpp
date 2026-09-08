@@ -21,9 +21,18 @@ bool Paraboloid::intersect(const core::Ray& r, double t_min, double t_max,
     double c = ox*ox + oy*oy - f4*oz;
 
     double t = -1.0;
-    if (std::abs(a) < 1e-14) {
-        // Linear case: ray nearly parallel to z-axis
-        if (std::abs(b) < 1e-14)
+    // a = dx²+dy² is the quadratic leading coefficient and carries units of |d|², which
+    // is 1/s² under a scale of s. Referencing it to |d|² makes the degeneracy test the
+    // scale-free statement "the ray has (almost) no radial component", i.e. it is
+    // parallel to the z-axis and the quadratic collapses to a linear equation.
+    const double a_ref = glm::dot(lr.direction, lr.direction);
+    if (std::abs(a) < 1e-14 * a_ref) {
+        // Linear case: ray nearly parallel to z-axis.
+        // b mixes a length (o, 4f) with a direction, so its natural magnitude is the sum
+        // of its own terms' magnitudes; that is also the cancellation scale of the sum.
+        const double b_ref = 2.0 * (std::abs(ox * dx) + std::abs(oy * dy))
+                           + std::abs(f4 * dz);
+        if (std::abs(b) <= 1e-14 * b_ref)
             return false;
         t = -c / b;
     } else {
@@ -69,15 +78,10 @@ bool Paraboloid::intersect(const core::Ray& r, double t_min, double t_max,
     return true;
 }
 
-core::AABB Paraboloid::world_bounds() const {
+core::AABB Paraboloid::local_bounds() const {
     double depth = aperture_radius_ * aperture_radius_ / (4.0 * focal_length_);
-    core::AABB box;
-    const double r = aperture_radius_;
-    for (int sx : {-1, 1}) for (int sy : {-1, 1}) {
-        box.expand(xform_.point_to_world({sx*r, sy*r, 0.0}));
-        box.expand(xform_.point_to_world({sx*r, sy*r, depth}));
-    }
-    return box;
+    return core::AABB{ {-aperture_radius_, -aperture_radius_, 0.0},
+                       {aperture_radius_, aperture_radius_, depth} };
 }
 
 void Paraboloid::tessellate(int nseg, std::vector<math::vec3>& verts,

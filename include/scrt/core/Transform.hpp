@@ -14,6 +14,18 @@ public:
     static Transform from_euler_xyz(math::vec3 euler_radians);
     static Transform from_look_at(math::vec3 eye, math::vec3 target, math::vec3 up);
     static Transform from_matrix(const math::mat4& m);
+    /// Pure (possibly non-uniform) scale about the local origin.
+    static Transform from_scale(math::vec3 s);
+    /// Translate * Rotate(euler XYZ) * Scale, applied to a local point in that order.
+    static Transform from_trs(math::vec3 t, math::vec3 euler_rad, math::vec3 scale);
+
+    /// Recovers the T*R(XYZ)*S factors; returns false if the linear part is sheared.
+    bool decompose_trs(math::vec3& t, math::vec3& euler_rad, math::vec3& scale) const;
+
+    /// Largest singular value of the linear part: the worst-case length magnification.
+    double max_scale_factor() const;
+    /// True when the linear part is a rotation (or reflection) times one scalar factor.
+    bool is_uniform_scale(double tol = 1e-9) const;
 
     /// Returns transform equivalent to applying child first, then this.
     Transform compose(const Transform& child) const;

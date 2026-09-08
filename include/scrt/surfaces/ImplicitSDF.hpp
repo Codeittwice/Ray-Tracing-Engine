@@ -21,7 +21,9 @@ public:
 
     bool intersect(const core::Ray& r, double t_min, double t_max,
                    core::Hit& hit) const override;
-    core::AABB world_bounds() const override;
+    core::AABB local_bounds() const override;
+    /// Free: geometry is defined by an implicit function, so any invertible scale is still the same surface.
+    ScaleSupport scale_support() const override { return ScaleSupport::Free; }
     void tessellate(int nseg, std::vector<math::vec3>& verts,
                     std::vector<std::uint32_t>& indices) const override;
 

@@ -119,7 +119,11 @@ TraceResult Tracer::run(const TraceConfig& cfg) const {
 
     const auto& sun = *scene_->sun();
     const auto& ap  = scene_->aperture();
-    double ray_power = sun.dni() * ap.area() / static_cast<double>(cfg.n_primary_rays);
+    // DNI is per unit area NORMAL to the beam, so the aperture only intercepts its
+    // foreshortened projection. sun_direction() is where light travels; the sun is the
+    // other way. Zenith scenes (normal = +Z, direction = -Z) give cos_ap == 1 exactly.
+    const double cos_ap = ap.cosine_to(-sun.sun_direction());
+    double ray_power = sun.dni() * ap.area() * cos_ap / static_cast<double>(cfg.n_primary_rays);
 
     int nthreads = cfg.num_threads > 0
                        ? cfg.num_threads
@@ -208,7 +212,11 @@ TraceResult Tracer::run(const TraceConfig& cfg, FluxAccumulator& acc) const {
 
     const auto& sun = *scene_->sun();
     const auto& ap  = scene_->aperture();
-    double ray_power = sun.dni() * ap.area() / static_cast<double>(cfg.n_primary_rays);
+    // DNI is per unit area NORMAL to the beam, so the aperture only intercepts its
+    // foreshortened projection. sun_direction() is where light travels; the sun is the
+    // other way. Zenith scenes (normal = +Z, direction = -Z) give cos_ap == 1 exactly.
+    const double cos_ap = ap.cosine_to(-sun.sun_direction());
+    double ray_power = sun.dni() * ap.area() * cos_ap / static_cast<double>(cfg.n_primary_rays);
 
     int nthreads = cfg.num_threads > 0
                        ? cfg.num_threads
