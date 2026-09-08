@@ -32,6 +32,12 @@ $ExDst = Join-Path $DistDir "examples"
 New-Item $ExDst -ItemType Directory | Out-Null
 Get-ChildItem "$Root\examples\*.json" | Copy-Item -Destination $ExDst
 
+# Mesh assets. The STL scenes reference "../assets/meshes/<name>.stl" relative to
+# the scene file, so they must land at <dist>\assets\meshes for those paths to resolve.
+$AssetDst = Join-Path $DistDir "assets\meshes"
+New-Item $AssetDst -ItemType Directory -Force | Out-Null
+Get-ChildItem "$Root\assets\meshes\*.stl" | Copy-Item -Destination $AssetDst
+
 # ---- 3. Write README --------------------------------------------------------
 $Readme = @"
 Solar Cooker Ray Tracer  v$Version
