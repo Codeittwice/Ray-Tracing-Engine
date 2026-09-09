@@ -30,12 +30,27 @@ AI scene-generation helper. Optical results only.
 - [x] Wave 0 — Foundation & safety net (BVH empty-build fix, regression corpus, golden-flux baseline)
 - [x] Wave 1 — Sun & aperture physics ∥ Scale & surface geometry
 - [x] Wave 2 — SceneDocument & JSON writer (the pivot everything downstream hangs off)
-- [ ] Wave 3 — SceneEditor & mutation ∥ Viewer decomposition + outliner
+- [x] Wave 3 — SceneEditor & mutation ∥ Viewer decomposition + outliner
 - [ ] Wave 4 — ImGuizmo & transform UI ∥ model import & units
 - [ ] Wave 5 — Async trace, save UI, polish, packaging
 - [ ] Wave 6 — AI helper
 
 Out of scope on this track: thermal model, lat/lon geographic sun, TMY weather, day-integrated Wh.
+
+### Open findings from Wave 3 (deferred)
+- **`io::LoadedScene` does not carry its `SceneDocument`** - `load_scene()` parses one and throws it
+  away. That makes the natural `SceneEditor(LoadedScene, base_dir)` constructor unable to recover the
+  document, so two extra constructors exist as a workaround. Adding a `SceneDocument doc` member to
+  `LoadedScene` fixes it and unblocks save-on-load. **Do this early in Wave 4.**
+- `Scene`'s structural mutators are public, so "the document is authoritative" is documentation, not
+  enforcement. Once the viewer migrates to `SceneEditor`, make `add_surface`/`remove_surface`
+  friend-only.
+- `Scene::add_surface` stamps an id that callers then overwrite (SceneLoader and SceneEditor both), so
+  `next_surface_id_` drifts from the ids in use. Add an `add_surface(ptr, id)` overload.
+- `build_surface` is duplicated: the loader's lives in an anonymous namespace in `SceneLoader.cpp` and
+  SceneEditor replicates it branch-for-branch. Promote one to a public `io::` helper and delete the copy.
+- `ElementDoc::visible` still has no runtime counterpart; surfaces are added regardless. Whoever owns
+  hide/show needs a Surface- or Scene-level filter.
 
 ### Open findings from Wave 2 (deferred)
 - **`save_scene` cannot relocate a mesh scene.** Its frozen signature has nowhere to put the
@@ -89,6 +104,12 @@ For large parallelizable work, deploy a two-layer agent hierarchy:
 - **Workers never self-certify.** Every completion claim must cite build output and named tests. "Done"
   without a green `ctest` line is rejected and re-issued.
 - Important diffs get an independent Opus auditor that reads them cold, without the implementer's reasoning.
+- **Dispatch agents FLAT in this harness - do not nest.** Both nesting modes fail: a sub-agent spawned
+  with `run_in_background: true` (the default) leaves the parent with nothing to block on, so it reports
+  "children running" and returns with unverified work; `run_in_background: false` makes the parent block
+  silently and the stream watchdog kills it at 600s. There is no setting that lets a lead both wait for
+  its children and stay alive. One agent, one bounded task, no sub-agents. This overrides the agent-army
+  skill's rule that every Layer 1 agent must spawn 2+ sub-agents.
 - The commander performs final integration and QA by re-deriving from the diff, build and test output —
   not by accepting agent reports.
 
