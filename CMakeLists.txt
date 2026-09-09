@@ -99,6 +99,7 @@ target_sources(scrt_core PRIVATE
     src/scene/Aperture.cpp
     src/scene/Receiver.cpp
     src/scene/Scene.cpp
+    src/scene/SceneEditor.cpp
     src/tracer/FluxAccumulator.cpp
     src/tracer/Tracer.cpp
 )
@@ -140,6 +141,7 @@ target_sources(scrt_tests PRIVATE
     tests/test_regression_corpus.cpp
     tests/test_scale.cpp
     tests/test_scene_document.cpp
+    tests/test_scene_editor.cpp
 )
 
 target_compile_definitions(scrt_tests PRIVATE
@@ -158,6 +160,12 @@ add_library(scrt_viz STATIC
     src/viz/Viewer.cpp
     src/viz/RayRenderer.cpp
     src/viz/FluxPlotter.cpp
+    src/viz/panels/OutlinerPanel.cpp
+    src/viz/panels/SceneBrowserPanel.cpp
+    src/viz/panels/TransformPanel.cpp
+    src/viz/panels/MaterialsPanel.cpp
+    src/viz/panels/SunPanel.cpp
+    src/viz/panels/TracePanel.cpp
 )
 target_link_libraries(scrt_viz PUBLIC scrt_core polyscope implot_lib)
 set_project_warnings(scrt_viz)
