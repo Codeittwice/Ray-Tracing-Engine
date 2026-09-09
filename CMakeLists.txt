@@ -75,6 +75,9 @@ target_sources(scrt_core PRIVATE
     src/surfaces/GeneralQuadric.cpp
     src/surfaces/ImplicitSDF.cpp
     src/io/SceneLoader.cpp
+    src/io/SceneDocument.cpp
+    src/io/SceneWriter.cpp
+    src/io/ScenePaths.cpp
     src/io/ResultsExporter.cpp
 )
 
@@ -136,6 +139,7 @@ target_sources(scrt_tests PRIVATE
     tests/test_compare.cpp
     tests/test_regression_corpus.cpp
     tests/test_scale.cpp
+    tests/test_scene_document.cpp
 )
 
 target_compile_definitions(scrt_tests PRIVATE
