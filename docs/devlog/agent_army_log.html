@@ -151,7 +151,14 @@ footer{margin-top:20pt;padding-top:8pt;border-top:1px solid var(--line);color:va
 <p>Found by the <em>writer</em> agent verifying across the seam into the <em>parser's</em> file — territory neither it nor its sub-agents owned. Fixed and pinned with a regression test.</p></div>
 
 <h3>Verification</h3>
-<p>The writer was verified out-of-band over <strong>144 real scenes</strong>: every written document was accepted by the real loader, round-tripping is a fixed point, and all four golden fluxes traced from <em>rewritten</em> files came back <code>delta = 0.000e+00</code> — bit-identical.</p>
+<p>Nothing in the suite exercised the writer at first — the green test run was <em>not</em> evidence for this wave's code, since the agents' verification lived in throwaway scratch harnesses. That gap is now closed by a permanent suite:</p>
+<ul>
+<li><strong>Structural round-trip, all 94 scenes.</strong> Parse strictly, write, parse strictly again, write again, and compare with deep equality. The pair is mutually reinforcing: a key the writer <em>forgets</em> shows as a diff, a key it <em>invents</em> throws on the second strict parse. 94/94, zero exceptions, zero diffs.</li>
+<li><strong>Physics round-trip.</strong> Load, save, reload, trace both — receiver power reproduces <em>bit-identically at 17 significant digits</em> across an analytic scene, a flat-plate scene, an STL mesh scene and an 11-face battery scene. Three of the four independently reproduce the golden baselines, which cross-validates the harness itself.</li>
+<li><strong>Box receivers</strong> keep all 6 or 11 faces with the expected names, and authored battery extents survive rather than silently falling back to derived values.</li>
+<li><strong>Mesh surfaces</strong> round-trip as a path plus a unit scale, never a vertex dump.</li>
+</ul>
+<p>A second vacuous test was found and deleted in the process — it built a JSON object, dumped it, re-parsed and compared strings, testing the JSON library against itself without ever calling the loader.</p>
 
 <h2>6. Orchestration: what worked and what failed</h2>
 <p>The work ran as a two-layer agent hierarchy: a commander doing recon, composition and verification; Opus leads owning workstreams; Sonnet sub-agents doing bounded implementation.</p>
@@ -207,16 +214,20 @@ footer{margin-top:20pt;padding-top:8pt;border-top:1px solid var(--line);color:va
 <tr><td class="n">1f5384b</td><td>Wave 2 stub registration</td></tr>
 <tr><td class="n">e0bf80b</td><td>Wave 2 — SceneDocument, JSON writer, stable object IDs</td></tr>
 <tr><td class="n">8ed4410</td><td>Azimuth-loss fix and first tests covering Wave 2 code</td></tr>
+<tr><td class="n">e60530d</td><td>This development log</td></tr>
+<tr><td class="n">a19c7ff</td><td>Wave 2 tests — T13–T16 round-trip verification</td></tr>
+<tr><td class="n">4d60f1e</td><td>Wave 2 completion and open findings</td></tr>
 </table>
-<p><strong>Test suite:</strong> 94 cases, 24 248 assertions, all passing. Four golden flux values unchanged across every wave. 94-scene corpus loading clean.</p>
+<p><strong>Test suite:</strong> 101 cases, 24 536 assertions, all passing. Four golden flux values unchanged across every wave. 94-scene corpus loading clean.</p>
 <p><strong>Deliverable:</strong> a statically linked, self-contained Windows executable requiring no installation and no runtime dependencies. Double-clicking it auto-discovers the bundled example scenes.</p>
 
 <h2>9. Open items</h2>
-<h4>Wave 2 remainder</h4>
+<h4>From Wave 2 — carried into Wave 3</h4>
 <ul>
-<li>The systematic round-trip suite (structural, physics, box-receiver face survival, mesh-path preservation) across all 94 scenes. The evidence exists but lived in agents' scratch harnesses rather than the repository.</li>
-<li><code>save_scene</code> cannot rebase mesh paths — its signature has no room for the original directory. A sibling function can. The Save-As UI must call that one.</li>
+<li><strong>A live trap for the Save-As UI.</strong> The plain save function cannot relocate a mesh scene: its signature has nowhere to put the original directory, so the mesh-path rebase is a documented no-op. Wiring Save-As to it would silently write unloadable files for every mesh scene. A sibling function takes the original directory and does the rebase properly. This is now pinned by a test that fails if the behaviour changes in <em>either</em> direction.</li>
+<li>The writer emits only the sunshape parameter matching the active type, so an authored but inactive one is dropped on the first save. No shipped scene is affected.</li>
 <li>A legacy validation check on receiver top-mode was dropped rather than modify the frozen contract. No scene exercises it, but it is a real capability lost.</li>
+<li>One example scene widely assumed to be a box receiver is not — it has no receiver type key and takes the plane branch. Recorded so it is not used as a box fixture again.</li>
 </ul>
 <h4>Carried from Audit A1</h4>
 <ul>
