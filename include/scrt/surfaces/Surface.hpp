@@ -62,11 +62,19 @@ public:
     void set_name(std::string s) { name_ = std::move(s); }
     const std::string& name() const { return name_; }
 
+    /// Stable identity assigned by the owning Scene; 0 until added to a scene.
+    std::uint64_t id() const { return id_; }
+    /// Sets the stable identity; called by Scene::add_surface only.
+    void set_id(std::uint64_t v) { id_ = v; }
+
 protected:
     Surface() = default;
     core::Transform           xform_;
     const materials::Material* material_ = nullptr;
     std::string               name_;
+
+private:
+    std::uint64_t id_ = 0;
 };
 
 } // namespace scrt::surfaces

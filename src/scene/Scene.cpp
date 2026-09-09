@@ -1,4 +1,5 @@
 #include "scrt/scene/Scene.hpp"
+#include <algorithm>
 #include <limits>
 
 namespace scrt::scene {
@@ -8,9 +9,49 @@ std::size_t Scene::add_material(std::unique_ptr<materials::Material> m) {
     return materials_.size() - 1;
 }
 
-std::size_t Scene::add_surface(std::unique_ptr<surfaces::Surface> s) {
+std::uint64_t Scene::add_surface(std::unique_ptr<surfaces::Surface> s) {
+    const std::uint64_t id = next_surface_id_++;
+    s->set_id(id);
     surfaces_.push_back(std::move(s));
-    return surfaces_.size() - 1;
+    // A surface added after build_acceleration_structure() is otherwise invisible to a
+    // stale BVH, so any add — not just remove — must force the linear-scan fallback.
+    mark_acceleration_dirty();
+    return id;
+}
+
+bool Scene::remove_surface(std::uint64_t id) {
+    auto it = std::find_if(surfaces_.begin(), surfaces_.end(),
+                           [id](const std::unique_ptr<surfaces::Surface>& s) {
+                               return s->id() == id;
+                           });
+    if (it == surfaces_.end())
+        return false;
+    surfaces_.erase(it);
+    // The BVH holds raw Surface* into the erased element; it must not be traversed again
+    // until rebuilt.
+    mark_acceleration_dirty();
+    return true;
+}
+
+surfaces::Surface* Scene::surface_by_id(std::uint64_t id) {
+    for (auto& s : surfaces_)
+        if (s->id() == id)
+            return s.get();
+    return nullptr;
+}
+
+const surfaces::Surface* Scene::surface_by_id(std::uint64_t id) const {
+    for (const auto& s : surfaces_)
+        if (s->id() == id)
+            return s.get();
+    return nullptr;
+}
+
+std::optional<std::size_t> Scene::index_of(std::uint64_t id) const {
+    for (std::size_t i = 0; i < surfaces_.size(); ++i)
+        if (surfaces_[i]->id() == id)
+            return i;
+    return std::nullopt;
 }
 
 void Scene::set_receiver(std::unique_ptr<Receiver> r) { receiver_ = std::move(r); }
@@ -19,7 +60,8 @@ void Scene::set_aperture(Aperture a) { aperture_ = a; }
 
 void Scene::build_acceleration_structure() {
     bvh_.build(surfaces_);
-    use_bvh_ = !bvh_.empty();
+    use_bvh_     = !bvh_.empty();
+    accel_dirty_ = false;
 }
 
 std::span<const std::unique_ptr<surfaces::Surface>> Scene::surfaces() const {
@@ -63,7 +105,7 @@ bool Scene::intersect(const core::Ray& r, double t_min, double t_max,
     double t_best = t_max;
     core::Hit tmp;
 
-    if (use_bvh_) {
+    if (use_bvh_ && !accel_dirty_) {
         if (bvh_.intersect(r, t_min, t_best, tmp)) {
             t_best = tmp.t;
             hit    = tmp;

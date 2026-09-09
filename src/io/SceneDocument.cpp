@@ -1,1 +1,458 @@
 #include "scrt/io/SceneDocument.hpp"
+#include "scrt/math/Constants.hpp"
+#include "scrt/sources/SunSource.hpp"
+#include <algorithm>
+#include <initializer_list>
+#include <stdexcept>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
+// NOTE ON SCOPE: this translation unit implements only TransformDoc::to_transform() and
+// parse_document(). write_document()/save_scene() are implemented by agent "Writer" in
+// SceneWriter.cpp; build_scene() is implemented by agent "SceneBuilder" in SceneLoader.cpp.
+// The frozen header's Doxygen comments claim all four live here — that comment is stale.
+
+namespace scrt::io {
+
+using json = nlohmann::json;
+
+// ---- core::Transform construction --------------------------------------
+
+/// Builds the equivalent core::Transform: an explicit matrix wins over the TRS fields;
+/// otherwise composes as T * R(euler XYZ) * S, mirroring core::Transform::from_trs.
+core::Transform TransformDoc::to_transform() const {
+    if (matrix)
+        return core::Transform::from_matrix(*matrix);
+    return core::Transform::from_trs(translation, rotation_euler_deg * math::DEG2RAD, scale);
+}
+
+namespace {
+
+/// Throws a "SceneLoader: "-prefixed runtime_error when cond is false.
+void require(bool cond, const std::string& msg) {
+    if (!cond)
+        throw std::runtime_error("SceneLoader: " + msg);
+}
+
+/// Reads a required 3-element JSON array field as a math::vec3; throws when absent/malformed.
+math::vec3 read_vec3(const json& j, const std::string& key) {
+    require(j.contains(key), "missing '" + key + "'");
+    require(j[key].is_array() && j[key].size() == 3,
+            "'" + key + "' must be a 3-element array");
+    return {j[key][0].get<double>(), j[key][1].get<double>(), j[key][2].get<double>()};
+}
+
+/// Strict-mode guard: throws when obj (a JSON object) contains a key outside `allowed`.
+void reject_unknown_keys(const json& obj, std::initializer_list<const char*> allowed,
+                          const char* context) {
+    if (!obj.is_object())
+        return;
+    for (auto it = obj.begin(); it != obj.end(); ++it) {
+        bool ok = false;
+        for (const char* key : allowed) {
+            if (it.key() == key) {
+                ok = true;
+                break;
+            }
+        }
+        if (!ok)
+            throw std::runtime_error("SceneLoader: unrecognized key '" + it.key() +
+                                      "' in " + context);
+    }
+}
+
+/// Strict-mode-only: validates a material's type string and its (id/type-erased) param keys
+/// against the fixed per-type allow-list, and rejects an unknown Sellmeier preset.
+void validate_material_strict(const std::string& type, const json& params) {
+    static const std::unordered_map<std::string, std::vector<std::string>> allowed = {
+        {"perfect_mirror", {}},
+        {"real_mirror", {"reflectance", "slope_error_mrad"}},
+        {"dielectric", {"n", "absorption_per_m", "sellmeier", "alpha_spectrum"}},
+        {"thin_dielectric_pane", {"n", "thickness_m", "absorption_per_m"}},
+        {"absorber", {}},
+    };
+    auto it = allowed.find(type);
+    require(it != allowed.end(), "unknown material type '" + type + "'");
+    for (auto p = params.begin(); p != params.end(); ++p) {
+        if (std::find(it->second.begin(), it->second.end(), p.key()) == it->second.end())
+            throw std::runtime_error("SceneLoader: unrecognized key '" + p.key() +
+                                      "' in material of type '" + type + "'");
+    }
+    if (type == "dielectric" && params.contains("sellmeier")) {
+        std::string preset = params["sellmeier"].get<std::string>();
+        require(preset == "bk7" || preset == "fused_silica",
+                "unknown Sellmeier preset '" + preset + "'");
+    }
+}
+
+/// Parses a `transform` JSON object into a TransformDoc; absent keys keep struct defaults
+/// (identity translation/rotation, unit scale, no explicit matrix).
+TransformDoc parse_transform_doc(const json& j, bool strict) {
+    if (strict)
+        reject_unknown_keys(j, {"translation", "rotation_euler_deg", "scale", "matrix"},
+                             "transform");
+    TransformDoc t;
+    if (j.contains("rotation_euler_deg"))
+        t.rotation_euler_deg = read_vec3(j, "rotation_euler_deg");
+    if (j.contains("translation"))
+        t.translation = read_vec3(j, "translation");
+    if (j.contains("scale"))
+        t.scale = read_vec3(j, "scale");
+    if (j.contains("matrix")) {
+        require(j["matrix"].is_array() && j["matrix"].size() == 16,
+                "'matrix' must be a 16-element array");
+        math::mat4 m;
+        for (int i = 0; i < 16; ++i)
+            m[i / 4][i % 4] = j["matrix"][i].get<double>();
+        t.matrix = m;
+    }
+    return t;
+}
+
+/// Parses an `element.surface` JSON object into the matching SurfaceDoc alternative; does no
+/// filesystem work — a "mesh" surface stores its path string verbatim, unresolved.
+SurfaceDoc parse_surface_doc(const json& sj, bool strict) {
+    require(sj.contains("type"), "surface missing 'type'");
+    std::string type = sj["type"];
+
+    if (type == "plane") {
+        if (strict)
+            reject_unknown_keys(sj, {"type", "half_width", "half_height"}, "surface.plane");
+        PlaneDoc d;
+        d.half_width = sj.value("half_width", 0.5);
+        d.half_height = sj.value("half_height", 0.5);
+        return d;
+    }
+    if (type == "sphere") {
+        if (strict)
+            reject_unknown_keys(sj, {"type", "radius"}, "surface.sphere");
+        require(sj.contains("radius"), "sphere missing 'radius'");
+        SphereDoc d;
+        d.radius = sj["radius"].get<double>();
+        return d;
+    }
+    if (type == "paraboloid") {
+        if (strict)
+            reject_unknown_keys(sj, {"type", "focal_length_m", "aperture_radius_m"},
+                                 "surface.paraboloid");
+        require(sj.contains("focal_length_m"), "paraboloid missing 'focal_length_m'");
+        require(sj.contains("aperture_radius_m"), "paraboloid missing 'aperture_radius_m'");
+        ParaboloidDoc d;
+        d.focal_length_m = sj["focal_length_m"].get<double>();
+        d.aperture_radius_m = sj["aperture_radius_m"].get<double>();
+        return d;
+    }
+    if (type == "quadric") {
+        if (strict)
+            reject_unknown_keys(sj, {"type", "coeffs", "aperture_box"}, "surface.quadric");
+        require(sj.contains("coeffs"), "quadric missing 'coeffs'");
+        require(sj.contains("aperture_box"), "quadric missing 'aperture_box'");
+        const json& cj = sj["coeffs"];
+        if (strict)
+            reject_unknown_keys(cj, {"A", "B", "C", "D", "E", "F", "G", "H", "I", "J"},
+                                 "surface.quadric.coeffs");
+        QuadricDoc d;
+        d.A = cj.value("A", 0.0); d.B = cj.value("B", 0.0); d.C = cj.value("C", 0.0);
+        d.D = cj.value("D", 0.0); d.E = cj.value("E", 0.0); d.F = cj.value("F", 0.0);
+        d.G = cj.value("G", 0.0); d.H = cj.value("H", 0.0); d.I = cj.value("I", 0.0);
+        d.J = cj.value("J", 0.0);
+        const json& bj = sj["aperture_box"];
+        require(bj.contains("min") && bj.contains("max"),
+                "quadric aperture_box missing 'min'/'max'");
+        if (strict)
+            reject_unknown_keys(bj, {"min", "max"}, "surface.quadric.aperture_box");
+        // Mirrors SceneLoader.cpp: raw [i].get<double>() indexing, not read_vec3 — malformed
+        // arrays behave identically (bitwise) to the loader, including on out-of-range access.
+        d.box_min = {bj["min"][0].get<double>(), bj["min"][1].get<double>(),
+                     bj["min"][2].get<double>()};
+        d.box_max = {bj["max"][0].get<double>(), bj["max"][1].get<double>(),
+                     bj["max"][2].get<double>()};
+        return d;
+    }
+    if (type == "fresnel_zone_lens") {
+        if (strict)
+            reject_unknown_keys(sj,
+                                 {"type", "focal_length_m", "inner_radius_m", "pitch_m",
+                                  "n_zones", "n_lens"},
+                                 "surface.fresnel_zone_lens");
+        require(sj.contains("focal_length_m"), "fresnel_zone_lens missing 'focal_length_m'");
+        require(sj.contains("inner_radius_m"), "fresnel_zone_lens missing 'inner_radius_m'");
+        require(sj.contains("pitch_m"), "fresnel_zone_lens missing 'pitch_m'");
+        require(sj.contains("n_zones"), "fresnel_zone_lens missing 'n_zones'");
+        require(sj.contains("n_lens"), "fresnel_zone_lens missing 'n_lens'");
+        FresnelZoneLensDoc d;
+        d.focal_length_m = sj["focal_length_m"].get<double>();
+        d.inner_radius_m = sj["inner_radius_m"].get<double>();
+        d.pitch_m = sj["pitch_m"].get<double>();
+        d.n_zones = sj["n_zones"].get<int>();
+        d.n_lens = sj["n_lens"].get<double>();
+        return d;
+    }
+    if (type == "cylindrical_paraboloid") {
+        if (strict)
+            reject_unknown_keys(sj,
+                                 {"type", "focal_length_m", "aperture_half_width_m",
+                                  "aperture_half_length_m"},
+                                 "surface.cylindrical_paraboloid");
+        require(sj.contains("focal_length_m"),
+                "cylindrical_paraboloid missing 'focal_length_m'");
+        require(sj.contains("aperture_half_width_m"),
+                "cylindrical_paraboloid missing 'aperture_half_width_m'");
+        require(sj.contains("aperture_half_length_m"),
+                "cylindrical_paraboloid missing 'aperture_half_length_m'");
+        CylParaboloidDoc d;
+        d.focal_length_m = sj["focal_length_m"].get<double>();
+        d.aperture_half_width_m = sj["aperture_half_width_m"].get<double>();
+        d.aperture_half_length_m = sj["aperture_half_length_m"].get<double>();
+        return d;
+    }
+    if (type == "mesh") {
+        if (strict)
+            reject_unknown_keys(sj, {"type", "path", "scale_to_meters"}, "surface.mesh");
+        require(sj.contains("path"), "mesh surface missing 'path'");
+        MeshDoc d;
+        d.path = sj["path"].get<std::string>();
+        d.scale_to_meters = sj.value("scale_to_meters", 1.0);
+        return d;
+    }
+    throw std::runtime_error("SceneLoader: unknown surface type '" + type + "'");
+}
+
+} // namespace
+
+// ---- parse_document -----------------------------------------------------
+
+/// Parses a root `{"scene": {...}, "trace": {...}}` JSON document into a SceneDocument.
+/// Does no filesystem work (mesh paths are stored unresolved); in strict mode, throws on any
+/// unrecognized key at any level of the document.
+SceneDocument parse_document(const json& root, bool strict) {
+    if (strict)
+        reject_unknown_keys(root, {"scene", "trace"}, "root");
+    require(root.contains("scene"), "missing top-level 'scene' key");
+    const json& s = root["scene"];
+    if (strict)
+        reject_unknown_keys(
+            s, {"name", "sun", "aperture", "materials", "elements", "receiver"}, "scene");
+
+    SceneDocument doc;
+    doc.name = s.value("name", std::string());
+
+    // ---- Materials --------------------------------------------------------
+    if (s.contains("materials")) {
+        for (const auto& mj : s["materials"]) {
+            require(mj.contains("id"), "material entry missing 'id'");
+            require(mj.contains("type"), "material entry missing 'type'");
+            MaterialDoc md;
+            md.id = mj["id"].get<std::string>();
+            md.type = mj["type"].get<std::string>();
+            json params = mj;
+            params.erase("id");
+            params.erase("type");
+            if (strict)
+                validate_material_strict(md.type, params);
+            md.params = std::move(params);
+            doc.materials.push_back(std::move(md));
+        }
+    }
+
+    // ---- Sun ----------------------------------------------------------------
+    require(s.contains("sun"), "missing 'sun'");
+    {
+        const json& sj = s["sun"];
+        if (strict)
+            reject_unknown_keys(
+                sj, {"direction", "dni_wm2", "sunshape", "azimuth_deg", "elevation_deg"}, "sun");
+        require(sj.contains("sunshape"), "sun missing 'sunshape'");
+        const json& shj = sj["sunshape"];
+        if (strict)
+            reject_unknown_keys(shj, {"type", "half_angle_mrad", "chi"}, "sunshape");
+
+        SunDoc sun;
+        sun.sunshape_type = shj.value("type", std::string("pillbox"));
+        sun.half_angle_mrad = shj.value("half_angle_mrad", 4.65);
+        sun.chi = shj.value("chi", 0.05);
+        sun.dni_wm2 = sj.value("dni_wm2", 1000.0);
+        if (strict)
+            require(sun.sunshape_type == "pillbox" || sun.sunshape_type == "buie",
+                    "unknown sunshape type '" + sun.sunshape_type + "'");
+
+        if (sj.contains("direction")) {
+            // Stored verbatim, un-normalized: build_scene() normalizes on the way into
+            // SunSource. The angle fields are re-derived from the normalized direction so
+            // they are never stale relative to it.
+            math::vec3 d = read_vec3(sj, "direction");
+            sun.direction = d;
+            sources::SunAngles angles =
+                sources::SunSource::angles_from_direction(math::safe_normalize(d));
+            sun.azimuth_deg = angles.azimuth_deg;
+            sun.elevation_deg = angles.elevation_deg;
+        } else {
+            if (sj.contains("azimuth_deg"))
+                sun.azimuth_deg = sj["azimuth_deg"].get<double>();
+            if (sj.contains("elevation_deg"))
+                sun.elevation_deg = sj["elevation_deg"].get<double>();
+        }
+        doc.sun = std::move(sun);
+    }
+
+    // ---- Aperture -------------------------------------------------------------
+    // Relaxed vs. SceneLoader.cpp: the aperture object itself is now optional.
+    if (s.contains("aperture")) {
+        const json& aj = s["aperture"];
+        if (strict)
+            reject_unknown_keys(aj, {"type", "center", "normal", "radius", "mode", "margin"},
+                                 "aperture");
+        ApertureDoc ap;
+        ap.center = read_vec3(aj, "center");
+        ap.normal = read_vec3(aj, "normal");
+        ap.radius = aj.value("radius", 1.0);
+        ap.mode = aj.value("mode", std::string("fixed"));
+        ap.margin = aj.value("margin", 0.05);
+        if (strict)
+            require(ap.mode == "fixed" || ap.mode == "auto" || ap.mode == "auto_fit",
+                    "unknown aperture mode '" + ap.mode + "'");
+        doc.aperture = std::move(ap);
+    } else {
+        ApertureDoc ap;
+        ap.mode = "auto_fit";
+        doc.aperture = ap;
+    }
+
+    // ---- Elements ---------------------------------------------------------
+    if (s.contains("elements")) {
+        std::uint64_t next_id = 1;
+        for (const auto& el : s["elements"]) {
+            if (strict)
+                reject_unknown_keys(el, {"name", "material", "surface", "transform", "visible"},
+                                     "element");
+            require(el.contains("surface"), "element missing 'surface'");
+            require(el.contains("material"), "element missing 'material'");
+
+            ElementDoc ed;
+            ed.id = next_id++;
+            if (el.contains("name"))
+                ed.name = el["name"].get<std::string>();
+            ed.material_id = el["material"].get<std::string>();
+            ed.surface = parse_surface_doc(el["surface"], strict);
+            if (el.contains("transform"))
+                ed.transform = parse_transform_doc(el["transform"], strict);
+            ed.visible = el.value("visible", true);
+            doc.elements.push_back(std::move(ed));
+        }
+        doc.next_id = next_id;
+    } else {
+        doc.next_id = 1;
+    }
+
+    // ---- Receiver ---------------------------------------------------------
+    require(s.contains("receiver"), "missing 'receiver'");
+    {
+        const json& rj = s["receiver"];
+        if (strict)
+            reject_unknown_keys(
+                rj, {"surface", "grid", "transform", "depth", "top_mode", "type", "battery"},
+                "receiver");
+
+        ReceiverDoc rd;
+        // The loader's else-branch takes every non-"box" value, including a typo — preserved.
+        if (rj.value("type", std::string("plane")) == "box") {
+            BoxReceiverDoc bd;
+            if (rj.contains("surface")) {
+                const json& surf = rj["surface"];
+                if (strict)
+                    reject_unknown_keys(surf, {"type", "half_width", "half_height"},
+                                         "receiver.surface");
+                bd.half_width = surf.value("half_width", bd.half_width);
+                bd.half_height = surf.value("half_height", bd.half_height);
+            }
+            bd.depth = rj.value("depth", bd.depth);
+            if (rj.contains("grid")) {
+                const json& g = rj["grid"];
+                if (strict)
+                    reject_unknown_keys(g, {"nx", "ny"}, "receiver.grid");
+                bd.nx = g.value("nx", bd.nx);
+                bd.ny = g.value("ny", bd.ny);
+            }
+            if (rj.contains("battery")) {
+                const json& bj = rj["battery"];
+                if (strict)
+                    reject_unknown_keys(bj,
+                                         {"enabled", "half_width", "half_height", "height_m",
+                                          "top_depth_m", "nx", "ny", "height"},
+                                         "receiver.battery");
+                BatteryDoc battery;
+                battery.enabled = bj.value("enabled", true);
+                if (bj.contains("half_width"))
+                    battery.half_width = bj["half_width"].get<double>();
+                if (bj.contains("half_height"))
+                    battery.half_height = bj["half_height"].get<double>();
+                if (bj.contains("top_depth_m"))
+                    battery.top_depth_m = bj["top_depth_m"].get<double>();
+                // Legacy alias: prefer "height_m", fall back to "height"; nullopt if neither.
+                if (bj.contains("height_m"))
+                    battery.height_m = bj["height_m"].get<double>();
+                else if (bj.contains("height"))
+                    battery.height_m = bj["height"].get<double>();
+                if (bj.contains("nx"))
+                    battery.nx = bj["nx"].get<int>();
+                if (bj.contains("ny"))
+                    battery.ny = bj["ny"].get<int>();
+                bd.battery = std::move(battery);
+            }
+            rd.kind = std::move(bd);
+        } else {
+            PlaneReceiverDoc pd;
+            if (rj.contains("grid")) {
+                const json& g = rj["grid"];
+                if (strict)
+                    reject_unknown_keys(g, {"nx", "ny"}, "receiver.grid");
+                pd.nx = g.value("nx", pd.nx);
+                pd.ny = g.value("ny", pd.ny);
+            }
+            if (rj.contains("surface")) {
+                const json& surf = rj["surface"];
+                if (strict)
+                    reject_unknown_keys(surf, {"type", "half_width", "half_height"},
+                                         "receiver.surface");
+                pd.half_width = surf.value("half_width", pd.half_width);
+                pd.half_height = surf.value("half_height", pd.half_height);
+            }
+            rd.kind = std::move(pd);
+        }
+        if (rj.contains("transform"))
+            rd.transform = parse_transform_doc(rj["transform"], strict);
+        doc.receiver = std::move(rd);
+    }
+
+    // ---- Trace config -------------------------------------------------------
+    {
+        tracer::TraceConfig cfg;
+        if (root.contains("trace")) {
+            const json& tj = root["trace"];
+            if (strict)
+                reject_unknown_keys(tj,
+                                     {"n_primary_rays", "max_bounces", "record_paths",
+                                      "max_paths_to_record", "rng_seed", "power_cutoff_w"},
+                                     "trace");
+            if (tj.contains("n_primary_rays"))
+                cfg.n_primary_rays = tj["n_primary_rays"].get<std::size_t>();
+            if (tj.contains("max_bounces"))
+                cfg.max_bounces = tj["max_bounces"].get<int>();
+            if (tj.contains("power_cutoff_w"))
+                cfg.power_cutoff_w = tj["power_cutoff_w"].get<double>();
+            if (tj.contains("rng_seed"))
+                cfg.rng_seed = tj["rng_seed"].get<std::uint64_t>();
+            if (tj.contains("record_paths"))
+                cfg.record_paths = tj["record_paths"].get<bool>();
+            if (tj.contains("max_paths_to_record"))
+                cfg.max_paths_to_record = tj["max_paths_to_record"].get<std::size_t>();
+        }
+        doc.trace = cfg;
+    }
+
+    return doc;
+}
+
+} // namespace scrt::io

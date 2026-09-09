@@ -2,12 +2,12 @@
 #include "scrt/core/AABB.hpp"
 #include "scrt/core/Transform.hpp"
 #include "scrt/io/MeshImporter.hpp"
+#include "scrt/io/SceneDocument.hpp"
 #include "scrt/materials/Absorber.hpp"
 #include "scrt/materials/Dielectric.hpp"
 #include "scrt/materials/PerfectMirror.hpp"
 #include "scrt/materials/RealMirror.hpp"
 #include "scrt/materials/ThinDielectricPane.hpp"
-#include "scrt/math/Constants.hpp"
 #include "scrt/math/Vec.hpp"
 #include "scrt/scene/Aperture.hpp"
 #include "scrt/scene/Receiver.hpp"
@@ -21,12 +21,24 @@
 #include "scrt/surfaces/Plane.hpp"
 #include "scrt/surfaces/Sphere.hpp"
 #include "scrt/surfaces/TriangleMesh.hpp"
+#include <algorithm>
 #include <cmath>
 #include <fstream>
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
+#include <utility>
+#include <variant>
+#include <vector>
+
+// NOTE ON SCOPE: this translation unit owns the *Scene-construction* half of scene loading -
+// build_scene() plus the thin load_scene() file wrapper. The JSON-reading half lives in
+// SceneDocument.cpp (parse_document / TransformDoc::to_transform) and serialization in
+// SceneWriter.cpp (write_document). The frozen SceneDocument.hpp Doxygen claims build_scene() is
+// implemented in SceneDocument.cpp; that comment is stale, the declaration itself is unchanged.
 
 namespace scrt::io {
 
@@ -34,32 +46,15 @@ using json = nlohmann::json;
 
 namespace {
 
+// ---- Shared helpers -----------------------------------------------------
+
+/// Throws a "SceneLoader: "-prefixed runtime_error when cond is false.
 void require(bool cond, const std::string& msg) {
     if (!cond)
         throw std::runtime_error("SceneLoader: " + msg);
 }
 
-math::vec3 read_vec3(const json& j, const std::string& key) {
-    require(j.contains(key), "missing '" + key + "'");
-    require(j[key].is_array() && j[key].size() == 3,
-            "'" + key + "' must be a 3-element array");
-    return {j[key][0].get<double>(), j[key][1].get<double>(), j[key][2].get<double>()};
-}
-
-core::Transform parse_transform(const json& j) {
-    core::Transform rot;
-    if (j.contains("rotation_euler_deg")) {
-        math::vec3 deg = read_vec3(j, "rotation_euler_deg");
-        rot = core::Transform::from_euler_xyz(deg * math::DEG2RAD);
-    }
-    if (j.contains("translation")) {
-        math::vec3 t = read_vec3(j, "translation");
-        // T * R: rotate first, then translate (standard object placement).
-        return core::Transform::from_translation(t).compose(rot);
-    }
-    return rot;
-}
-
+/// Builds a world-from-local frame with the given origin and (renormalized) basis axes.
 core::Transform frame_transform(math::vec3 origin, math::vec3 x_axis,
                                 math::vec3 y_axis, math::vec3 z_axis) {
     math::mat4 m(1.0);
@@ -70,83 +65,338 @@ core::Transform frame_transform(math::vec3 origin, math::vec3 x_axis,
     return core::Transform::from_matrix(m);
 }
 
-std::unique_ptr<surfaces::Surface> parse_surface(const json& sj,
-                                                   const std::filesystem::path& base_dir) {
-    require(sj.contains("type"), "surface missing 'type'");
-    std::string type = sj["type"];
+/// True when every field of t is still its struct default, i.e. the authored JSON had no
+/// "transform" key at all (parse_document leaves an absent transform default-constructed).
+///
+/// Legacy SceneLoader.cpp only ever called parse_transform() when the "transform" key was
+/// present (`if (el.contains("transform")) ...`), so an absent key never went through
+/// core::Transform construction at all. TransformDoc::to_transform() is implemented by a
+/// sibling agent concurrently with this file; rather than assume it reproduces a default
+/// core::Transform bit-for-bit, this guard reproduces the legacy conditional exactly, so the
+/// identity case never depends on that function.
+bool is_default_transform(const TransformDoc& t) {
+    return t.translation == math::vec3{0.0} &&
+           t.rotation_euler_deg == math::vec3{0.0} &&
+           t.scale == math::vec3{1.0} &&
+           !t.matrix.has_value();
+}
 
-    if (type == "plane") {
-        double hw = sj.value("half_width",  0.5);
-        double hh = sj.value("half_height", 0.5);
-        return std::make_unique<surfaces::Plane>(hw, hh);
-    }
-    if (type == "sphere") {
-        require(sj.contains("radius"), "sphere missing 'radius'");
-        return std::make_unique<surfaces::Sphere>(sj["radius"].get<double>());
-    }
-    if (type == "paraboloid") {
-        require(sj.contains("focal_length_m"),    "paraboloid missing 'focal_length_m'");
-        require(sj.contains("aperture_radius_m"), "paraboloid missing 'aperture_radius_m'");
-        return std::make_unique<surfaces::Paraboloid>(
-            sj["focal_length_m"].get<double>(),
-            sj["aperture_radius_m"].get<double>());
-    }
-    if (type == "quadric") {
-        require(sj.contains("coeffs"),       "quadric missing 'coeffs'");
-        require(sj.contains("aperture_box"), "quadric missing 'aperture_box'");
-        const json& cj = sj["coeffs"];
-        surfaces::QuadricCoeffs c;
-        c.A = cj.value("A", 0.0); c.B = cj.value("B", 0.0); c.C = cj.value("C", 0.0);
-        c.D = cj.value("D", 0.0); c.E = cj.value("E", 0.0); c.F = cj.value("F", 0.0);
-        c.G = cj.value("G", 0.0); c.H = cj.value("H", 0.0); c.I = cj.value("I", 0.0);
-        c.J = cj.value("J", 0.0);
-        const json& bj = sj["aperture_box"];
-        require(bj.contains("min") && bj.contains("max"),
-                "quadric aperture_box missing 'min'/'max'");
-        math::vec3 bmin{bj["min"][0].get<double>(),
-                        bj["min"][1].get<double>(),
-                        bj["min"][2].get<double>()};
-        math::vec3 bmax{bj["max"][0].get<double>(),
-                        bj["max"][1].get<double>(),
-                        bj["max"][2].get<double>()};
-        return std::make_unique<surfaces::GeneralQuadric>(c, core::AABB{bmin, bmax});
-    }
-    if (type == "fresnel_zone_lens") {
-        require(sj.contains("focal_length_m"),  "fresnel_zone_lens missing 'focal_length_m'");
-        require(sj.contains("inner_radius_m"),  "fresnel_zone_lens missing 'inner_radius_m'");
-        require(sj.contains("pitch_m"),         "fresnel_zone_lens missing 'pitch_m'");
-        require(sj.contains("n_zones"),         "fresnel_zone_lens missing 'n_zones'");
-        require(sj.contains("n_lens"),          "fresnel_zone_lens missing 'n_lens'");
-        return std::make_unique<surfaces::FresnelZoneLens>(
-            sj["focal_length_m"].get<double>(),
-            sj["inner_radius_m"].get<double>(),
-            sj["pitch_m"].get<double>(),
-            sj["n_zones"].get<int>(),
-            sj["n_lens"].get<double>());
-    }
-    if (type == "cylindrical_paraboloid") {
-        require(sj.contains("focal_length_m"),         "cylindrical_paraboloid missing 'focal_length_m'");
-        require(sj.contains("aperture_half_width_m"),  "cylindrical_paraboloid missing 'aperture_half_width_m'");
-        require(sj.contains("aperture_half_length_m"), "cylindrical_paraboloid missing 'aperture_half_length_m'");
-        return std::make_unique<surfaces::CylindricalParaboloid>(
-            sj["focal_length_m"].get<double>(),
-            sj["aperture_half_width_m"].get<double>(),
-            sj["aperture_half_length_m"].get<double>());
-    }
-    if (type == "mesh") {
-        require(sj.contains("path"), "mesh surface missing 'path'");
-        double scale = sj.value("scale_to_meters", 1.0);
-        auto imp = import_mesh(base_dir / sj["path"].get<std::string>(), scale);
-        return std::make_unique<surfaces::TriangleMesh>(
-            std::move(imp.vertices), std::move(imp.indices));
-    }
-    throw std::runtime_error("SceneLoader: unknown surface type '" + type + "'");
+/// Constructs the surface geometry for one element/receiver-plane, dispatching on SurfaceDoc's
+/// active alternative. Mirrors SceneLoader.cpp's former parse_surface() branch-for-branch.
+std::unique_ptr<surfaces::Surface> build_surface(const SurfaceDoc& sd,
+                                                  const std::filesystem::path& base_dir) {
+    return std::visit(
+        [&](const auto& s) -> std::unique_ptr<surfaces::Surface> {
+            using T = std::decay_t<decltype(s)>;
+            if constexpr (std::is_same_v<T, PlaneDoc>) {
+                return std::make_unique<surfaces::Plane>(s.half_width, s.half_height);
+            } else if constexpr (std::is_same_v<T, SphereDoc>) {
+                return std::make_unique<surfaces::Sphere>(s.radius);
+            } else if constexpr (std::is_same_v<T, ParaboloidDoc>) {
+                return std::make_unique<surfaces::Paraboloid>(s.focal_length_m,
+                                                               s.aperture_radius_m);
+            } else if constexpr (std::is_same_v<T, CylParaboloidDoc>) {
+                return std::make_unique<surfaces::CylindricalParaboloid>(
+                    s.focal_length_m, s.aperture_half_width_m, s.aperture_half_length_m);
+            } else if constexpr (std::is_same_v<T, QuadricDoc>) {
+                surfaces::QuadricCoeffs c;
+                c.A = s.A; c.B = s.B; c.C = s.C; c.D = s.D; c.E = s.E;
+                c.F = s.F; c.G = s.G; c.H = s.H; c.I = s.I; c.J = s.J;
+                return std::make_unique<surfaces::GeneralQuadric>(
+                    c, core::AABB{s.box_min, s.box_max});
+            } else if constexpr (std::is_same_v<T, FresnelZoneLensDoc>) {
+                return std::make_unique<surfaces::FresnelZoneLens>(
+                    s.focal_length_m, s.inner_radius_m, s.pitch_m, s.n_zones, s.n_lens);
+            } else if constexpr (std::is_same_v<T, MeshDoc>) {
+                auto imp = import_mesh(base_dir / s.path, s.scale_to_meters);
+                return std::make_unique<surfaces::TriangleMesh>(std::move(imp.vertices),
+                                                                  std::move(imp.indices));
+            }
+        },
+        sd);
 }
 
 } // namespace
 
+/// Builds a fully-wired LoadedScene from an already-parsed SceneDocument; see the Doxygen on
+/// its declaration in SceneDocument.hpp. Implemented here (not in SceneDocument.cpp) by wave
+/// assignment: this is the Scene-construction half of the former monolithic load_scene().
+LoadedScene build_scene(const SceneDocument& doc, const std::filesystem::path& base_dir) {
+    auto scene = std::make_unique<scene::Scene>();
+
+    // ---- Materials ----------------------------------------------------
+    std::unordered_map<std::string, const materials::Material*> mat_index;
+    for (const auto& md : doc.materials) {
+        const json& params = md.params;
+
+        std::unique_ptr<materials::Material> mat;
+        if (md.type == "perfect_mirror") {
+            mat = std::make_unique<materials::PerfectMirror>();
+        } else if (md.type == "real_mirror") {
+            double rho = params.value("reflectance", 1.0);
+            double se  = params.value("slope_error_mrad", 0.0);
+            mat = std::make_unique<materials::RealMirror>(rho, se);
+        } else if (md.type == "dielectric") {
+            double n     = params.value("n", 1.5);
+            double alpha = params.value("absorption_per_m", 0.0);
+            auto di = std::make_unique<materials::Dielectric>(n, alpha);
+            if (params.contains("sellmeier")) {
+                std::string preset = params["sellmeier"].get<std::string>();
+                if (preset == "bk7")
+                    di->set_sellmeier(materials::SellmeierCoeffs::bk7());
+                else if (preset == "fused_silica")
+                    di->set_sellmeier(materials::SellmeierCoeffs::fused_silica());
+                else
+                    throw std::runtime_error(
+                        "SceneLoader: unknown Sellmeier preset '" + preset + "'");
+            }
+            if (params.contains("alpha_spectrum")) {
+                std::vector<std::pair<double, double>> spec;
+                for (const auto& pt : params["alpha_spectrum"]) {
+                    require(pt.is_array() && pt.size() == 2,
+                            "alpha_spectrum entry must be [wavelength_nm, alpha_per_m]");
+                    spec.push_back({pt[0].get<double>(), pt[1].get<double>()});
+                }
+                di->set_alpha_spectrum(std::move(spec));
+            }
+            mat = std::move(di);
+        } else if (md.type == "thin_dielectric_pane") {
+            const double n         = params.value("n", 1.49);
+            const double thickness = params.value("thickness_m", 0.003);
+            const double alpha     = params.value("absorption_per_m", 0.0);
+            mat = std::make_unique<materials::ThinDielectricPane>(n, thickness, alpha);
+        } else if (md.type == "absorber") {
+            mat = std::make_unique<materials::Absorber>();
+        } else {
+            throw std::runtime_error("SceneLoader: unknown material type '" + md.type + "'");
+        }
+        mat->set_name(md.id);
+        mat_index[md.id] = mat.get();
+        scene->add_material(std::move(mat));
+    }
+
+    // ---- Elements / surfaces -------------------------------------------
+    for (const auto& el : doc.elements) {
+        auto surf = build_surface(el.surface, base_dir);
+
+        if (!is_default_transform(el.transform))
+            surf->set_transform(el.transform.to_transform());
+        if (!el.name.empty())
+            surf->set_name(el.name);
+
+        require(mat_index.count(el.material_id) > 0,
+                "element references unknown material id '" + el.material_id + "'");
+        surf->set_material(mat_index.at(el.material_id));
+
+        // TODO(Wave 3): ElementDoc::visible has no runtime counterpart on surfaces::Surface
+        // yet. The surface is added regardless of visibility so the optics are unaffected by
+        // an editor-only flag; wire real hide/show support in the Wave 3 editor/viewer.
+        auto* raw = surf.get();
+        // Scene::add_surface stamps its own sequential id; overwrite it with the document's so
+        // outliner selection survives a save/load round trip even once ids develop gaps. Guarded
+        // because id 0 is Surface's "not owned by a scene" sentinel: a hand-built SceneDocument
+        // that never went through parse_document leaves it 0, and stamping that back would make
+        // Scene::surface_by_id/index_of unable to find the surface.
+        scene->add_surface(std::move(surf));
+        if (el.id != 0)
+            raw->set_id(el.id);
+    }
+
+    // ---- Receiver -------------------------------------------------------
+    if (std::holds_alternative<BoxReceiverDoc>(doc.receiver.kind)) {
+        const auto& bd = std::get<BoxReceiverDoc>(doc.receiver.kind);
+        const double half_width  = bd.half_width;
+        const double half_height = bd.half_height;
+        const double depth       = bd.depth;
+        const int    nx = bd.nx, ny = bd.ny;
+
+        const double bin_x = (2.0 * half_width) / static_cast<double>(nx);
+        const double bin_y = (2.0 * half_height) / static_cast<double>(ny);
+        const double bin   = 0.5 * (bin_x + bin_y);
+        const int depth_bins = std::max(1, static_cast<int>(std::lround(depth / bin)));
+
+        auto recv = std::make_unique<scene::Receiver>(half_width, half_height, nx, ny);
+        recv->mutable_faces().front()->set_name("glass_top");
+        recv->mutable_faces().front()->set_mode(scene::ReceiverFaceMode::RecordPass);
+
+        auto absorber = std::make_unique<materials::Absorber>();
+        const auto* absorber_ptr = absorber.get();
+        scene->add_material(std::move(absorber));
+
+        recv->mutable_faces().front()->surface()->set_material(absorber_ptr);
+        recv->mutable_faces().front()->set_transform(
+            frame_transform({0.0, 0.0, 0.0}, {1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}));
+
+        auto& bottom = recv->add_face("bottom", half_width, half_height, nx, ny,
+                                      scene::ReceiverFaceMode::RecordAbsorb);
+        bottom.surface()->set_material(absorber_ptr);
+        bottom.set_transform(
+            frame_transform({0.0, 0.0, -depth}, {1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}));
+
+        auto& north = recv->add_face("north_wall", half_width, depth * 0.5, nx, depth_bins,
+                                     scene::ReceiverFaceMode::RecordAbsorb);
+        north.surface()->set_material(absorber_ptr);
+        north.set_transform(
+            frame_transform({0.0, half_height, -depth * 0.5}, {1.0, 0.0, 0.0}, {0.0, 0.0, -1.0}, {0.0, 1.0, 0.0}));
+
+        auto& south = recv->add_face("south_wall", half_width, depth * 0.5, nx, depth_bins,
+                                     scene::ReceiverFaceMode::RecordAbsorb);
+        south.surface()->set_material(absorber_ptr);
+        south.set_transform(
+            frame_transform({0.0, -half_height, -depth * 0.5}, {1.0, 0.0, 0.0}, {0.0, 0.0, -1.0}, {0.0, -1.0, 0.0}));
+
+        auto& east = recv->add_face("east_wall", depth * 0.5, half_height, depth_bins, ny,
+                                    scene::ReceiverFaceMode::RecordAbsorb);
+        east.surface()->set_material(absorber_ptr);
+        east.set_transform(
+            frame_transform({half_width, 0.0, -depth * 0.5}, {0.0, 0.0, -1.0}, {0.0, 1.0, 0.0}, {1.0, 0.0, 0.0}));
+
+        auto& west = recv->add_face("west_wall", depth * 0.5, half_height, depth_bins, ny,
+                                    scene::ReceiverFaceMode::RecordAbsorb);
+        west.surface()->set_material(absorber_ptr);
+        west.set_transform(
+            frame_transform({-half_width, 0.0, -depth * 0.5}, {0.0, 0.0, -1.0}, {0.0, 1.0, 0.0}, {-1.0, 0.0, 0.0}));
+
+        if (bd.battery.has_value() && bd.battery->enabled) {
+            const auto& bat = *bd.battery;
+            const double battery_hw     = bat.half_width.value_or(half_width * 0.5);
+            const double battery_hh     = bat.half_height.value_or(half_height * 0.5);
+            const double top_depth      = bat.top_depth_m.value_or(depth);
+            const double battery_height = bat.height_m.value_or(depth - top_depth);
+            require(top_depth > 0.0 && top_depth <= depth,
+                    "box battery top_depth_m must be in (0, depth]");
+            require(battery_height > 0.0 && top_depth + battery_height <= depth + 1.0e-12,
+                    "box battery height_m must keep the battery inside the box depth");
+            const int battery_nx = bat.nx.value_or(nx);
+            const int battery_ny = bat.ny.value_or(ny);
+            const double battery_bin_x = (2.0 * battery_hw) / static_cast<double>(battery_nx);
+            const double battery_bin_y = (2.0 * battery_hh) / static_cast<double>(battery_ny);
+            const double battery_bin   = 0.5 * (battery_bin_x + battery_bin_y);
+            const int battery_height_bins =
+                std::max(1, static_cast<int>(std::lround(battery_height / battery_bin)));
+
+            auto& battery = recv->add_face("battery_top", battery_hw, battery_hh,
+                                           battery_nx, battery_ny,
+                                           scene::ReceiverFaceMode::RecordAbsorb);
+            battery.surface()->set_material(absorber_ptr);
+            battery.set_transform(
+                frame_transform({0.0, 0.0, -top_depth}, {1.0, 0.0, 0.0},
+                                {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}));
+
+            const double side_z = -(top_depth + battery_height * 0.5);
+            auto& battery_north =
+                recv->add_face("battery_north_wall", battery_hw, battery_height * 0.5,
+                               battery_nx, battery_height_bins,
+                               scene::ReceiverFaceMode::RecordAbsorb);
+            battery_north.surface()->set_material(absorber_ptr);
+            battery_north.set_transform(
+                frame_transform({0.0, battery_hh, side_z}, {1.0, 0.0, 0.0},
+                                {0.0, 0.0, -1.0}, {0.0, 1.0, 0.0}));
+
+            auto& battery_south =
+                recv->add_face("battery_south_wall", battery_hw, battery_height * 0.5,
+                               battery_nx, battery_height_bins,
+                               scene::ReceiverFaceMode::RecordAbsorb);
+            battery_south.surface()->set_material(absorber_ptr);
+            battery_south.set_transform(
+                frame_transform({0.0, -battery_hh, side_z}, {1.0, 0.0, 0.0},
+                                {0.0, 0.0, -1.0}, {0.0, -1.0, 0.0}));
+
+            auto& battery_east =
+                recv->add_face("battery_east_wall", battery_height * 0.5, battery_hh,
+                               battery_height_bins, battery_ny,
+                               scene::ReceiverFaceMode::RecordAbsorb);
+            battery_east.surface()->set_material(absorber_ptr);
+            battery_east.set_transform(
+                frame_transform({battery_hw, 0.0, side_z}, {0.0, 0.0, -1.0},
+                                {0.0, 1.0, 0.0}, {1.0, 0.0, 0.0}));
+
+            auto& battery_west =
+                recv->add_face("battery_west_wall", battery_height * 0.5, battery_hh,
+                               battery_height_bins, battery_ny,
+                               scene::ReceiverFaceMode::RecordAbsorb);
+            battery_west.surface()->set_material(absorber_ptr);
+            battery_west.set_transform(
+                frame_transform({-battery_hw, 0.0, side_z}, {0.0, 0.0, -1.0},
+                                {0.0, 1.0, 0.0}, {-1.0, 0.0, 0.0}));
+        }
+
+        // NOTE(behaviour change, flagged for lead ruling): legacy SceneLoader.cpp threw
+        // std::runtime_error when receiver.top_mode != "record_pass" (SceneLoader.cpp:409-411).
+        // ReceiverDoc deliberately does not store top_mode (parse_document only ever accepted
+        // the literal "record_pass", so the key carries no round-trippable information), so
+        // that validation cannot be reproduced here without inventing a field the frozen header
+        // does not declare. The check is dropped rather than invented.
+
+        const core::Transform base = is_default_transform(doc.receiver.transform)
+                                          ? core::Transform{}
+                                          : doc.receiver.transform.to_transform();
+        for (auto& face : recv->mutable_faces()) {
+            const auto local = face->surface()->transform();
+            face->set_transform(base.compose(local));
+        }
+        scene->set_receiver(std::move(recv));
+    } else {
+        const auto& pd = std::get<PlaneReceiverDoc>(doc.receiver.kind);
+        auto recv = std::make_unique<scene::Receiver>(pd.half_width, pd.half_height, pd.nx, pd.ny);
+
+        // Dedicated absorber for the receiver plane.
+        auto absorber = std::make_unique<materials::Absorber>();
+        recv->surface()->set_material(absorber.get());
+        scene->add_material(std::move(absorber));
+
+        if (!is_default_transform(doc.receiver.transform))
+            recv->set_transform(doc.receiver.transform.to_transform());
+        scene->set_receiver(std::move(recv));
+    }
+
+    // ---- Sun --------------------------------------------------------------
+    {
+        std::unique_ptr<sources::SunSource> sun;
+        if (doc.sun.sunshape_type == "pillbox") {
+            sun = std::make_unique<sources::Pillbox>(doc.sun.half_angle_mrad * 1e-3);
+        } else if (doc.sun.sunshape_type == "buie") {
+            sun = std::make_unique<sources::Buie>(doc.sun.chi);
+        } else {
+            throw std::runtime_error(
+                "SceneLoader: unknown sunshape type '" + doc.sun.sunshape_type + "'");
+        }
+
+        if (doc.sun.direction.has_value())
+            sun->set_sun_direction(math::safe_normalize(*doc.sun.direction));
+        else
+            sun->set_sun_angles(sources::SunAngles{doc.sun.azimuth_deg, doc.sun.elevation_deg});
+        sun->set_dni(doc.sun.dni_wm2);
+        scene->set_sun(std::move(sun));
+    }
+
+    // ---- Aperture (must come after surfaces and receiver: auto_fit unions both) -----
+    if (doc.aperture.mode == "auto" || doc.aperture.mode == "auto_fit") {
+        scene::Aperture ap = scene::Aperture::auto_fit(
+            scene->world_bounds(), scene->sun()->to_sun(), doc.aperture.margin);
+        ap.mode = scene::ApertureMode::AutoFitToSun;
+        scene->set_aperture(ap);
+    } else {
+        // "fixed" and any unrecognized value: forward-compatible passthrough, build a fixed
+        // disk exactly as the legacy loader always did.
+        scene::Aperture ap;
+        ap.center = doc.aperture.center;
+        ap.normal = math::safe_normalize(doc.aperture.normal);
+        ap.radius = doc.aperture.radius;
+        ap.mode   = scene::ApertureMode::Fixed;
+        ap.margin = doc.aperture.margin;
+        scene->set_aperture(ap);
+    }
+
+    // ---- Trace config and finish -------------------------------------------
+    tracer::TraceConfig cfg = doc.trace;
+    scene->build_acceleration_structure();
+
+    return {std::move(scene), cfg};
+}
+
+/// Parse a JSON scene file and return a fully wired Scene; see Doxygen in SceneLoader.hpp.
 LoadedScene load_scene(const std::filesystem::path& path) {
-    std::filesystem::path base_dir = path.parent_path();
     std::ifstream file(path);
     require(file.is_open(), "cannot open '" + path.string() + "'");
 
@@ -157,312 +407,7 @@ LoadedScene load_scene(const std::filesystem::path& path) {
         throw std::runtime_error(std::string("SceneLoader JSON parse error: ") + e.what());
     }
 
-    require(root.contains("scene"), "missing top-level 'scene' key");
-    const json& s = root["scene"];
-
-    auto scene = std::make_unique<scene::Scene>();
-
-    // ---- Materials --------------------------------------------------------
-    std::unordered_map<std::string, const materials::Material*> mat_index;
-    if (s.contains("materials")) {
-        for (const auto& mj : s["materials"]) {
-            require(mj.contains("id"),   "material entry missing 'id'");
-            require(mj.contains("type"), "material entry missing 'type'");
-            std::string id   = mj["id"];
-            std::string type = mj["type"];
-
-            std::unique_ptr<materials::Material> mat;
-            if (type == "perfect_mirror") {
-                mat = std::make_unique<materials::PerfectMirror>();
-            } else if (type == "real_mirror") {
-                double rho = mj.value("reflectance",     1.0);
-                double se  = mj.value("slope_error_mrad", 0.0);
-                mat = std::make_unique<materials::RealMirror>(rho, se);
-            } else if (type == "dielectric") {
-                double n     = mj.value("n", 1.5);
-                double alpha = mj.value("absorption_per_m", 0.0);
-                auto di = std::make_unique<materials::Dielectric>(n, alpha);
-                if (mj.contains("sellmeier")) {
-                    std::string preset = mj["sellmeier"].get<std::string>();
-                    if (preset == "bk7")
-                        di->set_sellmeier(materials::SellmeierCoeffs::bk7());
-                    else if (preset == "fused_silica")
-                        di->set_sellmeier(materials::SellmeierCoeffs::fused_silica());
-                    else
-                        throw std::runtime_error(
-                            "SceneLoader: unknown Sellmeier preset '" + preset + "'");
-                }
-                if (mj.contains("alpha_spectrum")) {
-                    std::vector<std::pair<double,double>> spec;
-                    for (const auto& pt : mj["alpha_spectrum"]) {
-                        require(pt.is_array() && pt.size() == 2,
-                                "alpha_spectrum entry must be [wavelength_nm, alpha_per_m]");
-                        spec.push_back({pt[0].get<double>(), pt[1].get<double>()});
-                    }
-                    di->set_alpha_spectrum(std::move(spec));
-                }
-                mat = std::move(di);
-            } else if (type == "thin_dielectric_pane") {
-                const double n = mj.value("n", 1.49);
-                const double thickness = mj.value("thickness_m", 0.003);
-                const double alpha = mj.value("absorption_per_m", 0.0);
-                mat = std::make_unique<materials::ThinDielectricPane>(n, thickness, alpha);
-            } else if (type == "absorber") {
-                mat = std::make_unique<materials::Absorber>();
-            } else {
-                throw std::runtime_error("SceneLoader: unknown material type '" + type + "'");
-            }
-            mat->set_name(id);
-            mat_index[id] = mat.get();
-            scene->add_material(std::move(mat));
-        }
-    }
-
-    // ---- Sun --------------------------------------------------------------
-    require(s.contains("sun"), "missing 'sun'");
-    {
-        const json& sj = s["sun"];
-        require(sj.contains("sunshape"), "sun missing 'sunshape'");
-        std::string shape_type = sj["sunshape"].value("type", "pillbox");
-        std::unique_ptr<sources::SunSource> sun;
-        if (shape_type == "pillbox") {
-            double ha_mrad = sj["sunshape"].value("half_angle_mrad", 4.65);
-            sun = std::make_unique<sources::Pillbox>(ha_mrad * 1e-3);
-        } else if (shape_type == "buie") {
-            double chi = sj["sunshape"].value("chi", 0.05);
-            sun = std::make_unique<sources::Buie>(chi);
-        } else {
-            throw std::runtime_error(
-                "SceneLoader: unknown sunshape type '" + shape_type + "'");
-        }
-        sun->set_sun_direction(math::safe_normalize(read_vec3(sj, "direction")));
-        sun->set_dni(sj.value("dni_wm2", 1000.0));
-        scene->set_sun(std::move(sun));
-    }
-
-    // ---- Aperture ---------------------------------------------------------
-    require(s.contains("aperture"), "missing 'aperture'");
-    {
-        const json& aj = s["aperture"];
-        scene::Aperture ap;
-        ap.center = read_vec3(aj, "center");
-        ap.normal = math::safe_normalize(read_vec3(aj, "normal"));
-        ap.radius = aj.value("radius", 1.0);
-        scene->set_aperture(ap);
-    }
-
-    // ---- Elements ---------------------------------------------------------
-    if (s.contains("elements")) {
-        for (const auto& el : s["elements"]) {
-            require(el.contains("surface"),  "element missing 'surface'");
-            require(el.contains("material"), "element missing 'material'");
-
-            auto surf = parse_surface(el["surface"], base_dir);
-            if (el.contains("transform"))
-                surf->set_transform(parse_transform(el["transform"]));
-            if (el.contains("name"))
-                surf->set_name(el["name"].get<std::string>());
-
-            std::string mat_id = el["material"];
-            require(mat_index.count(mat_id) > 0,
-                    "element references unknown material id '" + mat_id + "'");
-            surf->set_material(mat_index.at(mat_id));
-
-            scene->add_surface(std::move(surf));
-        }
-    }
-
-    // ---- Receiver ---------------------------------------------------------
-    require(s.contains("receiver"), "missing 'receiver'");
-    {
-        const json& rj = s["receiver"];
-        if (rj.value("type", std::string("plane")) == "box") {
-            double half_width = 0.15, half_height = 0.15, depth = 0.15;
-            if (rj.contains("surface")) {
-                half_width = rj["surface"].value("half_width", half_width);
-                half_height = rj["surface"].value("half_height", half_height);
-            }
-            depth = rj.value("depth", depth);
-
-            int nx = 64, ny = 64;
-            if (rj.contains("grid")) {
-                nx = rj["grid"].value("nx", nx);
-                ny = rj["grid"].value("ny", ny);
-            }
-            const double bin_x = (2.0 * half_width) / static_cast<double>(nx);
-            const double bin_y = (2.0 * half_height) / static_cast<double>(ny);
-            const double bin = 0.5 * (bin_x + bin_y);
-            const int depth_bins = std::max(1, static_cast<int>(std::lround(depth / bin)));
-
-            auto recv = std::make_unique<scene::Receiver>(half_width, half_height, nx, ny);
-            recv->mutable_faces().front()->set_name("glass_top");
-            recv->mutable_faces().front()->set_mode(scene::ReceiverFaceMode::RecordPass);
-
-            auto absorber = std::make_unique<materials::Absorber>();
-            const auto* absorber_ptr = absorber.get();
-            scene->add_material(std::move(absorber));
-
-            recv->mutable_faces().front()->surface()->set_material(absorber_ptr);
-            recv->mutable_faces().front()->set_transform(
-                frame_transform({0.0, 0.0, 0.0}, {1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}));
-
-            auto& bottom = recv->add_face("bottom", half_width, half_height, nx, ny,
-                                          scene::ReceiverFaceMode::RecordAbsorb);
-            bottom.surface()->set_material(absorber_ptr);
-            bottom.set_transform(
-                frame_transform({0.0, 0.0, -depth}, {1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}));
-
-            auto& north = recv->add_face("north_wall", half_width, depth * 0.5, nx, depth_bins,
-                                         scene::ReceiverFaceMode::RecordAbsorb);
-            north.surface()->set_material(absorber_ptr);
-            north.set_transform(
-                frame_transform({0.0, half_height, -depth * 0.5}, {1.0, 0.0, 0.0}, {0.0, 0.0, -1.0}, {0.0, 1.0, 0.0}));
-
-            auto& south = recv->add_face("south_wall", half_width, depth * 0.5, nx, depth_bins,
-                                         scene::ReceiverFaceMode::RecordAbsorb);
-            south.surface()->set_material(absorber_ptr);
-            south.set_transform(
-                frame_transform({0.0, -half_height, -depth * 0.5}, {1.0, 0.0, 0.0}, {0.0, 0.0, -1.0}, {0.0, -1.0, 0.0}));
-
-            auto& east = recv->add_face("east_wall", depth * 0.5, half_height, depth_bins, ny,
-                                        scene::ReceiverFaceMode::RecordAbsorb);
-            east.surface()->set_material(absorber_ptr);
-            east.set_transform(
-                frame_transform({half_width, 0.0, -depth * 0.5}, {0.0, 0.0, -1.0}, {0.0, 1.0, 0.0}, {1.0, 0.0, 0.0}));
-
-            auto& west = recv->add_face("west_wall", depth * 0.5, half_height, depth_bins, ny,
-                                        scene::ReceiverFaceMode::RecordAbsorb);
-            west.surface()->set_material(absorber_ptr);
-            west.set_transform(
-                frame_transform({-half_width, 0.0, -depth * 0.5}, {0.0, 0.0, -1.0}, {0.0, 1.0, 0.0}, {-1.0, 0.0, 0.0}));
-
-            if (rj.contains("battery")) {
-                const json& bj = rj["battery"];
-                const bool enabled = bj.value("enabled", true);
-                if (enabled) {
-                    const double battery_hw = bj.value("half_width", half_width * 0.5);
-                    const double battery_hh = bj.value("half_height", half_height * 0.5);
-                    const double top_depth = bj.value("top_depth_m", depth);
-                    const double battery_height = bj.value("height_m",
-                                                           bj.value("height", depth - top_depth));
-                    require(top_depth > 0.0 && top_depth <= depth,
-                            "box battery top_depth_m must be in (0, depth]");
-                    require(battery_height > 0.0 && top_depth + battery_height <= depth + 1.0e-12,
-                            "box battery height_m must keep the battery inside the box depth");
-                    const int battery_nx = bj.value("nx", nx);
-                    const int battery_ny = bj.value("ny", ny);
-                    const double battery_bin_x =
-                        (2.0 * battery_hw) / static_cast<double>(battery_nx);
-                    const double battery_bin_y =
-                        (2.0 * battery_hh) / static_cast<double>(battery_ny);
-                    const double battery_bin = 0.5 * (battery_bin_x + battery_bin_y);
-                    const int battery_height_bins =
-                        std::max(1, static_cast<int>(std::lround(battery_height / battery_bin)));
-
-                    auto& battery = recv->add_face("battery_top", battery_hw, battery_hh,
-                                                   battery_nx, battery_ny,
-                                                   scene::ReceiverFaceMode::RecordAbsorb);
-                    battery.surface()->set_material(absorber_ptr);
-                    battery.set_transform(
-                        frame_transform({0.0, 0.0, -top_depth}, {1.0, 0.0, 0.0},
-                                        {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}));
-
-                    const double side_z = -(top_depth + battery_height * 0.5);
-                    auto& battery_north =
-                        recv->add_face("battery_north_wall", battery_hw, battery_height * 0.5,
-                                       battery_nx, battery_height_bins,
-                                       scene::ReceiverFaceMode::RecordAbsorb);
-                    battery_north.surface()->set_material(absorber_ptr);
-                    battery_north.set_transform(
-                        frame_transform({0.0, battery_hh, side_z}, {1.0, 0.0, 0.0},
-                                        {0.0, 0.0, -1.0}, {0.0, 1.0, 0.0}));
-
-                    auto& battery_south =
-                        recv->add_face("battery_south_wall", battery_hw, battery_height * 0.5,
-                                       battery_nx, battery_height_bins,
-                                       scene::ReceiverFaceMode::RecordAbsorb);
-                    battery_south.surface()->set_material(absorber_ptr);
-                    battery_south.set_transform(
-                        frame_transform({0.0, -battery_hh, side_z}, {1.0, 0.0, 0.0},
-                                        {0.0, 0.0, -1.0}, {0.0, -1.0, 0.0}));
-
-                    auto& battery_east =
-                        recv->add_face("battery_east_wall", battery_height * 0.5, battery_hh,
-                                       battery_height_bins, battery_ny,
-                                       scene::ReceiverFaceMode::RecordAbsorb);
-                    battery_east.surface()->set_material(absorber_ptr);
-                    battery_east.set_transform(
-                        frame_transform({battery_hw, 0.0, side_z}, {0.0, 0.0, -1.0},
-                                        {0.0, 1.0, 0.0}, {1.0, 0.0, 0.0}));
-
-                    auto& battery_west =
-                        recv->add_face("battery_west_wall", battery_height * 0.5, battery_hh,
-                                       battery_height_bins, battery_ny,
-                                       scene::ReceiverFaceMode::RecordAbsorb);
-                    battery_west.surface()->set_material(absorber_ptr);
-                    battery_west.set_transform(
-                        frame_transform({-battery_hw, 0.0, side_z}, {0.0, 0.0, -1.0},
-                                        {0.0, 1.0, 0.0}, {-1.0, 0.0, 0.0}));
-                }
-            }
-
-            auto top_mode = rj.value("top_mode", std::string("record_pass"));
-            if (top_mode != "record_pass")
-                throw std::runtime_error("SceneLoader: box receiver only supports top_mode='record_pass'");
-
-            auto base = core::Transform{};
-            if (rj.contains("transform"))
-                base = parse_transform(rj["transform"]);
-            for (auto& face : recv->mutable_faces()) {
-                const auto local = face->surface()->transform();
-                face->set_transform(base.compose(local));
-            }
-            scene->set_receiver(std::move(recv));
-        } else {
-        int nx = 64, ny = 64;
-        if (rj.contains("grid")) {
-            nx = rj["grid"].value("nx", nx);
-            ny = rj["grid"].value("ny", ny);
-        }
-        double hw = 0.05, hh = 0.05;
-        if (rj.contains("surface")) {
-            hw = rj["surface"].value("half_width",  hw);
-            hh = rj["surface"].value("half_height", hh);
-        }
-        auto recv = std::make_unique<scene::Receiver>(hw, hh, nx, ny);
-
-        // Dedicated absorber for the receiver plane.
-        auto absorber = std::make_unique<materials::Absorber>();
-        recv->surface()->set_material(absorber.get());
-        scene->add_material(std::move(absorber));
-
-        if (rj.contains("transform"))
-            recv->set_transform(parse_transform(rj["transform"]));
-        scene->set_receiver(std::move(recv));
-        }
-    }
-
-    // ---- Trace config -----------------------------------------------------
-    tracer::TraceConfig cfg;
-    if (root.contains("trace")) {
-        const json& tj = root["trace"];
-        if (tj.contains("n_primary_rays"))
-            cfg.n_primary_rays = tj["n_primary_rays"].get<std::size_t>();
-        if (tj.contains("max_bounces"))
-            cfg.max_bounces = tj["max_bounces"].get<int>();
-        if (tj.contains("power_cutoff_w"))
-            cfg.power_cutoff_w = tj["power_cutoff_w"].get<double>();
-        if (tj.contains("rng_seed"))
-            cfg.rng_seed = tj["rng_seed"].get<std::uint64_t>();
-        if (tj.contains("record_paths"))
-            cfg.record_paths = tj["record_paths"].get<bool>();
-        if (tj.contains("max_paths_to_record"))
-            cfg.max_paths_to_record = tj["max_paths_to_record"].get<std::size_t>();
-    }
-
-    scene->build_acceleration_structure();
-
-    return {std::move(scene), cfg};
+    return build_scene(parse_document(root), path.parent_path());
 }
 
 } // namespace scrt::io

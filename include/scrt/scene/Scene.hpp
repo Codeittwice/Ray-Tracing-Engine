@@ -7,7 +7,9 @@
 #include "scrt/scene/Receiver.hpp"
 #include "scrt/sources/SunSource.hpp"
 #include "scrt/surfaces/Surface.hpp"
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -20,8 +22,24 @@ public:
     /// Takes ownership of a material; returns its index.
     std::size_t add_material(std::unique_ptr<materials::Material> m);
 
-    /// Takes ownership of a surface; returns its index.
-    std::size_t add_surface(std::unique_ptr<surfaces::Surface> s);
+    /// Takes ownership of a surface, assigns it a stable non-zero id, and returns that id.
+    std::uint64_t add_surface(std::unique_ptr<surfaces::Surface> s);
+
+    /// Removes the surface with the given id, if present; marks the acceleration structure dirty.
+    bool remove_surface(std::uint64_t id);
+
+    /// Finds a surface by its stable id, or nullptr if not present.
+    surfaces::Surface* surface_by_id(std::uint64_t id);
+    /// Finds a surface by its stable id, or nullptr if not present.
+    const surfaces::Surface* surface_by_id(std::uint64_t id) const;
+
+    /// Finds the current index of a surface by its stable id, or nullopt if not present.
+    std::optional<std::size_t> index_of(std::uint64_t id) const;
+
+    /// Marks the acceleration structure stale; forces Scene::intersect to fall back to a linear scan.
+    void mark_acceleration_dirty() { accel_dirty_ = true; }
+    /// True when the acceleration structure no longer reflects surfaces_.
+    bool acceleration_dirty() const { return accel_dirty_; }
 
     void set_receiver(std::unique_ptr<Receiver> r);
     void set_sun(std::unique_ptr<sources::SunSource> s);
@@ -56,6 +74,8 @@ private:
     Aperture                                          aperture_;
     accel::BVH                                        bvh_;
     bool                                              use_bvh_ = false;
+    bool                                              accel_dirty_ = false;
+    std::uint64_t                                     next_surface_id_ = 1;
 };
 
 } // namespace scrt::scene
