@@ -14,6 +14,7 @@ find_package(fmt CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(doctest CONFIG REQUIRED)
 find_package(assimp CONFIG REQUIRED)
+find_package(nfd CONFIG REQUIRED)
 
 # ---------- Phase 6: Polyscope (FetchContent — not in vcpkg registry) ----------
 include(FetchContent)
@@ -186,8 +187,9 @@ add_library(scrt_viz STATIC
     src/viz/panels/SunPanel.cpp
     src/viz/panels/TracePanel.cpp
     src/viz/panels/ImportPanel.cpp
+    src/viz/panels/SavePanel.cpp
 )
-target_link_libraries(scrt_viz PUBLIC scrt_core polyscope implot_lib imguizmo_lib)
+target_link_libraries(scrt_viz PUBLIC scrt_core polyscope implot_lib imguizmo_lib nfd::nfd)
 set_project_warnings(scrt_viz)
 
 # ---------- scrt_app (desktop entry point) ----------
