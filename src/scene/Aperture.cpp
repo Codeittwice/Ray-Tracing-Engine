@@ -2,6 +2,8 @@
 #include "scrt/math/Constants.hpp"
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
+#include <string>
 
 namespace scrt::scene {
 
@@ -20,6 +22,34 @@ double Aperture::cosine_to(math::vec3 to_sun) const {
 }
 
 Aperture Aperture::auto_fit(const core::AABB& bounds, math::vec3 to_sun, double margin) {
+    // ---- Reject the inputs that used to produce a silently wrong disk -------------
+    if (!std::isfinite(margin) || margin < 0.0)
+        throw std::invalid_argument(
+            "Aperture::auto_fit: margin must be finite and >= 0 (got " +
+            std::to_string(margin) + "); a negative margin shrinks the disk inside the "
+            "bounds it must cover");
+
+    const math::vec3 extent = bounds.max() - bounds.min();
+    for (int i = 0; i < 3; ++i) {
+        if (!std::isfinite(extent[i]) || extent[i] < 0.0)
+            throw std::invalid_argument(
+                "Aperture::auto_fit: bounds are inside-out or unbounded — a "
+                "default-constructed AABB that nothing expanded gives an infinite radius");
+    }
+
+    if (glm::dot(to_sun, to_sun) <= 0.0)
+        throw std::invalid_argument("Aperture::auto_fit: to_sun is zero-length");
+
+    // +Z is the zenith throughout, so a to_sun with a negative z component is a sun that
+    // has set. Fitting to it puts the disk below the geometry and lights the cooker from
+    // underground, which reads as a perfectly ordinary result downstream. Refuse instead.
+    if (to_sun.z < 0.0)
+        throw std::invalid_argument(
+            "Aperture::auto_fit: the sun is below the horizon (elevation < 0), so there is "
+            "no daylight to collect; raise the sun elevation or use a fixed aperture");
+
+    // glm::normalize, not math::safe_normalize: the two round differently (v * (1/|v|)
+    // versus v / |v|), and the fitted axis feeds ray sampling. Keep the existing arithmetic.
     const math::vec3 axis = glm::normalize(to_sun);
     // Half the box diagonal bounds the distance from the centroid to any corner, so a
     // disk of that radius placed on the far side of the box always covers its shadow.

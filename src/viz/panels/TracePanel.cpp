@@ -1,5 +1,7 @@
 #include "scrt/viz/Panels.hpp"
 
+#include <cstdio>
+
 #include "imgui.h"
 
 namespace scrt::viz {
@@ -24,12 +26,35 @@ void draw_trace_panel(PanelContext& ctx) {
         if (ctx.need_retrace && *ctx.need_retrace)
             ImGui::TextColored({1, 0.6f, 0, 1}, "Parameters changed");
 
+        // Both launch buttons are dead while a trace runs: the worker reads the scene without
+        // a lock, and a second run would race the first for it.
+        ImGui::BeginDisabled(ctx.trace_running);
         if (ImGui::Button("Preview (10k rays)")) {
             if (ctx.run_trace) ctx.run_trace(10'000);
         }
         ImGui::SameLine();
         if (ImGui::Button("Full Trace")) {
             if (ctx.run_trace) ctx.run_trace(ctx.cfg->n_primary_rays);
+        }
+        ImGui::EndDisabled();
+
+        // ---- progress + cancel (only while a worker is running) --
+        if (ctx.trace_running) {
+            const float frac =
+                ctx.trace_rays_total > 0
+                    ? static_cast<float>(static_cast<double>(ctx.trace_rays_done) /
+                                         static_cast<double>(ctx.trace_rays_total))
+                    : 0.0f;
+            char overlay[64];
+            std::snprintf(overlay, sizeof(overlay), "%llu / %llu rays",
+                          static_cast<unsigned long long>(ctx.trace_rays_done),
+                          static_cast<unsigned long long>(ctx.trace_rays_total));
+            ImGui::ProgressBar(frac < 0.f ? 0.f : (frac > 1.f ? 1.f : frac), ImVec2(-1, 0),
+                               overlay);
+            if (ImGui::Button("Cancel", ImVec2(-1, 0))) {
+                if (ctx.cancel_trace) ctx.cancel_trace();
+            }
+            ImGui::TextDisabled("Tracing… the scene is locked until this finishes.");
         }
     }
 

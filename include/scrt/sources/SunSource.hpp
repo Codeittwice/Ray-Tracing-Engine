@@ -2,6 +2,7 @@
 #include "scrt/core/Ray.hpp"
 #include "scrt/math/Rng.hpp"
 #include "scrt/math/Vec.hpp"
+#include <stdexcept>
 
 namespace scrt::scene { struct Aperture; }
 
@@ -40,19 +41,53 @@ public:
     static constexpr double POLE_HORIZONTAL_EPS = 1e-12;
 
     /// Propagation direction (away from the sun) for the given horizon angles.
+    ///
+    /// Deliberately total: it maps a below-horizon elevation to the upward-travelling
+    /// direction that elevation really names, so angles_from_direction can round-trip it.
+    /// Use below_horizon() to decide whether such a sun should be simulated at all.
     static math::vec3 direction_from_angles(SunAngles a);
 
     /// Horizon angles for a propagation direction; returns fallback azimuth at the pole.
+    ///
+    /// Throws std::invalid_argument on a zero-length direction, which names no sun at all;
+    /// the previous glm::normalize path returned a silent NaN pair instead.
     static SunAngles angles_from_direction(math::vec3 propagation_dir,
                                            double fallback_azimuth_deg = 180.0);
 
-    void set_sun_direction(math::vec3 d) { sun_direction_ = glm::normalize(d); }
+    /// True when these angles put the sun under the horizon (elevation below 0 degrees).
+    static bool below_horizon(SunAngles a) { return a.elevation_deg < 0.0; }
+
+    /// True when this propagation direction carries light upward, i.e. from below ground.
+    ///
+    /// +Z is the zenith, and sun_direction_ is where the light travels, so a strictly
+    /// positive z component is exactly a negative solar elevation. Exact comparison, not
+    /// an epsilon: elevation 0 yields z == -0.0, which is not > 0.
+    static bool below_horizon(math::vec3 propagation_dir) { return propagation_dir.z > 0.0; }
+
+    /// True when this source's sun currently sits under the horizon (yields no daylight).
+    bool sun_below_horizon() const { return below_horizon(sun_direction_); }
+
+    /// Point the sun by propagation direction; throws std::invalid_argument on a zero vector.
+    void set_sun_direction(math::vec3 d) {
+        if (glm::dot(d, d) <= 0.0)
+            throw std::invalid_argument(
+                "SunSource::set_sun_direction: zero-length direction names no sun");
+        sun_direction_ = math::safe_normalize(d);
+    }
+
+    /// Unit vector along which sunlight travels (from the sun toward the scene).
     math::vec3 sun_direction() const { return sun_direction_; }
 
     /// Unit vector from the scene toward the sun (opposite the propagation direction).
     math::vec3 to_sun() const { return -sun_direction_; }
 
     /// Set the sun position from horizon angles.
+    ///
+    /// Accepts a below-horizon elevation rather than throwing, because a scene may be
+    /// mid-edit and because the geometry is still well defined; callers that will act on
+    /// the result (trace, auto-fit an aperture, draw a sun widget) must check
+    /// sun_below_horizon() and tell the user. scene::Aperture::auto_fit rejects such a sun
+    /// outright, since fitting to it silently buries the aperture under the cooker.
     void set_sun_angles(SunAngles a) { sun_direction_ = direction_from_angles(a); }
 
     /// Current sun position in horizon angles.
@@ -60,7 +95,10 @@ public:
         return angles_from_direction(sun_direction_, fallback_azimuth_deg);
     }
 
+    /// Set the direct normal irradiance carried by the beam [W/m^2].
     void set_dni(double dni_wm2) { dni_ = dni_wm2; }
+
+    /// Direct normal irradiance carried by the beam [W/m^2].
     double dni() const { return dni_; }
 
 protected:

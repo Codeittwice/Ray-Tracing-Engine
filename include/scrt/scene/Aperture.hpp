@@ -10,8 +10,16 @@ namespace scrt::scene {
 /// Single shared definition of the reference-axis heuristic that Aperture::tangent_frame,
 /// Pillbox::sample_ray and Buie::sample_ray each used to carry their own copy of. The
 /// |n.x| < 0.9 pick guarantees `ref` is never near-parallel to n, so the cross product is
-/// well conditioned. Keep the arithmetic below byte-identical: sampled ray sequences (and
-/// therefore the golden flux baselines) depend on it.
+/// well conditioned.
+///
+/// NOT byte-identical to the three copies it replaced, contrary to what this comment used
+/// to claim: those received an already-unit normal and used it as-is, whereas the
+/// glm::normalize below re-normalizes it. Re-normalizing a unit vector is not the identity
+/// in floating point — for roughly one direction in seven the result differs in the last
+/// bit, which perturbs u and v and therefore the sampled ray sequence. It is inert today
+/// only because every bundled scene has direction exactly (0, 0, -1), where 1/sqrt(1) is
+/// exact and the two frames agree bit for bit. Change the arithmetic below only with fresh
+/// golden flux baselines in hand: off-axis suns will move.
 inline void orthonormal_frame(math::vec3 n, math::vec3& u, math::vec3& v) {
     n = glm::normalize(n);
     const math::vec3 ref = (std::abs(n.x) < 0.9) ? math::vec3{1.0, 0.0, 0.0}
@@ -43,6 +51,15 @@ struct Aperture {
     double cosine_to(math::vec3 to_sun) const;
 
     /// Disk facing to_sun, pushed clear of bounds and sized to enclose their projection.
+    ///
+    /// Throws std::invalid_argument rather than returning a nonsense disk when
+    ///   - `margin` is negative or not finite (a negative margin shrinks the disk below the
+    ///     bounds it is supposed to cover, so covers() would fail on its own output),
+    ///   - `bounds` is inside-out or unbounded, as a default-constructed core::AABB is
+    ///     (min = +DBL_MAX, max = -DBL_MAX gives radius +inf and an infinite centre), or
+    ///   - `to_sun` is zero-length, or points below the horizon (+Z is the zenith). A
+    ///     below-horizon sun would place the disk *underneath* the cooker and light it
+    ///     from underground, producing plausible-looking power out of a sun that has set.
     static Aperture auto_fit(const core::AABB& bounds, math::vec3 to_sun, double margin);
 
     /// True when every corner of bounds lies behind this disk and inside its projection.

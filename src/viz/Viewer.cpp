@@ -13,7 +13,8 @@
 #include <string>
 #include <vector>
 
-#include "imgui.h"
+#include "imgui.h"       // must precede ImGuizmo.h: ImGuizmo.h declares against ImGui types
+#include "ImGuizmo.h"    // NOLINT(build/include_order)
 #include "implot.h"
 #include "polyscope/polyscope.h"
 #include "polyscope/surface_mesh.h"
@@ -80,9 +81,18 @@ void register_receiver_face_flux(const scene::ReceiverFace& face,
 
 } // namespace
 
+// ---- lifetime ----------------------------------------------------------------
+
+Viewer::~Viewer() {
+    // The worker holds a raw pointer into the scene, which the members below are about to
+    // destroy. Joining here is the only thing standing between that and a use-after-free.
+    cancel_and_join_trace();
+}
+
 // ---- set_scene ---------------------------------------------------------------
 
 void Viewer::set_scene(scene::Scene* s) {
+    cancel_and_join_trace();  // no worker may survive the scene it is reading
     scene_ = s;
     if (s && s->receiver()) {
         auto& ra = s->receiver()->accumulator();
@@ -127,6 +137,9 @@ void Viewer::load_from_file(const std::filesystem::path& path) {
 // ---- load_scene_internal -----------------------------------------------------
 
 void Viewer::load_scene_internal(io::LoadedScene ls) {
+    // Nothing below may run while a worker is reading the scene we are about to replace.
+    cancel_and_join_trace();
+
     ls.scene->build_acceleration_structure();
     ls.cfg.record_paths        = true;
     ls.cfg.max_paths_to_record = 200;
@@ -145,7 +158,7 @@ void Viewer::load_scene_internal(io::LoadedScene ls) {
     cfg_ = loaded_cfg;
     init_surf_xforms();
     register_scene();
-    run_trace(10'000);
+    start_trace(10'000);
 }
 
 // ---- init_surf_xforms --------------------------------------------------------
@@ -161,41 +174,97 @@ void Viewer::init_surf_xforms() {
     need_rebuild_ = false;
 }
 
-// ---- run_trace ---------------------------------------------------------------
+// ---- start_trace / poll_trace / cancel_and_join_trace ------------------------
 
-void Viewer::run_trace(std::size_t n_rays) {
+void Viewer::start_trace(std::size_t n_rays) {
     if (!scene_) return;
     auto* recv = scene_->receiver();
     if (!recv) return;
+    // One trace at a time. The buttons are greyed out while one runs, but a stale callback
+    // or a scripted call must not be able to launch a second worker over the first.
+    if (trace_running_.load(std::memory_order_acquire)) return;
+    if (trace_thread_.joinable()) trace_thread_.join();
 
+    // The BVH rebuild is a scene mutation, so it happens here on the GUI thread, before the
+    // worker exists — never concurrently with it.
     if (need_rebuild_) {
         scene_->build_acceleration_structure();
         need_rebuild_ = false;
     }
 
-    // Fresh accumulator (zeroed) for this run
-    auto& ra = recv->accumulator();
-    acc_     = std::make_unique<tracer::FluxAccumulator>(
-        ra.half_width(), ra.half_height(), ra.nx(), ra.ny());
-
     cfg_.n_primary_rays = n_rays;
 
-    tracer::Tracer tracer(*scene_);
-    if (recv->is_multi_face()) {
-        result_ = tracer.run(cfg_);
-        acc_ = std::make_unique<tracer::FluxAccumulator>(recv->accumulator());
-    } else {
-        result_ = tracer.run(cfg_, *acc_);
-    }
-    traced_       = true;
-    need_retrace_ = false;
+    // Everything the worker needs is snapshotted now: the config by value, the accumulator
+    // freshly allocated and moved in. After launch the worker reads no Viewer member except
+    // trace_ctl_ (atomics) and writes only pending_*.
+    const tracer::TraceConfig cfg   = cfg_;
+    const bool                multi = recv->is_multi_face();
+    const auto&               ra    = recv->accumulator();
+    auto work_acc = std::make_unique<tracer::FluxAccumulator>(
+        ra.half_width(), ra.half_height(), ra.nx(), ra.ny());
 
-    update_receiver_flux();
+    pending_result_ = {};
+    pending_acc_.reset();
+    trace_ctl_.reset(n_rays);
+    trace_done_.store(false, std::memory_order_relaxed);
+    trace_running_.store(true, std::memory_order_release);
 
-    if (!result_.sampled_paths.empty()) {
-        RayRenderer renderer(scene_);
-        renderer.register_paths(result_);
+    scene::Scene* sc = scene_;
+    trace_thread_ = std::jthread(
+        [this, sc, cfg, multi, acc = std::move(work_acc)]() mutable {
+            tracer::Tracer tr(*sc);
+            tracer::TraceResult r = multi ? tr.run(cfg, &trace_ctl_)
+                                          : tr.run(cfg, *acc, &trace_ctl_);
+            // The multi-face run deposits into the scene receiver's own faces; copy the
+            // summary grid out so the GUI never reads live scene state.
+            if (multi && !r.cancelled && sc->receiver())
+                acc = std::make_unique<tracer::FluxAccumulator>(sc->receiver()->accumulator());
+
+            pending_result_ = std::move(r);
+            pending_acc_    = std::move(acc);
+            // Release store: every write above happens-before the GUI's acquire load below.
+            trace_done_.store(true, std::memory_order_release);
+        });
+}
+
+void Viewer::poll_trace() {
+    if (!trace_done_.load(std::memory_order_acquire)) return;
+
+    // Join before touching pending_*: the join is a second, unconditional happens-before
+    // edge, so the GUI cannot observe a half-written result even if the flag were reordered.
+    if (trace_thread_.joinable()) trace_thread_.join();
+    trace_done_.store(false, std::memory_order_relaxed);
+    trace_running_.store(false, std::memory_order_release);
+
+    // A cancelled run holds a partial sum, so it is dropped and the previous result stays on
+    // screen; only a completed run is published.
+    if (!pending_result_.cancelled) {
+        result_ = std::move(pending_result_);
+        if (pending_acc_) acc_ = std::move(pending_acc_);
+        traced_       = true;
+        need_retrace_ = false;
+
+        update_receiver_flux();
+
+        if (!result_.sampled_paths.empty()) {
+            RayRenderer renderer(scene_);
+            renderer.register_paths(result_);
+        }
     }
+
+    pending_result_ = {};
+    pending_acc_.reset();
+}
+
+void Viewer::cancel_and_join_trace() {
+    if (trace_thread_.joinable()) {
+        trace_ctl_.request_cancel();
+        trace_thread_.join();
+    }
+    trace_running_.store(false, std::memory_order_release);
+    trace_done_.store(false, std::memory_order_relaxed);
+    pending_result_ = {};
+    pending_acc_.reset();
 }
 
 // ---- register_scene ----------------------------------------------------------
@@ -246,7 +315,14 @@ PanelContext Viewer::make_panel_context() {
     ctx.selected_id          = &selected_id_;
 
     ctx.load_scene           = [this](const std::filesystem::path& path) { load_from_file(path); };
-    ctx.run_trace             = [this](std::size_t n) { run_trace(n); };
+    ctx.run_trace             = [this](std::size_t n) { start_trace(n); };
+
+    // Trace progress is read from the control's atomics, so the panel can poll it every
+    // frame while the worker is mid-run.
+    ctx.trace_running        = trace_running_.load(std::memory_order_acquire);
+    ctx.trace_rays_done      = ctx.trace_running ? trace_ctl_.rays_done()  : 0;
+    ctx.trace_rays_total     = ctx.trace_running ? trace_ctl_.rays_total() : 0;
+    ctx.cancel_trace         = [this]() { trace_ctl_.request_cancel(); };
 
     // Import needs the scene's own directory so mesh paths stay relative to the file,
     // and a SceneEditor so a committed element reaches both document and live scene.
@@ -266,18 +342,36 @@ PanelContext Viewer::make_panel_context() {
 // ---- draw_gui ----------------------------------------------------------------
 
 void Viewer::draw_gui() {
+    // Pick up a finished worker before anything reads result_ or acc_ this frame.
+    poll_trace();
+
     ImGui::SetNextWindowSize(ImVec2(300, 720), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
     ImGui::Begin("Solar Cooker RT");
 
     PanelContext ctx = make_panel_context();
-    draw_outliner_panel(ctx);
+    const bool   busy = ctx.trace_running;
+
+    // The worker reads the scene without a lock, so for as long as it runs the scene must be
+    // immutable. Every control that can mutate it is greyed out here rather than in each
+    // panel: one gate, and no panel can forget it. ImGuizmo is not an ImGui widget and
+    // ignores BeginDisabled, so it gets its own switch.
+    ImGuizmo::Enable(!busy);
+
+    draw_outliner_panel(ctx);   // selection and visibility only: no scene mutation
+
+    ImGui::BeginDisabled(busy);
     draw_scene_browser_panel(ctx);
     draw_transform_panel(ctx);
     draw_materials_panel(ctx);
     draw_sun_panel(ctx);
-    draw_trace_panel(ctx);
+    ImGui::EndDisabled();
+
+    draw_trace_panel(ctx);      // owns the Cancel button, so it must stay live
+
+    ImGui::BeginDisabled(busy);
     draw_import_panel(ctx);
+    ImGui::EndDisabled();
 
     ImGui::End();
 
@@ -298,20 +392,25 @@ void Viewer::run() {
     polyscope::init();
     ImPlot::CreateContext();
 
+    // set_loaded_scene() may already have started a preview; this one supersedes it.
+    cancel_and_join_trace();
+
     init_surf_xforms();
     register_scene();
 
-    // Quick preview
-    auto prev_cfg                = cfg_;
-    prev_cfg.n_primary_rays      = 10'000;
-    prev_cfg.record_paths        = true;
-    prev_cfg.max_paths_to_record = 200;
-    cfg_                         = prev_cfg;
-    run_trace(10'000);
-    cfg_                         = prev_cfg;
+    // Quick preview. It goes through the same worker as every other trace: the window opens
+    // immediately and the preview lands on a later frame, which matters because a heavy mesh
+    // scene's 10k rays are not always cheap, and because one launch path is one race to
+    // reason about instead of two.
+    cfg_.record_paths        = true;
+    cfg_.max_paths_to_record = 200;
+    start_trace(10'000);
 
     polyscope::state::userCallback = [this]() { draw_gui(); };
     polyscope::show();
+
+    // The window is gone; the worker must not outlive it.
+    cancel_and_join_trace();
 
     ImPlot::DestroyContext();
 }

@@ -1,6 +1,7 @@
 #include "scrt/sources/SunSource.hpp"
 #include "scrt/math/Constants.hpp"
 #include <cmath>
+#include <stdexcept>
 
 namespace scrt::sources {
 
@@ -24,8 +25,16 @@ math::vec3 SunSource::direction_from_angles(SunAngles a) {
 
 SunAngles SunSource::angles_from_direction(math::vec3 propagation_dir,
                                            double fallback_azimuth_deg) {
+    // A zero vector points nowhere, so there are no angles to report. glm::normalize used
+    // to divide by zero here and hand back a NaN azimuth and elevation, which then spread
+    // silently into the scene document, the sun widget and any saved JSON. Reject instead,
+    // and normalize through math::safe_normalize once the length is known to be non-zero.
+    if (glm::dot(propagation_dir, propagation_dir) <= 0.0)
+        throw std::invalid_argument(
+            "SunSource::angles_from_direction: zero-length direction has no horizon angles");
+
     // sun_direction_ is where light travels; the sun itself sits the other way.
-    const math::vec3 to_sun = -glm::normalize(propagation_dir);
+    const math::vec3 to_sun = -math::safe_normalize(propagation_dir);
     const double     horiz  = std::hypot(to_sun.x, to_sun.y);
 
     SunAngles a;

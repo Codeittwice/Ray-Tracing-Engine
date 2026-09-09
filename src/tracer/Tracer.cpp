@@ -108,7 +108,7 @@ void Tracer::trace_one(core::Ray r, scene::Receiver& receiver, math::Rng& rng,
     }
 }
 
-TraceResult Tracer::run(const TraceConfig& cfg) const {
+TraceResult Tracer::run(const TraceConfig& cfg, TraceControl* ctl) const {
     auto* scene_receiver = const_cast<scene::Receiver*>(scene_->receiver());
     if (!scene_receiver)
         return {};
@@ -144,6 +144,11 @@ TraceResult Tracer::run(const TraceConfig& cfg) const {
     TraceResult result;
     result.primary_rays_traced = cfg.n_primary_rays;
 
+    // Rays between cancel checks. Hoisted out of the slot loop so the uncontrolled path
+    // never touches the control at all.
+    const std::size_t check_interval = ctl && ctl->check_interval > 0 ? ctl->check_interval : 4096;
+    std::size_t       rays_traced    = 0;
+
     std::mutex path_mutex;
 
     std::for_each(std::execution::par, slots.begin(), slots.end(),
@@ -164,7 +169,18 @@ TraceResult Tracer::run(const TraceConfig& cfg) const {
         scene::Receiver& slot_receiver = slot_receivers[static_cast<std::size_t>(slot)];
         std::size_t hits = 0;
 
+        std::size_t traced           = 0;    ///< Rays this slot actually traced.
+        std::size_t since_last_check = 0;    ///< Rays traced since progress was last published.
+        bool        check_due        = true; ///< Poll before the first ray, so a pre-cancelled run does nothing.
+
         for (std::size_t i = 0; i < slot_rays; ++i) {
+            if (ctl && check_due) {
+                ctl->add_done(since_last_check);
+                since_last_check = 0;
+                if (ctl->should_stop()) break;
+                check_due = false;
+            }
+
             std::vector<math::vec3>* path_ptr = nullptr;
             std::vector<math::vec3> path_buf;
 
@@ -188,18 +204,30 @@ TraceResult Tracer::run(const TraceConfig& cfg) const {
                 if (result.sampled_paths.size() < cfg.max_paths_to_record)
                     result.sampled_paths.push_back(std::move(path_buf));
             }
+
+            ++traced;
+            if (ctl && ++since_last_check >= check_interval) check_due = true;
         }
+
+        if (ctl) ctl->add_done(since_last_check);
 
         {
             std::lock_guard<std::mutex> lk(path_mutex);
             result.total_hits += hits;
+            rays_traced       += traced;
         }
     });
 
     for (auto& receiver : slot_receivers)
         scene_receiver->merge_from(receiver);
 
+    // Normalisation stays tied to the *requested* count: each ray already carries
+    // total_power / n_primary_rays, so a cancelled run is a correctly weighted partial sum,
+    // not a rescaled one. With no cancellation rays_traced == cfg.n_primary_rays exactly.
     scene_receiver->finalize(cfg.n_primary_rays);
+
+    result.primary_rays_traced = rays_traced;
+    result.cancelled           = ctl && ctl->cancel_requested();
 
     auto t1 = std::chrono::steady_clock::now();
     result.wall_time_s = std::chrono::duration<double>(t1 - t0).count();
@@ -207,7 +235,7 @@ TraceResult Tracer::run(const TraceConfig& cfg) const {
     return result;
 }
 
-TraceResult Tracer::run(const TraceConfig& cfg, FluxAccumulator& acc) const {
+TraceResult Tracer::run(const TraceConfig& cfg, FluxAccumulator& acc, TraceControl* ctl) const {
     auto t0 = std::chrono::steady_clock::now();
 
     const auto& sun = *scene_->sun();
@@ -239,6 +267,11 @@ TraceResult Tracer::run(const TraceConfig& cfg, FluxAccumulator& acc) const {
     TraceResult result;
     result.primary_rays_traced = cfg.n_primary_rays;
 
+    // Rays between cancel checks. Hoisted out of the slot loop so the uncontrolled path
+    // never touches the control at all.
+    const std::size_t check_interval = ctl && ctl->check_interval > 0 ? ctl->check_interval : 4096;
+    std::size_t       rays_traced    = 0;
+
     std::mutex path_mutex;
 
     std::for_each(std::execution::par, slots.begin(), slots.end(),
@@ -260,7 +293,18 @@ TraceResult Tracer::run(const TraceConfig& cfg, FluxAccumulator& acc) const {
         FluxAccumulator& slot_acc = slot_accs[static_cast<std::size_t>(slot)];
         std::size_t hits = 0;
 
+        std::size_t traced           = 0;    ///< Rays this slot actually traced.
+        std::size_t since_last_check = 0;    ///< Rays traced since progress was last published.
+        bool        check_due        = true; ///< Poll before the first ray, so a pre-cancelled run does nothing.
+
         for (std::size_t i = 0; i < slot_rays; ++i) {
+            if (ctl && check_due) {
+                ctl->add_done(since_last_check);
+                since_last_check = 0;
+                if (ctl->should_stop()) break;
+                check_due = false;
+            }
+
             std::vector<math::vec3>* path_ptr = nullptr;
             std::vector<math::vec3> path_buf;
 
@@ -285,12 +329,18 @@ TraceResult Tracer::run(const TraceConfig& cfg, FluxAccumulator& acc) const {
                 if (result.sampled_paths.size() < cfg.max_paths_to_record)
                     result.sampled_paths.push_back(std::move(path_buf));
             }
+
+            ++traced;
+            if (ctl && ++since_last_check >= check_interval) check_due = true;
         }
+
+        if (ctl) ctl->add_done(since_last_check);
 
         // Atomically accumulate hit count
         {
             std::lock_guard<std::mutex> lk(path_mutex);
             result.total_hits += hits;
+            rays_traced       += traced;
         }
     });
 
@@ -298,7 +348,13 @@ TraceResult Tracer::run(const TraceConfig& cfg, FluxAccumulator& acc) const {
     for (auto& sa : slot_accs)
         acc.merge_from(sa);
 
+    // Normalisation stays tied to the *requested* count: each ray already carries
+    // total_power / n_primary_rays, so a cancelled run is a correctly weighted partial sum,
+    // not a rescaled one. With no cancellation rays_traced == cfg.n_primary_rays exactly.
     acc.finalize(cfg.n_primary_rays);
+
+    result.primary_rays_traced = rays_traced;
+    result.cancelled           = ctl && ctl->cancel_requested();
 
     auto t1 = std::chrono::steady_clock::now();
     result.wall_time_s = std::chrono::duration<double>(t1 - t0).count();

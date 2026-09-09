@@ -6,10 +6,12 @@
 #include "scrt/tracer/FluxAccumulator.hpp"
 #include "scrt/tracer/Tracer.hpp"
 #include "scrt/viz/Panels.hpp"
+#include <atomic>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -19,7 +21,11 @@ namespace scrt::viz {
 class Viewer {
 public:
     Viewer() = default;
-    ~Viewer() = default;
+    /// Cancels and joins any running trace before the scene it reads is destroyed.
+    ~Viewer();
+
+    Viewer(const Viewer&)            = delete;  ///< Holds a worker thread; not copyable.
+    Viewer& operator=(const Viewer&) = delete;  ///< Holds a worker thread; not copyable.
 
     /// Set the scene to visualise (non-const for live material/transform editing).
     void set_scene(scene::Scene* s);
@@ -67,7 +73,25 @@ private:
     /// non-surface row) is selected. Owned here so selection survives across frames.
     std::uint64_t selected_id_ = 0;
 
-    void run_trace(std::size_t n_rays);
+    // ---- Async trace (Wave 5) --
+    // The worker owns nothing the GUI writes while it runs: it reads the scene (which every
+    // scene-mutating control is disabled for the duration) and writes only pending_*, which
+    // the GUI reads solely after joining the thread.
+
+    tracer::TraceControl                     trace_ctl_;      ///< Cancel flag + progress counters.
+    std::jthread                             trace_thread_;   ///< Worker running Tracer::run.
+    std::atomic<bool>                        trace_running_{false}; ///< True from launch to pickup.
+    std::atomic<bool>                        trace_done_{false};    ///< Worker finished; result waiting.
+    tracer::TraceResult                      pending_result_;       ///< Worker-written, GUI-read after join.
+    std::unique_ptr<tracer::FluxAccumulator> pending_acc_;          ///< Worker-written, GUI-read after join.
+
+    /// Launches a trace of `n_rays` on the worker thread; a no-op while one already runs.
+    void start_trace(std::size_t n_rays);
+    /// GUI-thread poll: joins a finished worker and publishes its result. Called once per frame.
+    void poll_trace();
+    /// Cancels any running trace and joins the worker; safe to call when idle.
+    void cancel_and_join_trace();
+
     void register_scene();
     void update_receiver_flux();
     void draw_gui();
