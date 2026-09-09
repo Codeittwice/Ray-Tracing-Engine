@@ -284,8 +284,12 @@ SceneDocument parse_document(const json& root, bool strict) {
             // they are never stale relative to it.
             math::vec3 d = read_vec3(sj, "direction");
             sun.direction = d;
-            sources::SunAngles angles =
-                sources::SunSource::angles_from_direction(math::safe_normalize(d));
+            // Azimuth is degenerate at the pole, so pass any authored azimuth_deg as the
+            // fallback. Without it a zenith sun round-trips to the default 180 and a
+            // user's authored azimuth is silently lost on save/reload.
+            const double fallback_az = sj.value("azimuth_deg", sun.azimuth_deg);
+            sources::SunAngles angles = sources::SunSource::angles_from_direction(
+                math::safe_normalize(d), fallback_az);
             sun.azimuth_deg = angles.azimuth_deg;
             sun.elevation_deg = angles.elevation_deg;
         } else {
