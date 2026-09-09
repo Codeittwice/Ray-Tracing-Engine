@@ -93,6 +93,11 @@ void Viewer::set_scene(scene::Scene* s) {
 
 // ---- set_examples_dir --------------------------------------------------------
 
+void Viewer::set_loaded_scene(io::LoadedScene ls, std::filesystem::path scene_dir) {
+    scene_dir_ = std::move(scene_dir);
+    load_scene_internal(std::move(ls));
+}
+
 void Viewer::set_examples_dir(std::filesystem::path dir) {
     examples_dir_ = std::move(dir);
     scan_examples_dir();
@@ -125,15 +130,19 @@ void Viewer::load_scene_internal(io::LoadedScene ls) {
     ls.scene->build_acceleration_structure();
     ls.cfg.record_paths        = true;
     ls.cfg.max_paths_to_record = 200;
-    owned_scene_ = std::make_unique<io::LoadedScene>(std::move(ls));
+    // The editor takes ownership of both the scene and the document it was built from,
+    // so every runtime mutation keeps the two in step. scene_ is a view into it.
+    const tracer::TraceConfig loaded_cfg = ls.cfg;
+    editor_ = std::make_unique<scene::SceneEditor>(std::move(ls), scene_dir_);
+    owned_scene_.reset();
 
     traced_       = false;
     need_retrace_ = false;
     need_rebuild_ = false;
 
     polyscope::removeAllStructures();
-    set_scene(owned_scene_->scene.get());
-    cfg_ = owned_scene_->cfg;
+    set_scene(&editor_->scene());
+    cfg_ = loaded_cfg;
     init_surf_xforms();
     register_scene();
     run_trace(10'000);
@@ -150,34 +159,6 @@ void Viewer::init_surf_xforms() {
         edits_[s->id()] = st;
     }
     need_rebuild_ = false;
-}
-
-// ---- apply_object_xform -------------------------------------------------------
-
-void Viewer::apply_object_xform(std::uint64_t id) {
-    if (!scene_) return;
-    auto it = edits_.find(id);
-    if (it == edits_.end()) return;
-    auto& st = it->second;
-
-    if (!scene_->surface_by_id(id)) return;
-
-    auto delta = core::Transform::from_translation(
-                     {static_cast<double>(st.trans[0]),
-                      static_cast<double>(st.trans[1]),
-                      static_cast<double>(st.trans[2])})
-                 .compose(core::Transform::from_euler_xyz(
-                     {static_cast<double>(st.rot_deg[0]) * math::DEG2RAD,
-                      static_cast<double>(st.rot_deg[1]) * math::DEG2RAD,
-                      static_cast<double>(st.rot_deg[2]) * math::DEG2RAD}));
-
-    // Placement-only edit: the tessellated vertices are unchanged, so RayRenderer writes
-    // the physics transform and the structure's display transform from this one matrix
-    // and re-uploads no geometry.
-    RayRenderer(scene_).set_surface_transform(id, delta.compose(st.base));
-
-    need_rebuild_ = true;
-    need_retrace_ = true;
 }
 
 // ---- run_trace ---------------------------------------------------------------
@@ -266,7 +247,18 @@ PanelContext Viewer::make_panel_context() {
 
     ctx.load_scene           = [this](const std::filesystem::path& path) { load_from_file(path); };
     ctx.run_trace             = [this](std::size_t n) { run_trace(n); };
-    ctx.apply_object_xform    = [this](std::uint64_t id) { apply_object_xform(id); };
+
+    // Import needs the scene's own directory so mesh paths stay relative to the file,
+    // and a SceneEditor so a committed element reaches both document and live scene.
+    ctx.scene_dir             = &scene_dir_;
+    if (editor_) {
+        ctx.add_element = [this](io::ElementDoc d) {
+            const std::uint64_t id = editor_->add_element(std::move(d));
+            need_rebuild_ = true;
+            need_retrace_ = true;
+            return id;
+        };
+    }
 
     return ctx;
 }
@@ -285,6 +277,7 @@ void Viewer::draw_gui() {
     draw_materials_panel(ctx);
     draw_sun_panel(ctx);
     draw_trace_panel(ctx);
+    draw_import_panel(ctx);
 
     ImGui::End();
 

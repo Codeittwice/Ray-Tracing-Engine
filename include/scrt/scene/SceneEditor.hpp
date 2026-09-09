@@ -56,19 +56,16 @@ namespace scrt::scene {
 ///     rebuild_element(id); until then the live surface lags the document.
 class SceneEditor {
 public:
-    /// Adopts an already-built scene that has no document behind it; doc() starts empty of
-    /// elements, so structure is only described for elements added through this editor
-    /// afterwards. Prefer the (SceneDocument, base_dir) overload, which builds the scene from
-    /// the document and is therefore in sync by construction.
-    explicit SceneEditor(io::LoadedScene loaded, std::filesystem::path base_dir);
+    /// Adopts a LoadedScene wholesale — scene, trace config and the io::SceneDocument the scene
+    /// was built from — so document and scene are in sync by construction. This is the entry
+    /// point for "the user opened a file": io::load_scene() returns exactly this. Throws
+    /// std::runtime_error when `loaded.scene` is null.
+    SceneEditor(io::LoadedScene loaded, std::filesystem::path base_dir);
 
-    /// Builds the live scene from `doc` (io::build_scene) and takes ownership of both, so the
-    /// document and the scene are in sync by construction. The primary entry point.
+    /// Builds the live scene from `doc` (io::build_scene) and takes ownership of both. The entry
+    /// point for a document that was synthesized rather than loaded (a new empty scene, an
+    /// AI-generated one). Throws std::runtime_error when the scene cannot be built.
     SceneEditor(io::SceneDocument doc, std::filesystem::path base_dir);
-
-    /// Adopts a scene the caller already built from `doc` via io::build_scene; the caller
-    /// asserts the two describe the same elements with the same ids.
-    SceneEditor(io::LoadedScene loaded, io::SceneDocument doc, std::filesystem::path base_dir);
 
     /// Appends `d` to the document with a freshly allocated id and derives its live surface;
     /// returns the new id. Throws std::runtime_error if the surface cannot be built (unknown

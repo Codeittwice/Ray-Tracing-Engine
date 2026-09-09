@@ -1,19 +1,22 @@
 #pragma once
 #include "scrt/core/Transform.hpp"
-#include "scrt/io/SceneLoader.hpp"
 #include "scrt/math/Vec.hpp"
+#include "scrt/scene/Scene.hpp"
 #include "scrt/tracer/Tracer.hpp"
 #include <cstdint>
 #include <filesystem>
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
 #include <variant>
 #include <vector>
 
-// LoadedScene is defined in SceneLoader.hpp, which does not include this header today, so a
-// direct include here is not circular. Included (rather than forward-declared) because
-// build_scene() returns LoadedScene by value.
+// LoadedScene lives at the BOTTOM of this header, next to build_scene() which produces it, and
+// SceneLoader.hpp includes this file rather than the reverse. It used to be the other way round,
+// but LoadedScene now carries a SceneDocument by value, so the type must be complete where
+// LoadedScene is defined; keeping the struct here is the only arrangement in which neither header
+// needs the other's contents before its own.
 
 namespace scrt::io {
 
@@ -251,8 +254,23 @@ SceneDocument parse_document(const nlohmann::json& root, bool strict = false);
 /// DECLARED ONLY, implemented in SceneDocument.cpp.
 nlohmann::json write_document(const SceneDocument& doc);
 
-/// Builds a fully-wired LoadedScene (scene graph + trace config) from a SceneDocument, resolving
-/// any relative mesh paths against `base_dir`. DECLARED ONLY, implemented in SceneDocument.cpp.
+/// Live scene, trace configuration, and the SceneDocument all three were derived from.
+///
+/// `doc` is what makes save-on-load possible: every producer of a LoadedScene (build_scene, and
+/// therefore load_scene) stores the document it built from, so a caller that loaded a file can
+/// later write_document()/save_scene() it without re-reading and re-parsing the original. It is
+/// the *authoritative* description of scene structure; `scene` is a derived view (see the sync
+/// discipline documented on scene::SceneEditor).
+struct LoadedScene {
+    std::unique_ptr<scene::Scene> scene;  ///< Fully wired scene graph; null only on a default-
+                                           ///< constructed LoadedScene.
+    tracer::TraceConfig           cfg;    ///< Trace configuration, a copy of `doc.trace`.
+    SceneDocument                 doc;    ///< The document `scene` was built from.
+};
+
+/// Builds a fully-wired LoadedScene (scene graph + trace config + a copy of `doc` itself) from a
+/// SceneDocument, resolving any relative mesh paths against `base_dir`. Implemented in
+/// SceneLoader.cpp.
 LoadedScene build_scene(const SceneDocument& doc, const std::filesystem::path& base_dir);
 
 /// Serializes doc via write_document() and writes the result to `path`. DECLARED ONLY,

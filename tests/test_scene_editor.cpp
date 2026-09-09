@@ -359,7 +359,10 @@ TEST_CASE("SceneEditor: adopting a document-built scene keeps loader ids as the 
     auto loaded = scrt::io::build_scene(doc, path.parent_path());
     const std::uint64_t first = doc.elements.front().id;
 
-    SceneEditor ed(std::move(loaded), doc, path.parent_path());
+    // The document travels inside the LoadedScene now, so no second argument is needed - and
+    // there is no way for the caller to hand over a document that disagrees with the scene.
+    CHECK(loaded.doc.elements.size() == doc.elements.size());
+    SceneEditor ed(std::move(loaded), path.parent_path());
     CHECK_FALSE(ed.dirty());
     REQUIRE(ed.scene().surface_by_id(first) != nullptr);
 

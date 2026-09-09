@@ -1,6 +1,7 @@
 #pragma once
 #include "scrt/core/Transform.hpp"
 #include "scrt/io/SceneLoader.hpp"
+#include "scrt/scene/SceneEditor.hpp"
 #include "scrt/scene/Scene.hpp"
 #include "scrt/tracer/FluxAccumulator.hpp"
 #include "scrt/tracer/Tracer.hpp"
@@ -29,6 +30,10 @@ public:
     /// Set directory to scan for example scene files (.json) shown in the browser.
     void set_examples_dir(std::filesystem::path dir);
 
+    /// Adopt a loaded scene and its document, so the viewer can mutate and save it.
+    /// Prefer this over set_scene(): it is what gives the viewer a SceneEditor.
+    void set_loaded_scene(io::LoadedScene ls, std::filesystem::path scene_dir);
+
     /// Run the viewer main loop (blocks until window closed).
     void run();
 
@@ -43,6 +48,10 @@ private:
 
     // Owned scene for scenes loaded via the browser
     std::unique_ptr<io::LoadedScene>         owned_scene_;
+
+    // Document-backed editor; non-null whenever the viewer owns its scene.
+    std::unique_ptr<scene::SceneEditor>      editor_;
+    std::filesystem::path                    scene_dir_;
 
     // Scene browser state
     std::filesystem::path              examples_dir_;
@@ -67,7 +76,6 @@ private:
     void load_from_file(const std::filesystem::path& path);
     void load_scene_internal(io::LoadedScene ls);
     void init_surf_xforms();
-    void apply_object_xform(std::uint64_t id);
 
     /// Builds the PanelContext used to dispatch to the GUI panel functions.
     PanelContext make_panel_context();

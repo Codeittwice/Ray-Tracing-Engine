@@ -37,8 +37,7 @@
 // NOTE ON SCOPE: this translation unit owns the *Scene-construction* half of scene loading -
 // build_scene() plus the thin load_scene() file wrapper. The JSON-reading half lives in
 // SceneDocument.cpp (parse_document / TransformDoc::to_transform) and serialization in
-// SceneWriter.cpp (write_document). The frozen SceneDocument.hpp Doxygen claims build_scene() is
-// implemented in SceneDocument.cpp; that comment is stale, the declaration itself is unchanged.
+// SceneWriter.cpp (write_document).
 
 namespace scrt::io {
 
@@ -118,9 +117,10 @@ std::unique_ptr<surfaces::Surface> build_surface(const SurfaceDoc& sd,
 
 } // namespace
 
-/// Builds a fully-wired LoadedScene from an already-parsed SceneDocument; see the Doxygen on
-/// its declaration in SceneDocument.hpp. Implemented here (not in SceneDocument.cpp) by wave
-/// assignment: this is the Scene-construction half of the former monolithic load_scene().
+/// Builds a fully-wired LoadedScene from an already-parsed SceneDocument, keeping a copy of the
+/// document in the result; see the Doxygen on its declaration in SceneDocument.hpp. Implemented
+/// here (not in SceneDocument.cpp) by wave assignment: this is the Scene-construction half of the
+/// former monolithic load_scene().
 LoadedScene build_scene(const SceneDocument& doc, const std::filesystem::path& base_dir) {
     auto scene = std::make_unique<scene::Scene>();
 
@@ -392,7 +392,11 @@ LoadedScene build_scene(const SceneDocument& doc, const std::filesystem::path& b
     tracer::TraceConfig cfg = doc.trace;
     scene->build_acceleration_structure();
 
-    return {std::move(scene), cfg};
+    // The document is copied into the result rather than discarded: it is the only structural
+    // description of the scene, and without it a caller that loaded a file could never save it
+    // back. The copy is pure metadata (names, shape parameters, mesh *paths*) - imported mesh
+    // geometry lives in the surfaces, not here - so it costs kilobytes, not megabytes.
+    return {std::move(scene), cfg, doc};
 }
 
 /// Parse a JSON scene file and return a fully wired Scene; see Doxygen in SceneLoader.hpp.

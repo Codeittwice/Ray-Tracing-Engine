@@ -160,6 +160,7 @@ target_sources(scrt_tests PRIVATE
     tests/test_scale.cpp
     tests/test_scene_document.cpp
     tests/test_scene_editor.cpp
+    tests/test_mesh_import.cpp
 )
 
 target_compile_definitions(scrt_tests PRIVATE

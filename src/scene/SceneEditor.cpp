@@ -87,25 +87,12 @@ std::unique_ptr<surfaces::Surface> build_surface(const io::SurfaceDoc& sd,
 
 // ---- Construction --------------------------------------------------------
 
+// io::LoadedScene now carries the io::SceneDocument its scene was built from, so adopting one
+// wholesale is the in-sync-by-construction case; there is nothing left to reconcile. The three
+// moves read from three distinct subobjects of `loaded`, so their unspecified evaluation order
+// is immaterial (mem-initializers still run in member declaration order regardless).
 SceneEditor::SceneEditor(io::LoadedScene loaded, std::filesystem::path base_dir)
-    : SceneEditor(std::move(loaded), io::SceneDocument{}, std::move(base_dir)) {}
-
-// Deliberately NOT delegating to the (LoadedScene, SceneDocument, path) constructor: the
-// arguments of a delegating mem-initializer are evaluated in unspecified order, so
-// `io::build_scene(doc, ...)` could run after `std::move(doc)` had already gutted it.
-SceneEditor::SceneEditor(io::SceneDocument doc, std::filesystem::path base_dir)
-    : doc_(std::move(doc)), base_dir_(std::move(base_dir)) {
-    io::LoadedScene loaded = io::build_scene(doc_, base_dir_);
-    scene_ = std::move(loaded.scene);
-    cfg_   = loaded.cfg;
-    if (!scene_)
-        throw std::runtime_error("SceneEditor: io::build_scene returned no scene");
-    seed_id_allocator();
-}
-
-SceneEditor::SceneEditor(io::LoadedScene loaded, io::SceneDocument doc,
-                         std::filesystem::path base_dir)
-    : doc_(std::move(doc)),
+    : doc_(std::move(loaded.doc)),
       scene_(std::move(loaded.scene)),
       cfg_(loaded.cfg),
       base_dir_(std::move(base_dir)) {
@@ -113,6 +100,14 @@ SceneEditor::SceneEditor(io::LoadedScene loaded, io::SceneDocument doc,
         throw std::runtime_error("SceneEditor: constructed from a LoadedScene with no scene");
     seed_id_allocator();
 }
+
+// HAZARD, do not "optimize" this: the two arguments below must both be plain copies. The
+// arguments of a delegating mem-initializer are evaluated in UNSPECIFIED order, so writing
+// `io::build_scene(doc, base_dir), std::move(base_dir)` (or `std::move(doc)` anywhere here) would
+// let the move run first and hand build_scene a gutted object. Copying a path and letting
+// build_scene copy the document is the whole cost of being obviously correct.
+SceneEditor::SceneEditor(io::SceneDocument doc, std::filesystem::path base_dir)
+    : SceneEditor(io::build_scene(doc, base_dir), base_dir) {}
 
 void SceneEditor::seed_id_allocator() {
     // The document's id allocator must clear every id already in play, otherwise the first

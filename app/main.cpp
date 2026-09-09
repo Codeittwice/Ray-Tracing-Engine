@@ -130,9 +130,11 @@ int main(int argc, char* argv[]) {
     ls.cfg.max_paths_to_record = 200;
 
     scrt::viz::Viewer viewer;
-    viewer.set_scene(ls.scene.get());
     viewer.set_config(ls.cfg);
     viewer.set_examples_dir(examples_dir);
+    // Hand over the whole LoadedScene (scene + document) so the viewer can build a
+    // SceneEditor and therefore mutate and save what it loaded.
+    viewer.set_loaded_scene(std::move(ls), scene_path.parent_path());
     viewer.run();
 
     return 0;

@@ -122,6 +122,52 @@ TEST_CASE("SceneDocument: transform scale survives load_scene end to end") {
     std::filesystem::remove_all(dir);
 }
 
+// Save-on-load ------------------------------------------------------------------
+
+// io::load_scene() used to parse a SceneDocument, build the Scene from it and throw the document
+// away, which made "open a file, edit it, save it" impossible without re-reading and re-parsing
+// the original. LoadedScene::doc now carries it. This pins the guarantee that matters: the
+// document that comes back is not a placeholder or a partial reconstruction, it is exactly what a
+// direct parse_document() of the same file produces, and it can be written straight back out.
+TEST_CASE("SceneDocument: load_scene keeps the document it built the scene from") {
+    const auto path = repo_file("examples/parabolic_dish.json");
+    REQUIRE_MESSAGE(std::filesystem::exists(path), path.string());
+
+    const auto direct = scrt::io::parse_document(read_scene_json(path), /*strict=*/true);
+    const auto ls     = scrt::io::load_scene(path);
+    REQUIRE(ls.scene != nullptr);
+
+    // The carried document describes the scene that was actually built.
+    REQUIRE_FALSE(ls.doc.elements.empty());
+    CHECK(ls.doc.elements.size() == ls.scene->surfaces().size());
+    CHECK(ls.doc.elements.size() == direct.elements.size());
+    CHECK(ls.doc.name == direct.name);
+
+    // Writing it produces exactly what writing a directly-parsed document produces...
+    const nlohmann::json from_loaded = scrt::io::write_document(ls.doc);
+    const nlohmann::json from_direct = scrt::io::write_document(direct);
+    CHECK(from_loaded == from_direct);
+
+    // ...and the result is a real scene file: it re-parses in strict mode, is stable under a
+    // second write, and loads back into an equivalent scene.
+    const auto reparsed = scrt::io::parse_document(from_loaded, /*strict=*/true);
+    CHECK(scrt::io::write_document(reparsed) == from_loaded);
+
+    const auto dir = std::filesystem::temp_directory_path() / "scrt_doc_survives_load";
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+    const auto saved = dir / "resaved.json";
+    scrt::io::save_scene(ls.doc, saved);
+
+    const auto reloaded = scrt::io::load_scene(saved);
+    REQUIRE(reloaded.scene != nullptr);
+    CHECK(reloaded.scene->surfaces().size() == ls.scene->surfaces().size());
+    // The round trip is a fixed point: the reloaded document writes to the same JSON again.
+    CHECK(scrt::io::write_document(reloaded.doc) == from_loaded);
+
+    std::filesystem::remove_all(dir);
+}
+
 // T13 -------------------------------------------------------------------------
 
 // Structural round-trip over the whole committed corpus: write(parse(file)) must equal
