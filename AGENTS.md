@@ -29,13 +29,27 @@ AI scene-generation helper. Optical results only.
 
 - [x] Wave 0 — Foundation & safety net (BVH empty-build fix, regression corpus, golden-flux baseline)
 - [x] Wave 1 — Sun & aperture physics ∥ Scale & surface geometry
-- [ ] Wave 2 — SceneDocument & JSON writer (the pivot everything downstream hangs off)
+- [x] Wave 2 — SceneDocument & JSON writer (the pivot everything downstream hangs off)
 - [ ] Wave 3 — SceneEditor & mutation ∥ Viewer decomposition + outliner
 - [ ] Wave 4 — ImGuizmo & transform UI ∥ model import & units
 - [ ] Wave 5 — Async trace, save UI, polish, packaging
 - [ ] Wave 6 — AI helper
 
 Out of scope on this track: thermal model, lat/lon geographic sun, TMY weather, day-integrated Wh.
+
+### Open findings from Wave 2 (deferred)
+- **`save_scene` cannot relocate a mesh scene.** Its frozen signature has nowhere to put the
+  original directory, so it delegates with `old_base == new_base`, making the mesh-path rebase a
+  documented no-op. Any Save-As UI wired to `save_scene` will silently write unloadable scene
+  files for every mesh scene. **Wave 3/5 must call `save_scene_as(doc, path, old_base)`.**
+  Pinned by a test that fails if the behaviour changes in either direction.
+- The writer emits only the sunshape field matching the active type, so a pillbox scene's
+  authored `chi` (or a Buie scene's `half_angle_mrad`) is dropped on the first save. Round-trip
+  is still a fixed point from generation 2 on, and no corpus file is affected.
+- `build_scene` dropped legacy SceneLoader's `top_mode != "record_pass"` validation rather than
+  modify the frozen header. No scene exercises it; restore it as a strict-mode parse check.
+- `examples/box_cooker.json` is NOT a box receiver - it has no `receiver.type`, so it takes the
+  plane branch. Do not use it as a box-receiver fixture.
 
 ### Open findings from Audit A1 (deferred, none blocking)
 Wire into Wave 2 (W3) unless noted:
