@@ -54,6 +54,10 @@ private:
     // Per-object (surface) transform editor state, keyed by stable Scene id.
     std::unordered_map<std::uint64_t, ObjectEditState> edits_;
 
+    /// Stable id of the surface selected in the outliner; 0 when nothing (or a
+    /// non-surface row) is selected. Owned here so selection survives across frames.
+    std::uint64_t selected_id_ = 0;
+
     void run_trace(std::size_t n_rays);
     void register_scene();
     void update_receiver_flux();

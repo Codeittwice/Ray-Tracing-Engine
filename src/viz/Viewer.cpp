@@ -160,9 +160,7 @@ void Viewer::apply_object_xform(std::uint64_t id) {
     if (it == edits_.end()) return;
     auto& st = it->second;
 
-    auto* surf_ptr = scene_->surface_by_id(id);
-    if (!surf_ptr) return;
-    auto& surf = *surf_ptr;
+    if (!scene_->surface_by_id(id)) return;
 
     auto delta = core::Transform::from_translation(
                      {static_cast<double>(st.trans[0]),
@@ -173,29 +171,10 @@ void Viewer::apply_object_xform(std::uint64_t id) {
                       static_cast<double>(st.rot_deg[1]) * math::DEG2RAD,
                       static_cast<double>(st.rot_deg[2]) * math::DEG2RAD}));
 
-    surf.set_transform(delta.compose(st.base));
-
-    std::vector<math::vec3>    verts;
-    std::vector<std::uint32_t> indices;
-    surf.tessellate(32, verts, indices);
-
-    if (!verts.empty() && indices.size() >= 3) {
-        std::vector<std::array<double, 3>>        pv;
-        std::vector<std::array<std::uint32_t, 3>> pf;
-        pv.reserve(verts.size());
-        for (const auto& v : verts) pv.push_back({v.x, v.y, v.z});
-        pf.reserve(indices.size() / 3);
-        for (std::size_t k = 0; k + 2 < indices.size(); k += 3)
-            pf.push_back({indices[k], indices[k + 1], indices[k + 2]});
-        // NOTE: preserves the known index-based-naming bug (Task B fixes this) —
-        // an unnamed surface's polyscope structure name is derived from its
-        // current index, which can orphan structures when the index changes.
-        std::size_t idx = 0;
-        if (auto oidx = scene_->index_of(id)) idx = *oidx;
-        std::string name = surf.name().empty()
-            ? "surface_" + std::to_string(idx) : surf.name();
-        polyscope::registerSurfaceMesh(name, pv, pf);
-    }
+    // Placement-only edit: the tessellated vertices are unchanged, so RayRenderer writes
+    // the physics transform and the structure's display transform from this one matrix
+    // and re-uploads no geometry.
+    RayRenderer(scene_).set_surface_transform(id, delta.compose(st.base));
 
     need_rebuild_ = true;
     need_retrace_ = true;
@@ -283,7 +262,7 @@ PanelContext Viewer::make_panel_context() {
     ctx.load_error           = &load_error_;
 
     ctx.edits                = &edits_;
-    ctx.selected_id          = 0;
+    ctx.selected_id          = &selected_id_;
 
     ctx.load_scene           = [this](const std::filesystem::path& path) { load_from_file(path); };
     ctx.run_trace             = [this](std::size_t n) { run_trace(n); };
@@ -300,6 +279,7 @@ void Viewer::draw_gui() {
     ImGui::Begin("Solar Cooker RT");
 
     PanelContext ctx = make_panel_context();
+    draw_outliner_panel(ctx);
     draw_scene_browser_panel(ctx);
     draw_transform_panel(ctx);
     draw_materials_panel(ctx);

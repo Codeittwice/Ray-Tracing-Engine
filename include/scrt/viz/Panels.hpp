@@ -39,8 +39,10 @@ struct PanelContext {
     // Object edit state, keyed by stable surface id (never by index).
     std::unordered_map<std::uint64_t, ObjectEditState>* edits = nullptr;
 
-    /// Stable id of the currently selected object; 0 means nothing selected.
-    std::uint64_t selected_id = 0;
+    /// Points at the Viewer-owned stable id of the selected surface (0 = none, or a
+    /// non-surface row such as Sun is selected). A pointer, not a value, so the outliner's
+    /// selection survives the per-frame rebuild of this context.
+    std::uint64_t* selected_id = nullptr;
 
     /// Loads the scene at the given path into the Viewer (throws on failure).
     std::function<void(const std::filesystem::path&)> load_scene;
@@ -50,6 +52,8 @@ struct PanelContext {
     std::function<void(std::uint64_t)> apply_object_xform;
 };
 
+/// Draws the object outliner tree (reflectors, receiver faces, sun, aperture, materials).
+void draw_outliner_panel(PanelContext& ctx);
 /// Draws the scene browser panel (load example scenes).
 void draw_scene_browser_panel(PanelContext& ctx);
 /// Draws the per-object transform editor panel.
