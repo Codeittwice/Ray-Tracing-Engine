@@ -4,9 +4,12 @@
 #include "scrt/scene/Scene.hpp"
 #include "scrt/tracer/FluxAccumulator.hpp"
 #include "scrt/tracer/Tracer.hpp"
+#include "scrt/viz/Panels.hpp"
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace scrt::viz {
@@ -48,13 +51,8 @@ private:
     int                                selected_scene_idx_ = -1;
     std::string                        load_error_;
 
-    // Per-surface transform editor state
-    struct SurfXformState {
-        core::Transform base;           ///< Transform at load time (preserved)
-        float           trans[3]   = {}; ///< GUI delta translation (m), world-space
-        float           rot_deg[3] = {}; ///< GUI delta Euler XYZ rotation (degrees)
-    };
-    std::vector<SurfXformState> surf_xforms_;
+    // Per-object (surface) transform editor state, keyed by stable Scene id.
+    std::unordered_map<std::uint64_t, ObjectEditState> edits_;
 
     void run_trace(std::size_t n_rays);
     void register_scene();
@@ -65,9 +63,10 @@ private:
     void load_from_file(const std::filesystem::path& path);
     void load_scene_internal(io::LoadedScene ls);
     void init_surf_xforms();
-    void apply_surf_xform(std::size_t idx);
-    void draw_scene_browser();
-    void draw_transform_editor();
+    void apply_object_xform(std::uint64_t id);
+
+    /// Builds the PanelContext used to dispatch to the GUI panel functions.
+    PanelContext make_panel_context();
 };
 
 } // namespace scrt::viz

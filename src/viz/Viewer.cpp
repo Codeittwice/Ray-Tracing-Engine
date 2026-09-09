@@ -1,12 +1,10 @@
 #include "scrt/viz/Viewer.hpp"
 #include "scrt/viz/FluxPlotter.hpp"
+#include "scrt/viz/Panels.hpp"
 #include "scrt/viz/RayRenderer.hpp"
 #include "scrt/core/Transform.hpp"
 #include "scrt/io/SceneLoader.hpp"
-#include "scrt/materials/Dielectric.hpp"
-#include "scrt/materials/RealMirror.hpp"
 #include "scrt/math/Constants.hpp"
-#include "scrt/scene/Aperture.hpp"
 #include "scrt/scene/Receiver.hpp"
 #include <algorithm>
 #include <array>
@@ -144,22 +142,27 @@ void Viewer::load_scene_internal(io::LoadedScene ls) {
 // ---- init_surf_xforms --------------------------------------------------------
 
 void Viewer::init_surf_xforms() {
-    surf_xforms_.clear();
+    edits_.clear();
     if (!scene_) return;
     for (const auto& s : scene_->surfaces()) {
-        SurfXformState st;
+        ObjectEditState st;
         st.base = s->transform();
-        surf_xforms_.push_back(st);
+        edits_[s->id()] = st;
     }
     need_rebuild_ = false;
 }
 
-// ---- apply_surf_xform --------------------------------------------------------
+// ---- apply_object_xform -------------------------------------------------------
 
-void Viewer::apply_surf_xform(std::size_t idx) {
-    auto& st    = surf_xforms_[idx];
-    auto  surfs = scene_->mutable_surfaces();
-    auto& surf  = *surfs[idx];
+void Viewer::apply_object_xform(std::uint64_t id) {
+    if (!scene_) return;
+    auto it = edits_.find(id);
+    if (it == edits_.end()) return;
+    auto& st = it->second;
+
+    auto* surf_ptr = scene_->surface_by_id(id);
+    if (!surf_ptr) return;
+    auto& surf = *surf_ptr;
 
     auto delta = core::Transform::from_translation(
                      {static_cast<double>(st.trans[0]),
@@ -184,6 +187,11 @@ void Viewer::apply_surf_xform(std::size_t idx) {
         pf.reserve(indices.size() / 3);
         for (std::size_t k = 0; k + 2 < indices.size(); k += 3)
             pf.push_back({indices[k], indices[k + 1], indices[k + 2]});
+        // NOTE: preserves the known index-based-naming bug (Task B fixes this) —
+        // an unnamed surface's polyscope structure name is derived from its
+        // current index, which can orphan structures when the index changes.
+        std::size_t idx = 0;
+        if (auto oidx = scene_->index_of(id)) idx = *oidx;
         std::string name = surf.name().empty()
             ? "surface_" + std::to_string(idx) : surf.name();
         polyscope::registerSurfaceMesh(name, pv, pf);
@@ -257,70 +265,31 @@ void Viewer::update_receiver_flux() {
     register_receiver_face_flux(*recv->faces().front(), *acc_, "receiver_flux");
 }
 
-// ---- draw_scene_browser ------------------------------------------------------
+// ---- make_panel_context --------------------------------------------------------
 
-void Viewer::draw_scene_browser() {
-    if (!ImGui::CollapsingHeader("Scene Browser")) return;
-    if (available_scenes_.empty()) {
-        ImGui::TextDisabled("No example scenes found.");
-        return;
-    }
+PanelContext Viewer::make_panel_context() {
+    PanelContext ctx;
+    ctx.scene               = scene_;
+    ctx.cfg                 = &cfg_;
+    ctx.result              = &result_;
+    ctx.acc                 = acc_.get();
+    ctx.traced              = traced_;
+    ctx.need_retrace         = &need_retrace_;
+    ctx.need_rebuild         = &need_rebuild_;
 
-    std::vector<const char*> names;
-    names.reserve(scene_display_names_.size());
-    for (const auto& n : scene_display_names_)
-        names.push_back(n.c_str());
+    ctx.available_scenes     = &available_scenes_;
+    ctx.scene_display_names  = &scene_display_names_;
+    ctx.selected_scene_idx   = &selected_scene_idx_;
+    ctx.load_error           = &load_error_;
 
-    ImGui::SetNextItemWidth(-1);
-    ImGui::ListBox("##scenes", &selected_scene_idx_,
-                   names.data(), static_cast<int>(names.size()), 6);
+    ctx.edits                = &edits_;
+    ctx.selected_id          = 0;
 
-    if (!load_error_.empty())
-        ImGui::TextColored({1.0f, 0.3f, 0.3f, 1.0f}, "%s", load_error_.c_str());
+    ctx.load_scene           = [this](const std::filesystem::path& path) { load_from_file(path); };
+    ctx.run_trace             = [this](std::size_t n) { run_trace(n); };
+    ctx.apply_object_xform    = [this](std::uint64_t id) { apply_object_xform(id); };
 
-    ImGui::BeginDisabled(selected_scene_idx_ < 0);
-    if (ImGui::Button("Load selected scene", ImVec2(-1, 0))) {
-        load_error_.clear();
-        try {
-            load_from_file(available_scenes_[static_cast<std::size_t>(selected_scene_idx_)]);
-        } catch (const std::exception& e) {
-            load_error_ = e.what();
-        }
-    }
-    ImGui::EndDisabled();
-}
-
-// ---- draw_transform_editor ---------------------------------------------------
-
-void Viewer::draw_transform_editor() {
-    if (!scene_ || surf_xforms_.empty()) return;
-    if (!ImGui::CollapsingHeader("Transforms")) return;
-
-    auto surfs = scene_->mutable_surfaces();
-    for (std::size_t i = 0; i < surf_xforms_.size(); ++i) {
-        auto& st   = surf_xforms_[i];
-        auto& surf = *surfs[i];
-        ImGui::PushID(static_cast<int>(i));
-
-        std::string surf_name = surf.name().empty()
-            ? "surface_" + std::to_string(i) : surf.name();
-        ImGui::Text("%s", surf_name.c_str());
-        ImGui::Indent();
-
-        bool changed = false;
-        changed |= ImGui::DragFloat3("Translate (m)", st.trans,   0.001f, -5.f, 5.f,    "%.3f");
-        changed |= ImGui::DragFloat3("Rotate (deg)",  st.rot_deg, 0.5f,   -180.f, 180.f, "%.1f");
-        if (changed) apply_surf_xform(i);
-
-        if (ImGui::Button("Reset##xf")) {
-            st.trans[0] = st.trans[1] = st.trans[2] = 0.f;
-            st.rot_deg[0] = st.rot_deg[1] = st.rot_deg[2] = 0.f;
-            apply_surf_xform(i);
-        }
-        ImGui::Unindent();
-        ImGui::PopID();
-        ImGui::Separator();
-    }
+    return ctx;
 }
 
 // ---- draw_gui ----------------------------------------------------------------
@@ -330,93 +299,12 @@ void Viewer::draw_gui() {
     ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
     ImGui::Begin("Solar Cooker RT");
 
-    draw_scene_browser();
-    draw_transform_editor();
-
-    // ---- Scene --
-    if (ImGui::CollapsingHeader("Scene", ImGuiTreeNodeFlags_DefaultOpen)) {
-        if (scene_) {
-            for (auto& mat_ptr : scene_->mutable_materials()) {
-                ImGui::PushID(mat_ptr.get());
-                ImGui::Text("%s", mat_ptr->name().c_str());
-                bool changed = false;
-
-                if (auto* rm = dynamic_cast<materials::RealMirror*>(mat_ptr.get())) {
-                    float rho = static_cast<float>(rm->reflectance());
-                    float se  = static_cast<float>(rm->slope_error());
-                    ImGui::Indent();
-                    if (ImGui::SliderFloat("Reflectance##rm", &rho, 0.0f, 1.0f))
-                        { rm->set_reflectance(rho); changed = true; }
-                    if (ImGui::SliderFloat("Slope err (mrad)", &se, 0.0f, 10.0f))
-                        { rm->set_slope_error_mrad(se); changed = true; }
-                    ImGui::Unindent();
-                } else if (auto* di = dynamic_cast<materials::Dielectric*>(mat_ptr.get())) {
-                    float n     = static_cast<float>(di->n());
-                    float alpha = static_cast<float>(di->absorption());
-                    ImGui::Indent();
-                    if (ImGui::SliderFloat("n##di", &n, 1.0f, 3.0f))
-                        { di->set_n(n); changed = true; }
-                    if (ImGui::SliderFloat("Absorb (1/m)", &alpha, 0.0f, 50.0f))
-                        { di->set_absorption(alpha); changed = true; }
-                    ImGui::Unindent();
-                }
-
-                if (changed) need_retrace_ = true;
-                ImGui::PopID();
-                ImGui::Separator();
-            }
-        }
-    }
-
-    // ---- Sun --
-    if (ImGui::CollapsingHeader("Sun", ImGuiTreeNodeFlags_DefaultOpen)) {
-        if (scene_ && scene_->sun()) {
-            float dni = static_cast<float>(scene_->sun()->dni());
-            if (ImGui::SliderFloat("DNI (W/m²)", &dni, 500.0f, 1500.0f)) {
-                const_cast<sources::SunSource*>(scene_->sun())->set_dni(dni);
-                need_retrace_ = true;
-            }
-        }
-    }
-
-    // ---- Trace controls --
-    if (ImGui::CollapsingHeader("Trace", ImGuiTreeNodeFlags_DefaultOpen)) {
-        int nr = static_cast<int>(cfg_.n_primary_rays);
-        ImGui::SliderInt("Rays", &nr, 1000, 10'000'000, "%d",
-                         ImGuiSliderFlags_Logarithmic);
-        cfg_.n_primary_rays = static_cast<std::size_t>(nr);
-
-        int mb = cfg_.max_bounces;
-        ImGui::SliderInt("Max bounces", &mb, 1, 32);
-        cfg_.max_bounces = mb;
-
-        bool rec = cfg_.record_paths;
-        if (ImGui::Checkbox("Record paths", &rec))
-            cfg_.record_paths = rec;
-
-        if (need_retrace_)
-            ImGui::TextColored({1, 0.6f, 0, 1}, "Parameters changed");
-
-        if (ImGui::Button("Preview (10k rays)"))
-            run_trace(10'000);
-        ImGui::SameLine();
-        if (ImGui::Button("Full Trace"))
-            run_trace(cfg_.n_primary_rays);
-    }
-
-    // ---- Results --
-    if (traced_ && acc_) {
-        if (ImGui::CollapsingHeader("Results", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::Text("Total power : %.3f W", acc_->total_power_w());
-            ImGui::Text("Peak flux   : %.1f W/m²", acc_->peak_flux_wm2());
-            ImGui::Text("Concentration : %.1f×",
-                        acc_->concentration_ratio(
-                            (scene_ && scene_->sun()) ? scene_->sun()->dni() : 1000.0));
-            ImGui::Text("Wall time   : %.2f s", result_.wall_time_s);
-            ImGui::Text("Rays/s      : %.1f k",
-                        result_.primary_rays_traced / result_.wall_time_s / 1e3);
-        }
-    }
+    PanelContext ctx = make_panel_context();
+    draw_scene_browser_panel(ctx);
+    draw_transform_panel(ctx);
+    draw_materials_panel(ctx);
+    draw_sun_panel(ctx);
+    draw_trace_panel(ctx);
 
     ImGui::End();
 

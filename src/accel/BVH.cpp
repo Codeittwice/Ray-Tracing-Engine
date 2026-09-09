@@ -26,20 +26,24 @@ int BVH::build_recursive(int begin, int end) {
 
     int idx = static_cast<int>(nodes_.size());
     nodes_.emplace_back();
-    Node& node = nodes_[idx];
-    // `node` stays valid across the recursive calls below only because
-    // build() reserved 2*prims_.size() capacity up front, guaranteeing
-    // nodes_ never reallocates. This assert enforces that invariant.
-    assert(nodes_.capacity() >= 2 * prims_.size());
+    // Deliberately no `Node&` held here across the recursive calls below: nodes_ is indexed
+    // (nodes_[idx]) at every access point instead. build() reserves 2*prims_.size() capacity
+    // up front, and for a median-split scheme with a leaf threshold of 4 the true worst-case
+    // node count is 2*ceil(N/4)-1 (a balanced ~4-ary-leaf tree), well under 2*N, so nodes_
+    // never actually reallocates during a build in practice. But relying on that bound to keep
+    // a `Node&` alive across recursive build_recursive() calls is exactly the kind of
+    // reserve-size assumption that turns into a dangling-reference UB bug the moment the
+    // splitting/threshold logic changes; indexing instead of holding a reference makes this
+    // function correct regardless of capacity, at no cost.
 
     // Compute union AABB of all primitives in [begin, end)
     for (int i = begin; i < end; ++i)
-        node.aabb.expand(prims_[i]->world_bounds());
+        nodes_[idx].aabb.expand(prims_[i]->world_bounds());
 
     int count = end - begin;
     if (count <= 4) {
-        node.first = begin;
-        node.count = count;
+        nodes_[idx].first = begin;
+        nodes_[idx].count = count;
         return idx;
     }
 
@@ -62,11 +66,10 @@ int BVH::build_recursive(int begin, int end) {
                                 b->world_bounds().centroid()[axis];
                      });
 
-    node.left  = build_recursive(begin, mid);
-    // Re-fetch reference: vector may have reallocated during recursion
-    node.right = build_recursive(mid, end);
-    nodes_[idx].left  = node.left;
-    nodes_[idx].right = node.right;
+    int left  = build_recursive(begin, mid);
+    int right = build_recursive(mid, end);
+    nodes_[idx].left  = left;
+    nodes_[idx].right = right;
 
     return idx;
 }
