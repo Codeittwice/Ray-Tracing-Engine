@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Solar Cooker RT — Development Log</title>
+<style>
+@page { size: A4; margin: 18mm 16mm; }
+:root{--ink:#14202e;--muted:#5b6a80;--line:#d3dbe6;--accent:#9a5208;--bg:#fff;--code:#eef2f7;--ok:#1c7c4a;--bad:#a32020;}
+*{box-sizing:border-box}
+body{font:10.5pt/1.55 "Segoe UI","Helvetica Neue",Arial,sans-serif;color:var(--ink);background:var(--bg);margin:0}
+h1{font-size:23pt;margin:0 0 2pt;letter-spacing:-.4pt;line-height:1.15}
+h2{font-size:14pt;margin:22pt 0 7pt;padding-bottom:4pt;border-bottom:2px solid var(--accent);page-break-after:avoid}
+h3{font-size:11.5pt;margin:14pt 0 5pt;color:var(--accent);page-break-after:avoid}
+h4{font-size:10.5pt;margin:11pt 0 3pt;page-break-after:avoid}
+p{margin:0 0 7pt}
+.sub{color:var(--muted);font-size:11pt;margin:0 0 3pt}
+.meta{color:var(--muted);font-size:8.5pt;font-family:Consolas,monospace;margin-bottom:14pt}
+.rule{height:3px;background:var(--accent);margin:0 0 12pt}
+code{font-family:Consolas,"Courier New",monospace;font-size:9pt;background:var(--code);padding:1px 4px;border-radius:3px}
+table{width:100%;border-collapse:collapse;margin:8pt 0 12pt;font-size:9pt;page-break-inside:avoid}
+th{text-align:left;background:#f3f6fa;border-bottom:1.5px solid var(--line);padding:5pt 6pt;font-weight:600}
+td{border-bottom:1px solid var(--line);padding:5pt 6pt;vertical-align:top}
+td.n{font-family:Consolas,monospace;white-space:nowrap}
+ul,ol{margin:0 0 8pt;padding-left:17pt}li{margin-bottom:3.5pt}
+.box{border-left:3px solid var(--accent);background:#fbf7f2;padding:8pt 11pt;margin:10pt 0;page-break-inside:avoid}
+.box.bad{border-left-color:var(--bad);background:#fdf4f4}
+.box.ok{border-left-color:var(--ok);background:#f3faf6}
+.box p:last-child{margin-bottom:0}
+.lbl{font-weight:700;font-size:8.5pt;text-transform:uppercase;letter-spacing:.6pt;display:block;margin-bottom:3pt}
+.lbl.a{color:var(--accent)}.lbl.b{color:var(--bad)}.lbl.g{color:var(--ok)}
+.ok-t{color:var(--ok);font-weight:600}.bad-t{color:var(--bad);font-weight:600}
+.pb{page-break-before:always}
+footer{margin-top:20pt;padding-top:8pt;border-top:1px solid var(--line);color:var(--muted);font-size:8pt}
+</style></head><body>
+
+<h1>Solar Cooker Ray Tracer</h1>
+<p class="sub">Development log — turning a research tool into a shippable application</p>
+<p class="meta">Branch <code>feat/interactive-app</code> &nbsp;·&nbsp; 2026-09-09 &nbsp;·&nbsp; Waves 0–2 of 7 complete</p>
+<div class="rule"></div>
+
+<h2>1. What this project was, and what it needed to become</h2>
+<p><code>solar-cooker-rt</code> was a physics-correct Monte Carlo ray tracer with a thin viewer bolted on. It had done real research — panel-angle sweeps, box-receiver flux maps, a finalised two-level CAD design — but it was not an application. Scenes were authored by <strong>Python scripts writing JSON</strong>. The GUI could browse those files, nudge two sliders per surface, and trace. You could not import a model, delete anything, or save what you edited. Every one of the 94 committed scenes had the sun frozen at the zenith.</p>
+<p>The goal: make it usable by a non-technical cooker builder without breaking the JSON/CLI/batch path the research workflow depends on.</p>
+
+<h3>Confirmed scope</h3>
+<ul>
+<li><strong>Audience:</strong> mixed, leading with non-technical builders; the expert path stays fully working.</li>
+<li><strong>Sun:</strong> keep the existing Pillbox/Buie sunshape and manual DNI. Add the ability to move the sun off zenith. No latitude/longitude, no atmospheric model.</li>
+<li><strong>Results:</strong> optical only — watts, W/m², concentration ratio, flux maps.</li>
+<li><strong>AI helper:</strong> Claude API with the user's own key. Last priority.</li>
+<li><strong>Deferred:</strong> thermal model, geographic sun, weather files, day-integrated energy.</li>
+</ul>
+
+<h3>Four findings that shaped the plan</h3>
+<table>
+<tr><th style="width:26%">Finding</th><th>Detail</th></tr>
+<tr><td>Scale does <em>not</em> break the t-parameter</td><td><code>Transform::ray_to_local</code> does not normalise the local direction, and <code>t</code> is invariant under any invertible affine map. My initial assumption was wrong; "fixing" it by rescaling <code>t</code> would have <em>introduced</em> the bug.</td></tr>
+<tr><td>Polyscope's gizmo is unreachable</td><td><code>TransformationGizmo</code> is a <code>protected</code> member with no public enable method, and has no scale handles. ImGuizmo is required instead.</td></tr>
+<tr><td>The existing round-trip test was vacuous</td><td>It round-tripped nlohmann against itself and never called the loader. Zero real coverage.</td></tr>
+<tr><td>Two live bugs blocked runtime mutation</td><td><code>BVH::build</code> retained stale pointers on an empty rebuild; <code>TriangleMesh</code> used an absolute epsilon against a scale-dependent quantity.</td></tr>
+</table>
+
+<h2>2. The plan</h2>
+<p>Seven sequential waves. Within a wave, file ownership is strictly disjoint — every affected file has exactly one owner.</p>
+<table>
+<tr><th style="width:8%">Wave</th><th style="width:52%">Content</th><th>Status</th></tr>
+<tr><td class="n">0</td><td>Foundation &amp; safety net</td><td class="ok-t">Complete</td></tr>
+<tr><td class="n">1</td><td>Sun &amp; aperture physics ∥ Scale &amp; surface geometry</td><td class="ok-t">Complete</td></tr>
+<tr><td class="n">2</td><td>SceneDocument &amp; JSON writer — the pivot everything else hangs off</td><td class="ok-t">Complete</td></tr>
+<tr><td class="n">3</td><td>SceneEditor &amp; mutation ∥ Viewer decomposition + outliner</td><td>Pending</td></tr>
+<tr><td class="n">4</td><td>ImGuizmo &amp; transform UI ∥ model import &amp; units</td><td>Pending</td></tr>
+<tr><td class="n">5</td><td>Async trace, save UI, polish, packaging</td><td>Pending</td></tr>
+<tr><td class="n">6</td><td>AI helper</td><td>Pending</td></tr>
+</table>
+
+<h2 class="pb">3. Wave 0 — Foundation and safety net</h2>
+<p>No features. Everything downstream depends on being able to tell a fix from a regression.</p>
+
+<h3>Latent bugs fixed</h3>
+<ul>
+<li><strong><code>BVH::build</code> retained dangling pointers.</strong> The early return on an empty surface list sat <em>above</em> the <code>clear()</code> calls, so a rebuild with no surfaces kept stale <code>Surface*</code> that dangle once the old surfaces are freed. Harmless until objects can be deleted at runtime — which is exactly what Wave 3 adds.</li>
+<li><strong>Two reserve-invariant hazards.</strong> <code>BVH::build_recursive</code> and <code>TriangleMesh::build_tri</code> hold a reference to a vector element across recursive <code>emplace_back</code> calls. Only defined because of an up-front <code>reserve</code>. Documented and asserted.</li>
+<li><strong>Three unguarded null dereferences</strong> in <code>Viewer::draw_gui</code>. My original instruction here was <em>wrong</em> — I said to guard with an early return, copying a sibling function. An agent caught that <code>draw_gui</code> owns the <code>ImGui::Begin</code>/<code>End</code> pair, so returning early would unbalance the frame and corrupt rendering. The guards had to be per-block.</li>
+</ul>
+
+<h3>The safety net</h3>
+<p>A golden-flux baseline: four representative scenes traced at a pinned configuration (<code>rng_seed=42</code>, <code>num_threads=1</code>, 20 000 rays) with the results recorded as constants. Single-threaded matters — it makes the tracer's slot-seeding reduce to exactly <code>rng_seed</code>, so the values reproduce across machines.</p>
+<table>
+<tr><th>Scene</th><th style="width:34%">Recorded total power</th></tr>
+<tr><td><code>parabolic_dish.json</code></td><td class="n">663.88135955660175 W</td></tr>
+<tr><td><code>box_cooker.json</code></td><td class="n">191.79550384668289 W</td></tr>
+<tr><td><code>fresnel_lens_cooker.json</code></td><td class="n">38.867692665554998 W</td></tr>
+<tr><td><code>stl_rectangular_3floors_606570deg_box.json</code></td><td class="n">874.83793179836209 W</td></tr>
+</table>
+<p>These are <em>measured, not predicted</em>. Waves 1 and 2 rewrote the aperture power formula, added scaling to every surface type, and replaced the entire scene loader. If any of these four numbers had moved, the optical model changed and that needed explaining rather than re-baselining. They never moved.</p>
+<p>Alongside them, a runtime filesystem sweep asserting all <strong>94 committed scenes</strong> load without throwing — replacing a hardcoded list of four filenames.</p>
+
+<h2>4. Wave 1 — Sun off zenith, and object scaling</h2>
+<p>Two workstreams in parallel on disjoint files.</p>
+
+<h3>The aperture cosine bug</h3>
+<p>Ray power was computed as <code>dni × aperture_area / N</code>. DNI is defined per unit area <em>normal to the beam</em>, so this is only correct when the aperture faces the sun. The moment anyone tilted the sun, total power would be overstated by <code>1/cos θ</code> — silently. Every existing scene has the sun at zenith and the aperture normal at +Z, so the cosine is exactly 1.0 and the goldens were unaffected bit-for-bit.</p>
+
+<div class="box"><span class="lbl a">A flaw in my own test specification</span>
+<p>I specified an end-to-end check with the aperture auto-fitted to the sun. But <code>auto_fit</code> makes the cosine equal 1 <em>by construction</em> — the test could not distinguish a correct cosine factor from a missing one. It would have passed either way.</p>
+<p>The agent caught this, added a second case with a <strong>fixed</strong> horizontal aperture struck obliquely, then <em>falsified</em> it: it neutered the cosine in the tracer and confirmed the test fails — power stuck at 999 W across all elevations, wrong by +286% at 15°. Then restored the file and diffed against a backup to confirm byte-identity.</p></div>
+
+<table>
+<tr><th>Sun elevation</th><th>Expected</th><th>Measured</th><th>Error</th></tr>
+<tr><td class="n">90°</td><td class="n">1000.000 W</td><td class="n">999.224 W</td><td class="n">−0.08%</td></tr>
+<tr><td class="n">60°</td><td class="n">866.025 W</td><td class="n">865.353 W</td><td class="n">−0.08%</td></tr>
+<tr><td class="n">30°</td><td class="n">500.000 W</td><td class="n">499.612 W</td><td class="n">−0.08%</td></tr>
+<tr><td class="n">15°</td><td class="n">258.819 W</td><td class="n">258.618 W</td><td class="n">−0.08%</td></tr>
+</table>
+<p>The tolerance was derived from binomial counting statistics rather than guessed: 1% is roughly 11σ — loose enough never to flake, far tighter than the error a wrong cosine produces.</p>
+
+<h3>Sun angles and the pole</h3>
+<p>Azimuth/elevation added with +Z as zenith and azimuth as a compass bearing from +Y (North) toward +X (East) — matching the existing box-receiver wall naming rather than inventing a convention. <code>cos(90°)</code> evaluates to ~6.1×10⁻¹⁷ in double, not zero, so the pole is snapped below a 10⁻¹² threshold to keep <code>direction_from_angles({any, 90°})</code> <em>exactly</em> <code>(0,0,−1)</code> — the invariant the goldens rest on.</p>
+
+<h3>Scaling</h3>
+<p>The highest-value change was not the scale factories but <strong>nine relativized degeneracy epsilons</strong>. The worst was the triangle-intersection guard: the tested quantity scales with triangle size <em>and</em> with local ray-direction length, so an absolute 10⁻⁶ threshold silently dropped 1 mm triangles at 100× scale. No crash — just missing geometry and quietly wrong flux.</p>
+<div class="box ok"><span class="lbl g">The test was proven to have teeth</span>
+<p>The agent reverted the guard to its old absolute form and demonstrated the failure: the entire mesh vanishes at scale 1000. Then restored it. A passing test that would pass anyway is worth nothing.</p></div>
+<p>Eight per-class <code>world_bounds()</code> implementations were also replaced by one non-virtual base implementation over a new <code>local_bounds()</code>, verified bit-identical for all eight classes under a rotated, translated, non-uniformly scaled transform.</p>
+
+<h3>Audit A1 — independent review</h3>
+<p>A fresh agent read the combined diff cold, with no access to either implementer's reasoning. It found a genuine <strong>high-severity</strong> bug:</p>
+<div class="box bad"><span class="lbl b">decompose_trs returned wrong angles at pitch = −90°</span>
+<p>A dropped sign factor meant the gimbal-lock branch recovered <code>−(a−c)</code> instead of <code>(a−c)</code> — while still reporting success. Reproduced with a probe: recomposition error 2.34 versus 1.18×10⁻¹⁶ for the correct pole.</p>
+<p>The existing test only exercised non-pole angles, so it passed vacuously. Real-world trigger: any panel rotated to face along −X, which this project's radial panel arrays produce routinely. <strong>Neither implementer would have found it</strong> — the same agent wrote both the code and the test that failed to catch it.</p></div>
+<p>The audit also confirmed what was <em>sound</em>, which matters as much: the cosine is exactly 1.0 bitwise (not merely within tolerance); all eight bounds refactors are byte-identical; all nine epsilons are dimensionally correct; <code>Aperture::covers</code> is exact, brute-forced over 200 000 random configurations with zero false results. And it corrected a false claim in the code's own comment — a shared helper described as "byte-identical" actually re-normalises an already-unit vector, differing in the last bit for ~15% of directions.</p>
+
+<h2 class="pb">5. Wave 2 — SceneDocument, the pivot</h2>
+<p>This wave split the load-only 468-line <code>SceneLoader.cpp</code> into a document model, a parser, a writer and a scene builder. Everything downstream — the object editor, save, undo, AI scene validation — depends on it.</p>
+
+<h3>Why a document model rather than walking the live scene</h3>
+<p>Three facts make round-tripping from a built <code>Scene</code> lossy: box receivers expand at load into 6 or 11 named faces plus a synthesised absorber; <code>TriangleMesh</code> discards its source path and unit scale; and <code>scene.name</code> is read by nothing, so a walker would drop it on every save.</p>
+
+<h3>What was built</h3>
+<ul>
+<li><strong>The frozen contract</strong> — a type model over all seven surface types, plane and box receivers with the optional battery, materials, sun, aperture, trace config. Material parameters are held as <em>raw JSON</em> so open-ended keys survive losslessly, including keys nobody has invented yet.</li>
+<li><strong>The parser</strong> — every loader default, requirement and alias ported exactly. A strict mode rejects unknown keys at every level, which is what later makes AI-generated scenes safe to validate.</li>
+<li><strong>The writer</strong> — the project's first C++ scene writer. Always emits <code>sun.direction</code>, because the loader throws without it. Emits battery keys only when explicitly authored, so derived defaults are not baked in as though the user had set them.</li>
+<li><strong>Path handling</strong> — mesh paths resolve against the scene file's own directory, so "Save As" elsewhere would silently break every reference. Rebasing handles the cross-volume case, which on Windows is a realistic user action.</li>
+<li><strong>Stable identity</strong> — 64-bit IDs on surfaces, removal, lookup, and a BVH dirty flag, since the acceleration structure holds raw pointers that must never be traversed stale.</li>
+</ul>
+
+<div class="box"><span class="lbl a">A blocking gap caught before it shipped</span>
+<p>A sub-agent decided <code>sun.direction</code> could be dropped in favour of azimuth/elevation, calling it "an intentional format change". The lead rejected that and verified why: the loader <em>throws</em> when the key is absent, and the angle round-trip is bitwise-exact only at the pole. Every scene written without a direction would have been unloadable, and off-zenith scenes would round-trip with perturbed ray sequences — the exact case Wave 1 exists to enable.</p></div>
+
+<h3>A lost-edit defect found across an ownership seam</h3>
+<div class="box bad"><span class="lbl b">Authored sun azimuth silently discarded</span>
+<p>The parser re-derived sun angles from <code>direction</code> without passing a fallback azimuth. Azimuth is mathematically degenerate at the pole, so a zenith sun returned the default 180° and any authored <code>azimuth_deg</code> was thrown away on save and reload.</p>
+<p>Found by the <em>writer</em> agent verifying across the seam into the <em>parser's</em> file — territory neither it nor its sub-agents owned. Fixed and pinned with a regression test.</p></div>
+
+<h3>Verification</h3>
+<p>The writer was verified out-of-band over <strong>144 real scenes</strong>: every written document was accepted by the real loader, round-tripping is a fixed point, and all four golden fluxes traced from <em>rewritten</em> files came back <code>delta = 0.000e+00</code> — bit-identical.</p>
+
+<h2>6. Orchestration: what worked and what failed</h2>
+<p>The work ran as a two-layer agent hierarchy: a commander doing recon, composition and verification; Opus leads owning workstreams; Sonnet sub-agents doing bounded implementation.</p>
+
+<h3>What worked</h3>
+<ul>
+<li><strong>Sequential waves with disjoint file ownership.</strong> Two workstreams edited the codebase simultaneously for an entire wave with zero conflicts. Both agents even observed each other's transient build breakage, correctly identified it as the other's in-flight work, and took no action.</li>
+<li><strong>Independent audits.</strong> Every significant defect in this project was found by an agent that did not write the code. Implementers verify their own assumptions; they cannot verify the ones they never questioned.</li>
+<li><strong>Golden baselines as a gate.</strong> Four numbers that must not move turned "did I break the physics?" from a judgement call into a test.</li>
+<li><strong>Refusing to self-certify.</strong> Every completion claim had to cite build output and named tests.</li>
+</ul>
+
+<h3>What failed</h3>
+<div class="box bad"><span class="lbl b">Layer-1 leads reported before their sub-agents finished</span>
+<p>The agent tool spawns sub-agents in the background by default, so a lead has nothing to block on and returns immediately — reporting, honestly enough, "my sub-agents are running, I'll verify when they report." But its turn is over.</p>
+<p>I misread this as the children being dead and dispatched replacements. <strong>That was wrong.</strong> The children were merely slower than their parents, and delivered good work afterwards — which made my replacements duplicate owners of the same files. I stopped both; one was mid-edit when killed, so the file had to be verified compiling, linking and passing all tests before it could be trusted.</p>
+<p>The real defect was narrower than I first said: the leads' <em>reporting</em> was broken, not their delegation. The fix is to make leads block on their children, not to abandon the two-layer pattern.</p></div>
+
+<div class="box"><span class="lbl a">Trust the diff, never the report</span>
+<p>One lead reported its sub-agents were "actively writing" a file that was still a one-line stub on disk. Had that been taken at face value, the wave would have "completed" with core files never written, surfacing later as unattributable link errors.</p>
+<p>Cross-referencing <code>git diff --stat</code> against every report is the only thing that catches this. It caught it three times.</p></div>
+
+<h3>A stale escalation, checked rather than acted on</h3>
+<p>An agent reported that scale and matrix keys were write-only and would silently corrupt geometry — a serious claim. It had read the scene loader <em>before</em> the refactor landed. Rather than take either side on faith, the claim was settled with a test: a unit plane scaled by (3,5) loads spanning x∈[−3,3], y∈[−5,5] through the real load path. The finding was stale; the test is permanent.</p>
+
+<h2 class="pb">7. Defects found and fixed</h2>
+<table>
+<tr><th style="width:23%">Defect</th><th style="width:11%">Severity</th><th style="width:20%">Found by</th><th>Consequence had it shipped</th></tr>
+<tr><td>Aperture cosine missing from ray power</td><td class="bad-t">High</td><td>Plan review</td><td>Power overstated by 1/cos θ for any off-zenith sun, silently</td></tr>
+<tr><td><code>decompose_trs</code> wrong at pitch −90°</td><td class="bad-t">High</td><td>Independent audit</td><td>Any panel facing −X decomposes to a different rotation, reported as success</td></tr>
+<tr><td>Authored sun azimuth lost on save</td><td class="bad-t">High</td><td>Cross-seam verification</td><td>User edits silently discarded on reload</td></tr>
+<tr><td>Absolute triangle epsilon</td><td>Medium</td><td>Plan review</td><td>Scaled meshes silently drop triangles — missing geometry, wrong flux</td></tr>
+<tr><td><code>BVH::build</code> stale pointers</td><td>Medium</td><td>Plan review</td><td>Dangling pointer traversal once object deletion exists</td></tr>
+<tr><td>Mesh assets never packaged</td><td>Medium</td><td>Packaging check</td><td>12 of 20 shipped scenes fail to load in a distributed build</td></tr>
+<tr><td><code>sun.direction</code> nearly dropped from the writer</td><td class="bad-t">High</td><td>Foundation lead</td><td>Every written scene unloadable</td></tr>
+<tr><td>Three unguarded null dereferences</td><td>Low</td><td>Plan review</td><td>Crash on an empty scene</td></tr>
+</table>
+
+<h3>A packaging bug worth calling out separately</h3>
+<p>Twelve of the twenty example scenes reference STL meshes by relative path, but the packaging script only ever copied the scene JSONs. Every STL design — the project's actual finalised work — failed to load in a distributed build. This was present in the previously shipped v1.0.0 archive. Fixed, and verified by tracing an STL scene from inside the packaged folder.</p>
+
+<h2>8. Current state</h2>
+<table>
+<tr><th style="width:22%">Commit</th><th>Description</th></tr>
+<tr><td class="n">f7b858b</td><td>Research artifacts (35 files)</td></tr>
+<tr><td class="n">b880d9b</td><td>App track + agent orchestration convention recorded in CLAUDE.md</td></tr>
+<tr><td class="n">c0b7fda</td><td>Packaging: mesh assets — fixes 12 broken scenes in shipped builds</td></tr>
+<tr><td class="n">f15b2a1</td><td>Wave 0 — bug fixes, 94-scene corpus, golden baseline</td></tr>
+<tr><td class="n">ce0f262</td><td>Wave 1 stub registration</td></tr>
+<tr><td class="n">b487105</td><td>Wave 1 — sun off zenith, aperture cosine, scaling, gimbal fix</td></tr>
+<tr><td class="n">9136bbd</td><td>Wave 0/1 progress and open audit findings</td></tr>
+<tr><td class="n">8e2a0ba</td><td>Project landing page</td></tr>
+<tr><td class="n">1f5384b</td><td>Wave 2 stub registration</td></tr>
+<tr><td class="n">e0bf80b</td><td>Wave 2 — SceneDocument, JSON writer, stable object IDs</td></tr>
+<tr><td class="n">8ed4410</td><td>Azimuth-loss fix and first tests covering Wave 2 code</td></tr>
+</table>
+<p><strong>Test suite:</strong> 94 cases, 24 248 assertions, all passing. Four golden flux values unchanged across every wave. 94-scene corpus loading clean.</p>
+<p><strong>Deliverable:</strong> a statically linked, self-contained Windows executable requiring no installation and no runtime dependencies. Double-clicking it auto-discovers the bundled example scenes.</p>
+
+<h2>9. Open items</h2>
+<h4>Wave 2 remainder</h4>
+<ul>
+<li>The systematic round-trip suite (structural, physics, box-receiver face survival, mesh-path preservation) across all 94 scenes. The evidence exists but lived in agents' scratch harnesses rather than the repository.</li>
+<li><code>save_scene</code> cannot rebase mesh paths — its signature has no room for the original directory. A sibling function can. The Save-As UI must call that one.</li>
+<li>A legacy validation check on receiver top-mode was dropped rather than modify the frozen contract. No scene exercises it, but it is a real capability lost.</li>
+</ul>
+<h4>Carried from Audit A1</h4>
+<ul>
+<li>A below-horizon sun is accepted silently — a fixed aperture yields 0 W with no diagnostic, and auto-fit will cheerfully light the cooker from underground.</li>
+<li>Parameter setters change bounds with no BVH-invalidation hook.</li>
+<li>Two surfaces return an inverted bounding box for negative focal length.</li>
+<li>Downstream Python efficiency formulas assume the cosine is 1, and become wrong by 1/cos once it is reachable from JSON.</li>
+<li>A stale comment claiming byte-identical arithmetic that is not.</li>
+</ul>
+
+<h2>10. Lessons</h2>
+<ol>
+<li><strong>Record a baseline before touching physics.</strong> Four measured numbers converted every subsequent "did this break anything?" from judgement into a test — across a rewritten power formula, scaling on every surface type, and a wholesale loader replacement.</li>
+<li><strong>Have someone else check the work.</strong> Every high-severity defect here was found by an agent that had not written the code. The implementer verifies the assumptions they thought to question.</li>
+<li><strong>Make tests fail on purpose.</strong> Three separate times a test was proven to have teeth by deliberately reverting the fix and confirming the failure. Two of those tests would otherwise have passed vacuously.</li>
+<li><strong>Verify claims in both directions.</strong> One escalated "serious bug" was stale information; one dismissed detail was a genuine data-loss defect. Neither could be resolved by reading the report.</li>
+<li><strong>The artefact is the truth.</strong> Reports describe intent. <code>git diff</code> describes what happened. They differed three times in this project.</li>
+</ol>
+
+<footer>Solar Cooker Ray Tracer — development log · branch <code>feat/interactive-app</code> · generated 2026-09-09</footer>
+</body></html>
