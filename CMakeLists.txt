@@ -45,6 +45,24 @@ add_library(implot_lib STATIC
 target_include_directories(implot_lib PUBLIC ${implot_fetch_SOURCE_DIR})
 target_link_libraries(implot_lib PRIVATE polyscope)
 
+FetchContent_Declare(imguizmo_fetch
+    GIT_REPOSITORY https://github.com/CedricGuillemet/ImGuizmo.git
+    GIT_TAG        1.83
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(imguizmo_fetch)
+
+# Build ImGuizmo against polyscope's bundled ImGui, same as implot_lib above,
+# so there is exactly one ImGui context in the process.
+add_library(imguizmo_lib STATIC
+    ${imguizmo_fetch_SOURCE_DIR}/ImGuizmo.cpp
+)
+target_include_directories(imguizmo_lib PUBLIC ${imguizmo_fetch_SOURCE_DIR})
+target_link_libraries(imguizmo_lib PRIVATE polyscope)
+# ImGuizmo uses ImVec2/ImVec4 arithmetic, which imgui_internal.h gates behind this macro.
+# PUBLIC so every consumer that includes ImGuizmo.h defines it before imgui.h too.
+target_compile_definitions(imguizmo_lib PUBLIC IMGUI_DEFINE_MATH_OPERATORS)
+
 # ---------- scrt_core (physics core, no GUI) ----------
 add_library(scrt_core STATIC)
 target_include_directories(scrt_core PUBLIC include)
@@ -166,8 +184,9 @@ add_library(scrt_viz STATIC
     src/viz/panels/MaterialsPanel.cpp
     src/viz/panels/SunPanel.cpp
     src/viz/panels/TracePanel.cpp
+    src/viz/panels/ImportPanel.cpp
 )
-target_link_libraries(scrt_viz PUBLIC scrt_core polyscope implot_lib)
+target_link_libraries(scrt_viz PUBLIC scrt_core polyscope implot_lib imguizmo_lib)
 set_project_warnings(scrt_viz)
 
 # ---------- scrt_app (desktop entry point) ----------
