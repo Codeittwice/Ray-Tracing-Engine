@@ -2,6 +2,9 @@
 
 All commands run from the project root: `C:\dev\solar-cooker-rt\`
 
+Results are **optical only**: the tracer reports where sunlight goes and how much arrives.
+It does not model heat, so there is no pot temperature, no cooling loss and no cooking time.
+
 ---
 
 ## Build
@@ -32,9 +35,78 @@ ctest --test-dir build/debug --output-on-failure
 
 ---
 
-## scrt_app — interactive 3D viewer
+## scrt_app — interactive 3D viewer and editor
 
-Opens a Polyscope GUI showing the scene geometry, traced rays and the flux heatmap on the receiver.
+Opens a Polyscope GUI showing the scene geometry, traced rays and the flux heatmap on the
+receiver, plus a sidebar for editing the scene and running traces.
+
+> **Caveat before you rely on any of this:** the GUI compiles and its underlying logic is
+> covered by the test suite, but the interface itself has not been driven end-to-end by a
+> human. What follows describes what the code does. The headless and `scrt_compare` paths
+> further down are the exercised, production research workflows and are unchanged.
+
+### The sidebar, top to bottom
+
+**Outliner** — every part of the scene by name: reflectors, receiver faces, sun, aperture,
+materials. Click a row to select it; the selected object is highlighted in the 3D view.
+**Frame selected** points the camera at it. This panel selects and toggles visibility only;
+it never edits geometry.
+
+**Scene Browser** — lists JSON scenes found in `--examples-dir` and loads one in place
+(see below). Also hosts the **Save scene** section.
+
+**Transform** — moves, rotates and scales whichever object is selected in the Outliner.
+
+- The numeric fields and the on-screen **gizmo** are two views of one edit, so dragging the
+  gizmo and typing a number cannot disagree.
+- **X / Y / Z** checkboxes lock the gizmo to the axes you leave ticked.
+- **Centre to origin** and **Align to receiver (XY)** are one-click placements.
+- Scaling is uniform unless you tick **Unlock non-uniform scale**.
+- **Reset transform** restores the pose the object had when the scene loaded.
+- Rotation and scaling happen about the object's own centre, not the world origin.
+
+**Scene** (materials) — live reflectance and slope error for mirrors, refractive index and
+absorption for dielectrics. Each control has a hover tooltip explaining what it means
+physically.
+
+**Sun** — DNI plus sun position:
+
+- **Azimuth** is a compass bearing in degrees: 0 = north, 90 = east, 180 = south, 270 = west.
+- **Elevation** is degrees above the horizon: 0 = sun on the horizon, 90 = directly overhead.
+- The slider range is 0–90 elevation, but a scene JSON can still specify a sun below the
+  horizon. The panel says so in orange when that happens, and such a scene collects no power.
+
+**Trace** — ray count, max bounces, path recording, and two launch buttons:
+
+- **Preview (10k rays)** — fast and rough, ignores the Rays slider.
+- **Full Trace** — uses the Rays slider and runs on a **background thread**, so the window
+  stays responsive. A progress bar shows rays completed and a **Cancel** button stops the run
+  early, keeping whatever was gathered.
+
+While a trace runs the scene is locked: every scene-editing panel is greyed out and the gizmo
+is disabled, because the worker reads the scene without a lock. Only the Trace panel stays
+live so Cancel remains reachable.
+
+**Import model** — brings an STL/OBJ/etc. into the running scene:
+
+1. **Browse...** or type a path, then **Inspect**.
+2. The panel reports submesh and triangle counts, the raw bounding box in file units, and its
+   **guess at the file's units** (millimetres, centimetres, metres, or a custom scale factor).
+3. It shows the resulting **real size in metres** so you can sanity-check the guess before
+   committing — this is where a 1000x-too-large CAD import gets caught.
+4. Optionally tick **Import submeshes as separate objects** and **Centre on scene**.
+5. **Add to scene** commits it as a new object, which then appears in the Outliner.
+
+**Save scene** — **Save**, **Save As...** and **Revert to saved...**. Both save paths write
+through `save_scene_as`, which rebases relative mesh paths against the destination directory,
+so a scene saved to a new folder still finds its meshes when reloaded. Revert asks for
+confirmation before discarding edits.
+
+### Flux Analysis window
+
+Opens once a trace has finished. Shows the flux heatmap, 1-D profile plots, and readouts for
+power reaching the receiver, peak flux and concentration ratio, each with a plain-language
+caption and an exact full-precision line beneath.
 
 ### Switching scenes without restarting
 

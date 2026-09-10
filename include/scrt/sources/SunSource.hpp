@@ -61,7 +61,7 @@ public:
     ///
     /// +Z is the zenith, and sun_direction_ is where the light travels, so a strictly
     /// positive z component is exactly a negative solar elevation. Exact comparison, not
-    /// an epsilon: elevation 0 yields z == -0.0, which is not > 0.
+    /// an epsilon: elevation 0 yields z == +0.0, which is not > 0.
     static bool below_horizon(math::vec3 propagation_dir) { return propagation_dir.z > 0.0; }
 
     /// True when this source's sun currently sits under the horizon (yields no daylight).

@@ -13,7 +13,13 @@ A physically-based Monte Carlo ray tracer for solar concentrator design, built i
 - **Sun models**: pillbox (uniform disk), Buie 2003 (realistic aureole, parameterised by circumsolar ratio χ)
 - **Parallel tracing**: `std::execution::par` with per-thread flux accumulators
 - **Export**: CSV flux map, NumPy `.npy`, JSON summary, Wavefront OBJ scene
+- **Interactive editor**: object outliner, transform gizmo with per-axis locks and centering, object scaling, runtime model import with unit detection, sun azimuth/elevation, scene save / save-as / revert, cancellable background trace with progress
 - **GUI**: Polyscope 3D view + ImPlot flux analysis window, live material editing
+
+The tracer models **optics only** — where sunlight goes and how much of it lands where. It
+does not model heat: there is no thermal mass, no losses from the pot, no cooking time, and
+no day-integrated energy. "Power reaching the pot" is optical watts arriving, not a
+temperature.
 
 ---
 
@@ -59,7 +65,29 @@ A `release` preset is also available (`cmake --preset release && cmake --build -
 build\debug\scrt_app.exe examples\parabolic_dish.json
 ```
 
-The window shows the 3D scene, sampled ray paths, a heatmap on the receiver, and a **Flux Analysis** panel with 1-D line plots and numerical readouts. Material parameters (reflectance, slope error, refractive index) can be edited live; clicking **Preview** or **Full Trace** re-traces with the new values.
+The window shows the 3D scene, sampled ray paths, a heatmap on the receiver, and a separate
+**Flux Analysis** window with the heatmap, 1-D line plots and numerical readouts.
+
+The left sidebar holds these panels, top to bottom:
+
+| Panel | What it does |
+|-------|--------------|
+| **Outliner** | Lists every part of the scene by name — reflectors, receiver faces, sun, aperture, materials. Click a row to select it; **Frame selected** points the camera at it. Selection only: it does not edit the scene. |
+| **Scene Browser** | Lists JSON scenes from `--examples-dir` and loads one in place. Also hosts the **Save scene** section (below). |
+| **Transform** | Moves, rotates and scales the selected object. Numeric fields and a 3D **gizmo** are two views of the same edit, so they cannot drift apart. Per-axis **X / Y / Z locks** restrict the gizmo; **Centre to origin** and **Align to receiver (XY)** are one-click placements; scaling is uniform unless **Unlock non-uniform scale** is ticked. **Reset transform** returns the object to its loaded pose. |
+| **Scene** (materials) | Live reflectance, slope error, refractive index and absorption per material. |
+| **Sun** | DNI, plus **azimuth** (compass bearing: 0 = north, 90 = east, 180 = south) and **elevation** (degrees above the horizon; 90 = directly overhead). |
+| **Trace** | Ray count, max bounces, path recording, **Preview (10k rays)** and **Full Trace**. A full trace runs on a background thread with a progress bar and a **Cancel** button. |
+| **Import model** | Loads an STL/OBJ/etc. at runtime. **Inspect** reports the raw bounding box and guesses the file's units (mm / cm / m, or a custom scale), shows the resulting real-world size in metres, and can split submeshes into separate objects before **Add to scene**. |
+| **Save scene** | **Save**, **Save As...** and **Revert to saved...**. Both save paths go through `save_scene_as`, so relative mesh paths are rebased against the new directory and a saved scene reloads from wherever it was written. |
+
+While a trace is running the scene is immutable: every mutating panel is greyed out and the
+gizmo is disabled, because the worker thread reads the scene without a lock. Only the Trace
+panel stays live, so **Cancel** remains reachable.
+
+> **Caveat:** the GUI builds and its logic is covered by the test suite, but it has not been
+> driven end-to-end by a human. Treat the panel behaviour above as *what the code does*,
+> not as a tested workflow. The headless and batch paths below are the exercised ones.
 
 ### Headless mode
 
@@ -196,6 +224,22 @@ ctest --test-dir build/debug --output-on-failure
 | T11 | All four example scenes load, trace, and export without error |
 | T12 | JSON round-trip: serialise → parse → serialise is byte-identical |
 
+The suite has grown well past the original T1–T12 acceptance set. It also covers:
+
+| Area | File |
+|------|------|
+| Golden flux baselines over the bundled scene corpus | `tests/test_regression_corpus.cpp` |
+| Scene document model and JSON writer round-trip | `tests/test_scene_document.cpp` |
+| Scene load/save, including mesh-path rebasing on save-as | `tests/test_scene_io.cpp` |
+| Editor mutations (add/remove/transform) against the document | `tests/test_scene_editor.cpp` |
+| Object scaling and surface parameter setters | `tests/test_scale.cpp` |
+| Mesh import, unit detection, submesh splitting | `tests/test_mesh_import.cpp` |
+| Sun angle conversions and aperture cosine / auto-fit | `tests/test_sun.cpp` |
+| Sun and aperture input validation (below-horizon, zero vectors, bad margins, DNI plumbing) | `tests/test_sun_validation.cpp` |
+
+The golden flux values in `test_regression_corpus.cpp` are the safety net for every optical
+change: if a refactor moves a number there, it moved the physics.
+
 ---
 
 ## Project structure
@@ -209,16 +253,24 @@ include/scrt/
   sources/     SunSource.hpp, Pillbox.hpp, Buie.hpp
   surfaces/    Surface.hpp, Plane, Sphere, Paraboloid, GeneralQuadric,
                ImplicitSDF, TriangleMesh
-  scene/       Scene.hpp, Aperture.hpp, Receiver.hpp
+  scene/       Scene.hpp, Aperture.hpp, Receiver.hpp, SceneEditor.hpp
   accel/       BVH.hpp
   tracer/      Tracer.hpp, FluxAccumulator.hpp
-  io/          SceneLoader.hpp, ResultsExporter.hpp, MeshImporter.hpp
-  viz/         Viewer.hpp, RayRenderer.hpp, FluxPlotter.hpp
+  io/          SceneLoader.hpp, SceneDocument.hpp, SceneWriter.hpp, ScenePaths.hpp,
+               ResultsExporter.hpp, MeshImporter.hpp
+  viz/         Viewer.hpp, RayRenderer.hpp, FluxPlotter.hpp, Panels.hpp
 src/           Implementation files mirroring include/ layout
+src/viz/panels/  One file per sidebar panel: Outliner, SceneBrowser, Transform,
+                 Materials, Sun, Trace, Import, Save
 app/main.cpp   CLI entry point (GUI + headless modes)
-examples/      Four ready-to-run JSON scenes
-tests/         doctest test suite (T1–T12)
+app/compare_main.cpp  scrt_compare batch entry point
+examples/      Ready-to-run JSON scenes
+tests/         doctest test suite
 ```
+
+`io::SceneDocument` is the authoritative in-memory form of a scene; `scene::Scene` is the
+traceable form built from it. `scene::SceneEditor` mutates the two together, which is what
+makes save-after-edit round-trip.
 
 ---
 
