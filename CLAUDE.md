@@ -32,25 +32,21 @@ AI scene-generation helper. Optical results only.
 - [x] Wave 2 — SceneDocument & JSON writer (the pivot everything downstream hangs off)
 - [x] Wave 3 — SceneEditor & mutation ∥ Viewer decomposition + outliner
 - [x] Wave 4 — ImGuizmo & transform UI ∥ model import & units
-- [~] Wave 5 — Async trace, save UI, polish, packaging (PARTIAL, see below)
+- [x] Wave 5 — Async trace, save UI, polish, packaging
 - [ ] Wave 6 — AI helper
 
 Out of scope on this track: thermal model, lat/lon geographic sun, TMY weather, day-integrated Wh.
 
-### Wave 5 is PARTIAL and UNREVIEWED - resume here
-Commit `0eb2d6d` landed work whose authoring agents were stopped before their own
-verification. It builds and the 121-case suite passes, but **no new tests cover any of it**.
-Before building on it, confirm:
-- **Does `SavePanel` call `save_scene_as`, not `save_scene`?** `save_scene` cannot rebase mesh
-  paths, so save-as on a mesh scene silently writes a file that fails to reload. There is a test
-  pinning this in `tests/test_scene_io.cpp` (search "save_scene cannot relocate").
-- **Is every scene-mutating control gated behind a running trace?** The tracer holds a
-  `const Scene&` and is only isolated if the GUI does not mutate the scene mid-run - and the
-  gizmo, outliner and import panel can all now mutate it. This is the live data race.
-- Does the FluxPlotter DNI fix actually track the slider, in both the display and the export?
-- Do the new sun/aperture validations reject a below-horizon sun without breaking the goldens?
-Still not done in Wave 5: packaging refresh, README/RUNNING updates, plain-language labels,
-and `tests/test_sun_validation.cpp` (never created; would need CMake registration).
+### Open findings from Wave 5
+- **Nobody has driven the GUI.** Every UI agent said so explicitly. Unverified: gizmo z-order
+  against the panel, mouse arbitration between gizmo drag and camera orbit, widget layout at the
+  real 300px width, and ImGuizmo in orthographic projection. This is the largest open risk.
+- `MeshDoc` has no `submesh` field, so split imports preview but cannot be committed. The panel
+  says so inline. Needs the field plus parser and writer support.
+- Three ~8-line copies of the `tip`/`help_line` tooltip helpers exist across panels; hoist into
+  `Panels.hpp` when someone owns that header.
+- `angles_from_direction` rejects vectors below ~1e-154 per component because the guard tests the
+  squared length and `dot()` underflows first. Harmless, documented.
 
 ### Open findings from Wave 3 (deferred)
 - **`io::LoadedScene` does not carry its `SceneDocument`** - `load_scene()` parses one and throws it
