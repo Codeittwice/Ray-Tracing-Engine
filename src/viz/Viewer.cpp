@@ -296,6 +296,21 @@ void Viewer::register_scene() {
     renderer.register_surfaces(32);
     renderer.register_aperture();
     update_receiver_flux(); // registers zeroed heatmap mesh
+
+    // Pin the ground plane to a fixed height taken from the scene we just loaded.
+    //
+    // In Automatic mode the floor sits a fixed offset under the scene's bounding box, so it
+    // tracks that box - and the box is recomputed from EVERY structure whenever any one of them
+    // is transformed. Scaling a single reflector therefore moved the floor, which is the
+    // "background changes while scaling" report. Manual mode reads options::groundPlaneHeight
+    // and ignores the bounding box entirely, so the floor stays put no matter what is edited.
+    if (scene_) {
+        const auto b = scene_->world_bounds();
+        const double span = b.max().z - b.min().z;
+        polyscope::options::groundPlaneHeightMode = polyscope::GroundPlaneHeightMode::Manual;
+        polyscope::options::groundPlaneHeight =
+            static_cast<float>(b.min().z - 0.02 * (span > 0.0 ? span : 1.0));
+    }
 }
 
 // ---- update_receiver_flux ----------------------------------------------------
@@ -457,6 +472,12 @@ void Viewer::run() {
     // Fill the screen on launch. Polyscope never creates a maximised window, and the GLFW
     // handle is not exposed - but the context it made current is.
     if (GLFWwindow* win = glfwGetCurrentContext()) glfwMaximizeWindow(win);
+
+    // This project is Z-up throughout: +Z is the zenith in the sun model, and the box receiver
+    // walls are named north/south/east/west in the XY plane. Polyscope defaults to Y-up, which
+    // drew the ground plane as a tilted wall standing through the cooker rather than a floor
+    // under it.
+    polyscope::view::setUpDir(polyscope::UpDir::ZUp);
 
     // set_loaded_scene() may already have started a preview; this one supersedes it.
     cancel_and_join_trace();
