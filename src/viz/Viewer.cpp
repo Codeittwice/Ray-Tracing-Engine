@@ -3,6 +3,7 @@
 #include "scrt/viz/Panels.hpp"
 #include "scrt/viz/RayRenderer.hpp"
 #include "scrt/viz/Layout.hpp"
+#include "scrt/viz/Theme.hpp"
 #include "scrt/core/Transform.hpp"
 #include "scrt/io/SceneLoader.hpp"
 #include "scrt/math/Constants.hpp"
@@ -23,6 +24,15 @@
 #include "polyscope/surface_mesh.h"
 
 namespace scrt::viz {
+
+/// Rays for the automatic preview that runs on load.
+///
+/// 10k over a 64x64 receiver is ~2 rays per bin, which renders as pure Poisson confetti rather
+/// than a flux map. Note the trade-off runs the other way from intuition: a FINER receiver grid
+/// makes the noise worse, because each bin catches fewer rays. Smoothing it means more rays.
+/// The trace is asynchronous, so this costs responsiveness rather than startup time.
+static constexpr std::size_t kPreviewRays = 150'000;
+
 
 namespace {
 
@@ -175,7 +185,7 @@ void Viewer::load_scene_internal(io::LoadedScene ls) {
     polyscope::removeAllStructures();
     init_surf_xforms();
     register_scene();
-    start_trace(10'000);
+    start_trace(kPreviewRays);
 }
 
 // ---- init_surf_xforms --------------------------------------------------------
@@ -422,6 +432,7 @@ void Viewer::draw_gui() {
 
     ImGui::BeginDisabled(busy);
     draw_import_panel(ctx);
+    draw_settings_panel(ctx);
     ImGui::EndDisabled();
 
     ImGui::End();
@@ -462,8 +473,10 @@ void Viewer::run() {
     // hook that lands on every context and early enough to stop imgui.ini being read at all.
     // Mutating ImGui::GetStyle() between init() and show() is silently discarded.
     polyscope::options::configureImGuiStyleCallback = []() {
-        polyscope::configureImGuiStyle();               // keep Polyscope's sizing/rounding
         ImGui::GetIO().IniFilename = nullptr;           // no saved window positions, ever
+        // Our own palette, not Polyscope's green/teal. Re-applied here rather than once after
+        // init() because show() builds a fresh ImGuiContext with a fresh ImGuiStyle.
+        apply_theme(current_theme());
     };
 
     polyscope::init();
@@ -491,7 +504,7 @@ void Viewer::run() {
     // reason about instead of two.
     cfg_.record_paths        = true;
     cfg_.max_paths_to_record = 200;
-    start_trace(10'000);
+    start_trace(kPreviewRays);
 
     polyscope::state::userCallback = [this]() { draw_gui(); };
     polyscope::show();

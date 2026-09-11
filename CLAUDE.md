@@ -45,7 +45,7 @@ the mockup is the agreed target design. Phases 1 and 2 are done.
 - [x] Phase 1 — Scale/rotation bug fixes, placements reach the document
 - [x] Phase 2 — Polyscope panels hidden, ghost window killed, maximise on start, panels docked
       and re-flowing on resize (`include/scrt/viz/Layout.hpp`)
-- [ ] Phase 3 — Dark/light themes + Settings panel (incl. per-panel toggles for Polyscope's own)
+- [x] Phase 3 — Dark/light themes + Settings panel (incl. toggle for Polyscope's own panels)
 - [ ] Phase 4 — Stronger selection highlight; numeric entry for translate/rotate/scale
 - [ ] Phase 5 — Left panel becomes three tabs; right column = flux / selection / contextual transform
 - [ ] Phase 6 — AI helper + import/export overlays
@@ -61,9 +61,10 @@ Polyscope's own panels hidden with per-panel toggles in Settings.
    bounding box. Polyscope was also left at its default Y-up while this project is Z-up throughout,
    which drew the ground as a tilted wall through the cooker; `UpDir::ZUp` is now set.
    **Not yet confirmed by a human at a window.**
-2. **The flux map renders as RGB noise** - orange/blue/green confetti instead of a heat ramp.
-   Never investigated. Note the stale `crash.log` at the repo root complains
-   `unrecognized colormap name: plasma`, which is a likely lead.
+2. ~~Flux map renders as RGB noise~~ - NOT A BUG. It is Poisson noise from the automatic
+   preview: 10k rays over a 64x64 receiver is ~2 rays per bin. Note the trade-off runs opposite
+   to intuition - a FINER receiver grid makes it worse, since each bin catches fewer rays. The
+   preview is now 150k rays (`kPreviewRays` in `Viewer.cpp`); a full trace smooths it further.
 3. **Edge-panning is not wired to the viewport rect.** `Layout.hpp` exposes `viewport_min/max`
    precisely so the trigger follows the viewport rather than the window, but nothing consumes it
    yet. The user explicitly wants edge-panning during a drag PRESERVED; now that panels occupy

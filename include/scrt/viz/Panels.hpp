@@ -146,5 +146,7 @@ void draw_trace_panel(PanelContext& ctx);
 void draw_import_panel(PanelContext& ctx);
 /// Draws the save / save-as / revert panel. Dispatched from draw_scene_browser_panel().
 void draw_save_panel(PanelContext& ctx);
+/// Draws the settings panel (theme, ground plane, Polyscope's own panels).
+void draw_settings_panel(PanelContext& ctx);
 
 } // namespace scrt::viz

@@ -179,6 +179,7 @@ set_project_warnings(scrt_compare)
 # ---------- scrt_viz (visualization, depends on Polyscope + ImPlot) ----------
 add_library(scrt_viz STATIC
     src/viz/Viewer.cpp
+    src/viz/Theme.cpp
     src/viz/RayRenderer.cpp
     src/viz/FluxPlotter.cpp
     src/viz/panels/OutlinerPanel.cpp
@@ -189,6 +190,7 @@ add_library(scrt_viz STATIC
     src/viz/panels/TracePanel.cpp
     src/viz/panels/ImportPanel.cpp
     src/viz/panels/SavePanel.cpp
+    src/viz/panels/SettingsPanel.cpp
 )
 # glfw is PRIVATE on the polyscope target, so link it here too: Viewer::run() needs
 # glfwMaximizeWindow, and Polyscope exposes no accessor for its own window handle.
