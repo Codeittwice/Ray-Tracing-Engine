@@ -109,11 +109,17 @@ math::vec3 base_pivot(const surfaces::Surface& surf, const core::Transform& base
 /// Pushes the edit onto both the physics surface and its Polyscope structure.
 void apply_edit(PanelContext& ctx, std::uint64_t id, const ObjectEditState& st) {
     if (!ctx.scene) return;
-    // Placement-only edit: set_surface_transform writes the physics transform and the
-    // structure's display transform from this one matrix and re-uploads no geometry, so a
-    // drag costs no re-tessellation and the two can never diverge.
-    RayRenderer(ctx.scene).set_surface_transform(
-        id, core::Transform::from_matrix(world_matrix(st)));
+    const math::mat4 world = world_matrix(st);
+
+    // The document is authoritative for placement, so the edit goes through the editor
+    // first. Writing Surface::set_transform directly - which this used to do - leaves the
+    // TransformDoc holding the load-time transform, so moving an object and saving wrote
+    // the OLD position back out. SceneEditor.hpp forbids exactly that.
+    if (ctx.commit_transform) ctx.commit_transform(id, world);
+
+    // Then the display. set_surface_transform re-uploads no geometry, so a drag costs no
+    // re-tessellation; it rewrites the same matrix onto the surface, which is idempotent.
+    RayRenderer(ctx.scene).set_surface_transform(id, core::Transform::from_matrix(world));
     if (ctx.need_rebuild) *ctx.need_rebuild = true;
     if (ctx.need_retrace) *ctx.need_retrace = true;
 }
@@ -213,10 +219,19 @@ bool run_gizmo(ObjectEditState& st, surfaces::ScaleSupport support, bool uniform
     float m[16];
     to_f16(world_matrix(st), m);
 
+    // ImGuizmo is only well-defined for SCALE in LOCAL mode. In WORLD mode ComputeContext
+    // keeps only the matrix's position and discards its linear part, then HandleScale writes
+    // back scale * that stripped model - so the first frame of a world-space scale drag
+    // deletes the object's rotation, and recompose feeds a different matrix back on the next
+    // frame. Translate survives the strip (pure translation) and Rotate handles the mode
+    // itself, which is exactly why only scale misbehaved.
+    const ImGuizmo::MODE space =
+        (g_tool.op == GizmoOp::Scale) ? ImGuizmo::LOCAL
+                                      : (g_tool.world ? ImGuizmo::WORLD : ImGuizmo::LOCAL);
+
     const bool moved = ImGuizmo::Manipulate(
         glm::value_ptr(view), glm::value_ptr(proj),
-        static_cast<ImGuizmo::OPERATION>(mask),
-        g_tool.world ? ImGuizmo::WORLD : ImGuizmo::LOCAL, m);
+        static_cast<ImGuizmo::OPERATION>(mask), space, m);
 
     set_mouse_grab(ImGuizmo::IsOver() || ImGuizmo::IsUsing());
 
@@ -292,10 +307,17 @@ void draw_tool_controls(surfaces::ScaleSupport support) {
     ImGui::EndDisabled();
     g_tool.op = static_cast<GizmoOp>(op);
 
-    int space = g_tool.world ? 1 : 0;
+    // Scale is always local (see run_gizmo), so the choice is meaningless there rather than
+    // merely unused - greying it out says so instead of silently ignoring the user.
+    const bool scaling = (g_tool.op == GizmoOp::Scale);
+    int space = (g_tool.world && !scaling) ? 1 : 0;
+    ImGui::BeginDisabled(scaling);
     ImGui::RadioButton("Local", &space, 0); ImGui::SameLine();
     ImGui::RadioButton("World", &space, 1);
-    g_tool.world = (space == 1);
+    ImGui::EndDisabled();
+    if (scaling && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("Scaling is always about the object's own axes.");
+    if (!scaling) g_tool.world = (space == 1);
 
     static const char* kLockTip =
         "A locked axis loses its gizmo handle and its numeric field.\n"

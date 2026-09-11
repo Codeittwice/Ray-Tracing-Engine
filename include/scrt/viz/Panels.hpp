@@ -90,6 +90,10 @@ struct PanelContext {
     /// io::ElementDoc, shows it, and reports that it cannot yet be committed.
     std::function<std::uint64_t(io::ElementDoc)> add_element;
 
+    /// Commits a world-space placement through SceneEditor so the document stays authoritative.
+    /// Null when the viewer has no editor; callers must fall back to display-only.
+    std::function<void(std::uint64_t, const math::mat4&)> commit_transform;
+
     // Save (Wave 5)
 
     /// The document-backed editor, for doc(), dirty() and mark_saved(). Null until the Viewer

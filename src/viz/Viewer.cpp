@@ -277,10 +277,21 @@ void Viewer::cancel_and_join_trace() {
 // ---- register_scene ----------------------------------------------------------
 
 void Viewer::register_scene() {
+    // Let Polyscope size the scene while the structures land...
+    polyscope::options::automaticallyComputeSceneExtents = true;
+
     RayRenderer renderer(scene_);
     renderer.register_surfaces(32);
     renderer.register_aperture();
     update_receiver_flux(); // registers zeroed heatmap mesh
+
+    // ...then freeze it. Structure::setTransform recomputes the GLOBAL lengthScale and
+    // bounding box across every structure, and the default TileReflection ground plane
+    // draws a mirrored copy of every object about a plane whose height comes from that box.
+    // So dragging one object's scale moved the ground plane and therefore every object's
+    // reflection - which read as "everything flashes and scales together". Translate and
+    // rotate use the identical path; they just never perturb the box enough to notice.
+    polyscope::options::automaticallyComputeSceneExtents = false;
 }
 
 // ---- update_receiver_flux ----------------------------------------------------
@@ -335,6 +346,9 @@ PanelContext Viewer::make_panel_context() {
     // and a SceneEditor so a committed element reaches both document and live scene.
     ctx.scene_dir             = &scene_dir_;
     if (editor_) {
+        ctx.commit_transform = [this](std::uint64_t id, const math::mat4& world) {
+            editor_->commit_transform(id, world);
+        };
         ctx.add_element = [this](io::ElementDoc d) {
             const std::uint64_t id = editor_->add_element(std::move(d));
             need_rebuild_ = true;

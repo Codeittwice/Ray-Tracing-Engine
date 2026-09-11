@@ -1,10 +1,13 @@
 #include <doctest/doctest.h>
+#include <algorithm>
+#include <cmath>
 #include "scrt/core/AABB.hpp"
 #include "scrt/core/Hit.hpp"
 #include "scrt/core/Ray.hpp"
 #include "scrt/core/Transform.hpp"
 #include "scrt/io/SceneDocument.hpp"
 #include "scrt/io/SceneLoader.hpp"
+#include "scrt/io/ScenePaths.hpp"
 #include "scrt/math/Vec.hpp"
 #include "scrt/scene/Scene.hpp"
 #include "scrt/scene/SceneEditor.hpp"
@@ -386,4 +389,57 @@ TEST_CASE("SceneEditor: add_element rejects an unknown material and changes noth
     CHECK(ed.doc().elements.empty());
     CHECK(ed.scene().surfaces().empty());
     CHECK_FALSE(ed.dirty());
+}
+
+// Regression: the transform panel wrote Surface::set_transform directly instead of going
+// through SceneEditor::commit_transform. The live object moved, but the TransformDoc kept
+// the load-time transform - so placing a reflector with the gizmo and saving wrote the OLD
+// position back out, and reopening the file silently undid the work. SceneEditor.hpp forbids
+// exactly that; this pins the whole path: commit -> save -> reload.
+TEST_CASE("SceneEditor: a committed placement survives save and reload") {
+    const auto src = std::filesystem::path(SCRT_SOURCE_DIR) / "examples" / "parabolic_dish.json";
+    REQUIRE(std::filesystem::exists(src));
+
+    auto loaded = scrt::io::load_scene(src);
+    REQUIRE(loaded.scene != nullptr);
+    REQUIRE(loaded.scene->surfaces().size() >= 1u);
+
+    scrt::scene::SceneEditor ed(std::move(loaded), src.parent_path());
+    const std::uint64_t id = ed.scene().surfaces()[0]->id();
+    REQUIRE(id != 0u);
+    const auto before = ed.scene().surfaces()[0]->transform().matrix();
+
+    // A placement with all three of translation, rotation and scale, so a fix that only
+    // carried position would still fail here.
+    const auto placed = scrt::core::Transform::from_trs(
+        {0.317, -0.142, 0.688},          // translation (m)
+        {0.4363, -0.1745, 1.0472},       // rotation (rad): 25, -10, 60 degrees
+        {2.0, 2.0, 2.0});                // uniform scale
+    ed.commit_transform(id, placed.matrix());
+
+    const auto dir = std::filesystem::temp_directory_path() / "scrt_commit_rt";
+    std::filesystem::create_directories(dir);
+    const auto dst = dir / "placed.json";
+    scrt::io::save_scene_as(ed.doc(), dst, src.parent_path());
+
+    auto back = scrt::io::load_scene(dst);
+    REQUIRE(back.scene != nullptr);
+    REQUIRE(back.scene->surfaces().size() == ed.scene().surfaces().size());
+
+    const auto& want = ed.scene().surfaces()[0]->transform().matrix();
+    const auto& got  = back.scene->surfaces()[0]->transform().matrix();
+    for (int c = 0; c < 4; ++c)
+        for (int r = 0; r < 4; ++r)
+            CHECK(got[c][r] == doctest::Approx(want[c][r]).epsilon(1e-9));
+
+    // Teeth: without this, a save that wrote the LOAD-TIME transform would still satisfy the
+    // comparison above if commit_transform had also failed to move the live surface. The
+    // reloaded placement must actually differ from where the object started.
+    double moved = 0.0;
+    for (int c = 0; c < 4; ++c)
+        for (int r = 0; r < 4; ++r)
+            moved = std::max(moved, std::abs(got[c][r] - before[c][r]));
+    CHECK(moved > 0.1);
+
+    std::filesystem::remove_all(dir);
 }
