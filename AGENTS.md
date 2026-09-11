@@ -56,14 +56,11 @@ Polyscope's own panels hidden with per-panel toggles in Settings.
 
 ### OPEN BUGS — reported by the user, NOT fixed
 
-1. **The background/ground plane still changes while scaling.** `set_extents_frozen()` in
-   `TransformPanel.cpp` freezes `automaticallyComputeSceneExtents` during a drag and calls
-   `updateStructureExtents()` once on release - so the jump on release is expected, but the user
-   reports movement during the drag too. Unverified whether the freeze engages on the first drag
-   frame (it is called near the end of `draw_transform_panel`, possibly after the gizmo has
-   already run that frame). **Recommended fix, not yet applied:** pin `groundPlaneHeightMode` to
-   Manual at load so the floor stops following the scene bounding box at all. Do not re-diagnose
-   this from the code alone - two previous diagnoses were confidently wrong.
+1. ~~Background changes while scaling~~ - FIXED. `groundPlaneHeightMode` is pinned to Manual at
+   registration with a height taken from the scene's own bounds, so the floor no longer tracks the
+   bounding box. Polyscope was also left at its default Y-up while this project is Z-up throughout,
+   which drew the ground as a tilted wall through the cooker; `UpDir::ZUp` is now set.
+   **Not yet confirmed by a human at a window.**
 2. **The flux map renders as RGB noise** - orange/blue/green confetti instead of a heat ramp.
    Never investigated. Note the stale `crash.log` at the repo root complains
    `unrecognized colormap name: plasma`, which is a likely lead.
