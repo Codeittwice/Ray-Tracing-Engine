@@ -191,6 +191,7 @@ add_library(scrt_viz STATIC
     src/viz/panels/ImportPanel.cpp
     src/viz/panels/SavePanel.cpp
     src/viz/panels/SettingsPanel.cpp
+    src/viz/panels/TopBarPanel.cpp
 )
 # glfw is PRIVATE on the polyscope target, so link it here too: Viewer::run() needs
 # glfwMaximizeWindow, and Polyscope exposes no accessor for its own window handle.

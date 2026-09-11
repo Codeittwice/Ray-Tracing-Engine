@@ -61,6 +61,9 @@ private:
     /// Full path of the file the current document came from; empty for a synthesized scene.
     std::filesystem::path                    scene_path_;
 
+    /// One-shot: the menu bar asked to reveal Settings.
+    bool                                     settings_requested_ = false;
+
     /// Show Polyscope's own Structures/Selection panels. Off by default: they are placed at
     /// fixed positions that collide with ours. Exposed so Settings can bring them back.
     bool                                     show_polyscope_panels_ = false;

@@ -27,10 +27,10 @@ struct LayoutRects {
 ///
 /// Columns are clamped so that a narrow window keeps a usable 3D area rather than being entirely
 /// consumed by panels.
-inline LayoutRects compute_layout(ImVec2 display) {
+inline LayoutRects compute_layout(ImVec2 display, float top_offset = 0.0f) {
     constexpr float kMargin      = 8.0f;
-    constexpr float kLeftWidth   = 300.0f;
-    constexpr float kRightWidth  = 380.0f;
+    constexpr float kLeftWidth   = 340.0f;
+    constexpr float kRightWidth  = 430.0f;
     constexpr float kMinViewport = 320.0f;
 
     // Give the 3D area priority when the window is too narrow for both columns at full width.
@@ -46,8 +46,8 @@ inline LayoutRects compute_layout(ImVec2 display) {
         right = std::max(200.0f, kRightWidth * share);
     }
 
-    const float top    = kMargin;
-    const float height = std::max(120.0f, display.y - 2.0f * kMargin);
+    const float top    = top_offset + kMargin;
+    const float height = std::max(120.0f, display.y - top - kMargin);
 
     LayoutRects r;
     r.left_pos   = ImVec2(kMargin, top);

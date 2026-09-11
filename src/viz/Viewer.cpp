@@ -375,6 +375,8 @@ PanelContext Viewer::make_panel_context() {
     // and a SceneEditor so a committed element reaches both document and live scene.
     ctx.scene_dir             = &scene_dir_;
     // Without these the save panel has no document and reports "No document to save".
+    ctx.settings_requested = &settings_requested_;
+    ctx.open_settings      = [this]() { settings_requested_ = true; };
     ctx.editor         = editor_.get();
     ctx.scene_path     = &scene_path_;
     ctx.set_scene_path = [this](const std::filesystem::path& p) { scene_path_ = p; };
@@ -400,17 +402,19 @@ void Viewer::draw_gui() {
     // Pick up a finished worker before anything reads result_ or acc_ this frame.
     poll_trace();
 
-    // Recomputed every frame from the live window size, with ImGuiCond_Always. The old
+    PanelContext ctx  = make_panel_context();
+    const bool   busy = ctx.trace_running;
+
+    // The menu bar claims the top strip, so the panels start below whatever height it reports.
+    // Recomputed every frame from the live window size with ImGuiCond_Always: the old
     // FirstUseEver positioned each window once and never again, so the panels froze wherever
     // they were last left and ignored a resize.
-    const LayoutRects lay = compute_layout(ImGui::GetIO().DisplaySize);
+    const float       bar = draw_top_bar(ctx);
+    const LayoutRects lay = compute_layout(ImGui::GetIO().DisplaySize, bar);
 
     ImGui::SetNextWindowPos(lay.left_pos, ImGuiCond_Always);
     ImGui::SetNextWindowSize(lay.left_size, ImGuiCond_Always);
     ImGui::Begin("Solar Cooker RT", nullptr, docked_panel_flags());
-
-    PanelContext ctx = make_panel_context();
-    const bool   busy = ctx.trace_running;
 
     // The worker reads the scene without a lock, so for as long as it runs the scene must be
     // immutable. Every control that can mutate it is greyed out here rather than in each
@@ -436,6 +440,8 @@ void Viewer::draw_gui() {
     ImGui::EndDisabled();
 
     ImGui::End();
+
+    draw_viewport_buttons(ctx, lay.viewport_min, lay.viewport_max);
 
     // ---- Flux Analysis window --
     if (traced_ && acc_) {
@@ -491,6 +497,14 @@ void Viewer::run() {
     // drew the ground plane as a tilted wall standing through the cooker rather than a floor
     // under it.
     polyscope::view::setUpDir(polyscope::UpDir::ZUp);
+
+    // Off by default: it is a depth cue, not optics, and it dominates the view on a cooker that
+    // sits close to the ground. Settings turns it back on.
+    polyscope::options::groundPlaneMode = polyscope::GroundPlaneMode::None;
+
+    // The 3D area is most of the screen; leaving it near-white under dark panels reads as two
+    // applications sharing a window.
+    polyscope::view::bgColor = viewport_background(current_theme());
 
     // set_loaded_scene() may already have started a preview; this one supersedes it.
     cancel_and_join_trace();

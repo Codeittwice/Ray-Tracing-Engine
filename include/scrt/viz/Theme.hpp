@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <string>
 
 namespace scrt::viz {
@@ -17,6 +18,12 @@ void apply_theme(Theme t);
 
 /// The theme last passed to apply_theme().
 Theme current_theme();
+
+/// Viewport clear colour for `t`, as Polyscope's RGBA float array.
+///
+/// The 3D area is most of the screen, so leaving it at Polyscope's near-white while the panels
+/// are dark reads as two applications sharing a window.
+std::array<float, 4> viewport_background(Theme t);
 
 /// Human-readable name, for the Settings panel.
 const char* theme_name(Theme t);

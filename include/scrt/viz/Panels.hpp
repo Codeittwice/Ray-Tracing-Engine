@@ -1,4 +1,5 @@
 #pragma once
+#include "imgui.h"
 #include "scrt/core/Transform.hpp"
 #include "scrt/io/SceneDocument.hpp"
 #include "scrt/io/SceneLoader.hpp"
@@ -112,6 +113,14 @@ struct PanelContext {
     /// the in-memory document's relative mesh paths still resolve against the *original* base
     /// directory, and the save panel keeps tracking that separately. Optional.
     std::function<void(const std::filesystem::path&)> set_scene_path;
+
+    /// Set by the Viewer when the menu bar asked for Settings; the settings panel opens itself
+    /// and clears it. A one-shot request rather than a persistent "is open" flag, so the user can
+    /// still collapse the panel afterwards.
+    bool* settings_requested = nullptr;
+
+    /// Asks the Viewer to reveal the settings panel (from the menu bar). Optional.
+    std::function<void()> open_settings;
 };
 
 /// Outcome of a save attempt: whether the file is really on disk, plus a message for the user.
@@ -148,5 +157,9 @@ void draw_import_panel(PanelContext& ctx);
 void draw_save_panel(PanelContext& ctx);
 /// Draws the settings panel (theme, ground plane, Polyscope's own panels).
 void draw_settings_panel(PanelContext& ctx);
+/// Draws the main menu bar. Returns its height so the layout can sit beneath it.
+float draw_top_bar(PanelContext& ctx);
+/// Draws the floating assistant / import-export buttons over the 3D viewport.
+void draw_viewport_buttons(PanelContext& ctx, ImVec2 viewport_min, ImVec2 viewport_max);
 
 } // namespace scrt::viz

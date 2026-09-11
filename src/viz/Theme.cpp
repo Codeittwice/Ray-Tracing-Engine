@@ -162,6 +162,13 @@ void apply_theme(Theme t) {
 
 Theme current_theme() { return g_theme; }
 
+std::array<float, 4> viewport_background(Theme t) {
+    // A shade darker than the panels in dark, a shade lighter in light, so the panels still read
+    // as objects sitting on the view rather than dissolving into it.
+    return t == Theme::Light ? std::array<float, 4>{0.882f, 0.902f, 0.922f, 1.0f}
+                             : std::array<float, 4>{0.043f, 0.067f, 0.086f, 1.0f};
+}
+
 const char* theme_name(Theme t) { return t == Theme::Light ? "Light" : "Dark"; }
 
 } // namespace scrt::viz

@@ -5,11 +5,23 @@
 #include "polyscope/polyscope.h"
 #include "polyscope/view.h"
 
+#include <array>
+
 #include "imgui.h"
 
 namespace scrt::viz {
 
 namespace {
+
+/// Applies a theme to both the panels and the 3D viewport clear colour.
+///
+/// apply_theme() only touches ImGui; without the second half the 3D area keeps the other
+/// theme's ground and the window reads as two applications sharing a screen.
+void set_theme_and_viewport(Theme t) {
+    apply_theme(t);
+    polyscope::view::bgColor = viewport_background(t);
+    polyscope::requestRedraw();
+}
 
 /// Tooltip on the item just submitted.
 void tip(const char* text) {
@@ -21,6 +33,13 @@ void tip(const char* text) {
 // ---- draw_settings_panel -------------------------------------------------------------------
 
 void draw_settings_panel(PanelContext& ctx) {
+    // The menu bar can ask for this panel. Consume the request here so it fires once and the
+    // user can still collapse the panel again afterwards.
+    if (ctx.settings_requested && *ctx.settings_requested) {
+        *ctx.settings_requested = false;
+        ImGui::SetNextItemOpen(true);
+        ImGui::SetScrollHereY(1.0f);
+    }
     if (!ImGui::CollapsingHeader("Settings###settings")) return;
 
     // ---- appearance ----
@@ -28,10 +47,10 @@ void draw_settings_panel(PanelContext& ctx) {
 
     Theme      theme = current_theme();
     const bool dark  = (theme == Theme::Dark);
-    if (ImGui::RadioButton("Dark", dark)) apply_theme(Theme::Dark);
+    if (ImGui::RadioButton("Dark", dark)) set_theme_and_viewport(Theme::Dark);
     tip("Darker panels, easier on the eyes for long sessions.");
     ImGui::SameLine();
-    if (ImGui::RadioButton("Light", !dark)) apply_theme(Theme::Light);
+    if (ImGui::RadioButton("Light", !dark)) set_theme_and_viewport(Theme::Light);
     tip("Lighter panels. Screenshots for reports and printed documentation read better on a\n"
         "light ground.");
 
