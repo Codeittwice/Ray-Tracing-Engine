@@ -190,7 +190,9 @@ add_library(scrt_viz STATIC
     src/viz/panels/ImportPanel.cpp
     src/viz/panels/SavePanel.cpp
 )
-target_link_libraries(scrt_viz PUBLIC scrt_core polyscope implot_lib imguizmo_lib nfd::nfd)
+# glfw is PRIVATE on the polyscope target, so link it here too: Viewer::run() needs
+# glfwMaximizeWindow, and Polyscope exposes no accessor for its own window handle.
+target_link_libraries(scrt_viz PUBLIC scrt_core polyscope implot_lib imguizmo_lib nfd::nfd glfw)
 set_project_warnings(scrt_viz)
 
 # ---------- scrt_app (desktop entry point) ----------

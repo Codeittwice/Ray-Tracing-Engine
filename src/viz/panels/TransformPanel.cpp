@@ -120,6 +120,9 @@ void apply_edit(PanelContext& ctx, std::uint64_t id, const ObjectEditState& st) 
     // Then the display. set_surface_transform re-uploads no geometry, so a drag costs no
     // re-tessellation; it rewrites the same matrix onto the surface, which is idempotent.
     RayRenderer(ctx.scene).set_surface_transform(id, core::Transform::from_matrix(world));
+    // setTransform's own redraw request goes through updateStructureExtents, which returns
+    // early while the extents are frozen (see set_extents_frozen), so ask explicitly.
+    polyscope::requestRedraw();
     if (ctx.need_rebuild) *ctx.need_rebuild = true;
     if (ctx.need_retrace) *ctx.need_retrace = true;
 }
@@ -159,7 +162,18 @@ bool locked_drag3(const char* label, float* v, float speed, float lo, float hi,
     return changed;
 }
 
-/// Forces a scale triple back to uniform, keeping whichever axis the drag changed most.
+/// Forces a scale triple back to uniform, keeping whichever axis moved most since `s0`.
+///
+/// `s0` MUST be the scale as it stood when the drag STARTED, never the previous frame's.
+/// ImGuizmo's HandleScale writes absolute column lengths `mScale * mScaleValueOrigin`, where
+/// mScaleValueOrigin is frozen at drag start and mScale stays exactly 1 on every axis the
+/// user is not dragging - so each frame it puts the two idle axes back to their drag-start
+/// lengths. Measured against the previous frame those idle axes therefore look *more*
+/// changed than the dragged one the moment a collapse has raised them, this picks one of
+/// them, and the whole triple snaps back to its starting value. The next frame picks the
+/// dragged axis again. Against examples/panel_cooker.json that produced the sequence
+/// 1.05, 1.10, 1.00, 1.20, 1.00, 1.30, 1.00 ... - a per-frame strobe between the dragged
+/// size and the original one, which is what "scaling makes everything flash" actually was.
 void collapse_uniform(float* s, const float* s0) {
     int   best = 0;
     float dev  = 0.0f;
@@ -219,12 +233,16 @@ bool run_gizmo(ObjectEditState& st, surfaces::ScaleSupport support, bool uniform
     float m[16];
     to_f16(world_matrix(st), m);
 
-    // ImGuizmo is only well-defined for SCALE in LOCAL mode. In WORLD mode ComputeContext
-    // keeps only the matrix's position and discards its linear part, then HandleScale writes
-    // back scale * that stripped model - so the first frame of a world-space scale drag
-    // deletes the object's rotation, and recompose feeds a different matrix back on the next
-    // frame. Translate survives the strip (pure translation) and Rotate handles the mode
-    // itself, which is exactly why only scale misbehaved.
+    // SCALE must be LOCAL. This ImGuizmo revision passes `mode` straight through to
+    // ComputeContext (newer upstream forces LOCAL for scale there; this one does not), and in
+    // WORLD mode ComputeContext sets mModel to the matrix's *translation only* - the linear
+    // part is discarded. HandleScale then writes back `Scale(...) * mModel`, a matrix with no
+    // rotation at all. Simulated over examples/panel_cooker.json's back_panel (base rotation
+    // 67.5 deg about X), the first frame of a WORLD scale drag decomposes to
+    // rot = (-67.5, 0, 0): the edit rotation becomes the exact inverse of the base rotation,
+    // i.e. the object snaps flat. In LOCAL the same simulation holds rot at (0, 0, 0) for
+    // every frame. The cost is that the handles follow the object's own axes rather than the
+    // screen, which is correct local-space behaviour and what the tooltip below explains.
     const ImGuizmo::MODE space =
         (g_tool.op == GizmoOp::Scale) ? ImGuizmo::LOCAL
                                       : (g_tool.world ? ImGuizmo::WORLD : ImGuizmo::LOCAL);
@@ -233,12 +251,21 @@ bool run_gizmo(ObjectEditState& st, surfaces::ScaleSupport support, bool uniform
         glm::value_ptr(view), glm::value_ptr(proj),
         static_cast<ImGuizmo::OPERATION>(mask), space, m);
 
-    set_mouse_grab(ImGuizmo::IsOver() || ImGuizmo::IsUsing());
+    const bool using_now = ImGuizmo::IsUsing();
+    set_mouse_grab(ImGuizmo::IsOver() || using_now);
+
+    // The scale as it stood when this drag began. collapse_uniform needs a reference that does
+    // NOT move under it every frame; see the note on that function for what using the previous
+    // frame's triple instead did. Captured before any write-back, on the frame the drag starts.
+    static bool  dragging = false;
+    static float scale_at_drag_start[3] = {1.f, 1.f, 1.f};
+    if (using_now && !dragging) std::copy(st.scale, st.scale + 3, scale_at_drag_start);
+    dragging = using_now;
 
     // Only a live drag may write back. Widening the float matrix on an idle frame would
     // round-trip dmat4 -> mat4 -> dmat4 sixty times a second and slowly erode a transform
     // nobody is touching, so the buffer above is written for drawing and then discarded.
-    if (!moved || !ImGuizmo::IsUsing()) return false;
+    if (!moved || !using_now) return false;
 
     float t0[3], r0[3], s0[3];
     std::copy(st.trans, st.trans + 3, t0);
@@ -256,9 +283,29 @@ bool run_gizmo(ObjectEditState& st, surfaces::ScaleSupport support, bool uniform
         st.rot_deg[i] = r0[i];
         st.scale[i]   = s0[i];
     }
-    if (uniform_scale) collapse_uniform(st.scale, s0);
+    if (uniform_scale) collapse_uniform(st.scale, scale_at_drag_start);
     for (int i = 0; i < 3; ++i) st.scale[i] = std::max(kMinScale, st.scale[i]);
     return true;
+}
+
+/// Freezes Polyscope's global scene extents for the duration of an interactive edit.
+///
+/// Structure::setTransform recomputes state::lengthScale and state::boundingBox across EVERY
+/// structure, and both feed things that are not the edited object: the ground plane's height
+/// and tile size, and every length Polyscope stores as "relative" - including the ray-path
+/// curve network's radius. Measured on examples/panel_cooker.json, driving one object's scale
+/// between 1.0 and 2.5 swings lengthScale between 1.336 and 13.441, which redraws the ground
+/// grid at ten times the size and turns the ray lines into fat tubes. That is the whole-scene
+/// half of "everything flashes and scales together".
+///
+/// Scoped to the drag rather than frozen for the whole session: registration and runtime model
+/// import still need the automatic sizing, and the extents are recomputed once on release.
+void set_extents_frozen(bool frozen) {
+    static bool frozen_now = false;
+    if (frozen == frozen_now) return;
+    frozen_now = frozen;
+    polyscope::options::automaticallyComputeSceneExtents = !frozen;
+    if (!frozen) polyscope::updateStructureExtents();  // catch up once, on release
 }
 
 // ---- centring helpers ---------------------------------------------------------
@@ -316,7 +363,10 @@ void draw_tool_controls(surfaces::ScaleSupport support) {
     ImGui::RadioButton("World", &space, 1);
     ImGui::EndDisabled();
     if (scaling && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-        ImGui::SetTooltip("Scaling is always about the object's own axes.");
+        ImGui::SetTooltip(
+            "Scaling is always about the object's own axes, so on a rotated object the\n"
+            "scale handles are tilted with it rather than lined up with the screen.\n"
+            "World-space scale is not offered because it cannot preserve the rotation.");
     if (!scaling) g_tool.world = (space == 1);
 
     static const char* kLockTip =
@@ -506,6 +556,12 @@ void draw_transform_panel(PanelContext& ctx) {
                                 st->pivot.x, st->pivot.y, st->pivot.z);
         }
     }
+
+    // Hold the global scene extents still for as long as the user is actually dragging
+    // something - the gizmo, or one of the numeric fields above - and let them catch up on
+    // release. ImGui::IsAnyItemActive() covers the DragFloat rows, which move a transform
+    // continuously just like the gizmo does.
+    set_extents_frozen(ImGuizmo::IsUsing() || ImGui::IsAnyItemActive());
 
     if (changed && st) apply_edit(ctx, id, *st);
 }

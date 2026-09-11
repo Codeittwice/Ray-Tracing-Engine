@@ -1,4 +1,5 @@
 #include "scrt/viz/FluxPlotter.hpp"
+#include "scrt/viz/Layout.hpp"
 #include "scrt/io/ResultsExporter.hpp"
 #include <algorithm>
 #include <cmath>
@@ -43,9 +44,11 @@ void FluxPlotter::draw(const tracer::FluxAccumulator& acc,
     // DNI the sun panel published this frame rather than to a hardcoded 1000 W/m^2.
     const double dni = (dni_wm2 > 0.0) ? dni_wm2 : scene_dni();
 
-    ImGui::SetNextWindowSize(ImVec2(520, 480), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowPos(ImVec2(820, 20), ImGuiCond_FirstUseEver);
-    ImGui::Begin("Flux Analysis");
+    // Position and size are the Viewer's job: it owns the docked layout and applies
+    // SetNextWindowPos/Size before calling this. Setting them here as well would override
+    // that, and the FirstUseEver they used to carry is exactly why this window ignored a
+    // resize and sat wherever it was last dragged.
+    ImGui::Begin("Flux Analysis", nullptr, docked_panel_flags());
 
     if (ImGui::BeginTabBar("flux_tabs")) {
         if (ImGui::BeginTabItem("Heatmap")) {

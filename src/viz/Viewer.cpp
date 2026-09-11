@@ -2,6 +2,7 @@
 #include "scrt/viz/FluxPlotter.hpp"
 #include "scrt/viz/Panels.hpp"
 #include "scrt/viz/RayRenderer.hpp"
+#include "scrt/viz/Layout.hpp"
 #include "scrt/core/Transform.hpp"
 #include "scrt/io/SceneLoader.hpp"
 #include "scrt/math/Constants.hpp"
@@ -17,6 +18,8 @@
 #include "ImGuizmo.h"    // NOLINT(build/include_order)
 #include "implot.h"
 #include "polyscope/polyscope.h"
+#include "polyscope/imgui_config.h"
+#include <GLFW/glfw3.h>
 #include "polyscope/surface_mesh.h"
 
 namespace scrt::viz {
@@ -277,21 +280,15 @@ void Viewer::cancel_and_join_trace() {
 // ---- register_scene ----------------------------------------------------------
 
 void Viewer::register_scene() {
-    // Let Polyscope size the scene while the structures land...
-    polyscope::options::automaticallyComputeSceneExtents = true;
-
+    // Scene extents stay automatic here, so registering (and a runtime model import) resizes
+    // the ground plane and the lengthScale-relative sizes to fit what is actually on screen.
+    // They are frozen only for the duration of a transform drag, by the transform panel - a
+    // session-long freeze would leave an imported model outside the scene's idea of its own
+    // size. See set_extents_frozen() in TransformPanel.cpp.
     RayRenderer renderer(scene_);
     renderer.register_surfaces(32);
     renderer.register_aperture();
     update_receiver_flux(); // registers zeroed heatmap mesh
-
-    // ...then freeze it. Structure::setTransform recomputes the GLOBAL lengthScale and
-    // bounding box across every structure, and the default TileReflection ground plane
-    // draws a mirrored copy of every object about a plane whose height comes from that box.
-    // So dragging one object's scale moved the ground plane and therefore every object's
-    // reflection - which read as "everything flashes and scales together". Translate and
-    // rotate use the identical path; they just never perturb the box enough to notice.
-    polyscope::options::automaticallyComputeSceneExtents = false;
 }
 
 // ---- update_receiver_flux ----------------------------------------------------
@@ -366,9 +363,14 @@ void Viewer::draw_gui() {
     // Pick up a finished worker before anything reads result_ or acc_ this frame.
     poll_trace();
 
-    ImGui::SetNextWindowSize(ImVec2(300, 720), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
-    ImGui::Begin("Solar Cooker RT");
+    // Recomputed every frame from the live window size, with ImGuiCond_Always. The old
+    // FirstUseEver positioned each window once and never again, so the panels froze wherever
+    // they were last left and ignored a resize.
+    const LayoutRects lay = compute_layout(ImGui::GetIO().DisplaySize);
+
+    ImGui::SetNextWindowPos(lay.left_pos, ImGuiCond_Always);
+    ImGui::SetNextWindowSize(lay.left_size, ImGuiCond_Always);
+    ImGui::Begin("Solar Cooker RT", nullptr, docked_panel_flags());
 
     PanelContext ctx = make_panel_context();
     const bool   busy = ctx.trace_running;
@@ -383,6 +385,7 @@ void Viewer::draw_gui() {
 
     ImGui::BeginDisabled(busy);
     draw_scene_browser_panel(ctx);
+    draw_save_panel(ctx);
     draw_transform_panel(ctx);
     draw_materials_panel(ctx);
     draw_sun_panel(ctx);
@@ -398,6 +401,8 @@ void Viewer::draw_gui() {
 
     // ---- Flux Analysis window --
     if (traced_ && acc_) {
+        ImGui::SetNextWindowPos(lay.right_pos, ImGuiCond_Always);
+        ImGui::SetNextWindowSize(lay.right_size, ImGuiCond_Always);
         static FluxPlotter plotter;
         plotter.draw(*acc_, result_);
     }
@@ -410,8 +415,36 @@ void Viewer::run() {
 
     polyscope::options::programName = "Solar Cooker Ray Tracer";
     polyscope::options::verbosity   = 0;
+
+    // Polyscope's own "Polyscope" / "Structures" / "Selection" windows are placed at fixed
+    // spots that collide with ours - Structures lands on top of the left panel, Selection on
+    // top of Flux Analysis. We own the layout instead; SettingsPanel can bring individual
+    // ones back once we know which built-ins are actually worth keeping.
+    polyscope::options::buildDefaultGuiPanels = show_polyscope_panels_;
+
+    // Polyscope otherwise wraps our callback in its own Begin("##Command UI"). We open our
+    // own windows inside it, leaving a visible empty ~500x42 shell in the top-right corner.
+    polyscope::options::openImGuiWindowForUserCallback = false;
+
+    // .polyscope.ini restores a previous window geometry over anything we set, and is written
+    // to the current working directory on exit - so the app's startup size depended on where
+    // it was launched from.
+    polyscope::options::usePrefsFile = false;
+
+    // show() creates a BRAND NEW ImGuiContext and re-runs this callback, so it is the only
+    // hook that lands on every context and early enough to stop imgui.ini being read at all.
+    // Mutating ImGui::GetStyle() between init() and show() is silently discarded.
+    polyscope::options::configureImGuiStyleCallback = []() {
+        polyscope::configureImGuiStyle();               // keep Polyscope's sizing/rounding
+        ImGui::GetIO().IniFilename = nullptr;           // no saved window positions, ever
+    };
+
     polyscope::init();
     ImPlot::CreateContext();
+
+    // Fill the screen on launch. Polyscope never creates a maximised window, and the GLFW
+    // handle is not exposed - but the context it made current is.
+    if (GLFWwindow* win = glfwGetCurrentContext()) glfwMaximizeWindow(win);
 
     // set_loaded_scene() may already have started a preview; this one supersedes it.
     cancel_and_join_trace();

@@ -59,6 +59,10 @@ private:
     std::unique_ptr<scene::SceneEditor>      editor_;
     std::filesystem::path                    scene_dir_;
 
+    /// Show Polyscope's own Structures/Selection panels. Off by default: they are placed at
+    /// fixed positions that collide with ours. Exposed so Settings can bring them back.
+    bool                                     show_polyscope_panels_ = false;
+
     // Scene browser state
     std::filesystem::path              examples_dir_;
     std::vector<std::filesystem::path> available_scenes_;
