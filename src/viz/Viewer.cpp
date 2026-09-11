@@ -361,7 +361,11 @@ PanelContext Viewer::make_panel_context() {
     ctx.edits                = &edits_;
     ctx.selected_id          = &selected_id_;
 
-    ctx.load_scene           = [this](const std::filesystem::path& path) { load_from_file(path); };
+    // Deferred, NOT immediate. load_from_file() destroys the Scene and the SceneEditor, and
+    // PanelContext hands every panel raw pointers to both - so loading from inside a panel left
+    // every panel drawn after it in that same frame reading freed memory. Crashed on any scene
+    // change from the browser.
+    ctx.load_scene           = [this](const std::filesystem::path& path) { pending_load_ = path; };
     ctx.run_trace             = [this](std::size_t n) { start_trace(n); };
 
     // Trace progress is read from the control's atomics, so the panel can poll it every
@@ -409,7 +413,11 @@ void Viewer::draw_gui() {
     // Recomputed every frame from the live window size with ImGuiCond_Always: the old
     // FirstUseEver positioned each window once and never again, so the panels froze wherever
     // they were last left and ignored a resize.
+    // A little more vertical room than ImGui's default menu bar, so the icon controls on the
+    // right have somewhere to sit.
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(9.0f, 9.0f));
     const float       bar = draw_top_bar(ctx);
+    ImGui::PopStyleVar();
     const LayoutRects lay = compute_layout(ImGui::GetIO().DisplaySize, bar);
 
     ImGui::SetNextWindowPos(lay.left_pos, ImGuiCond_Always);
@@ -442,6 +450,14 @@ void Viewer::draw_gui() {
     ImGui::End();
 
     draw_viewport_buttons(ctx, lay.viewport_min, lay.viewport_max);
+
+    // Apply a deferred scene load now that no panel holds a pointer into the old scene.
+    if (pending_load_) {
+        const auto path = *pending_load_;
+        pending_load_.reset();
+        load_from_file(path);
+        return;   // this frame's remaining widgets referred to the scene that just went away
+    }
 
     // ---- Flux Analysis window --
     if (traced_ && acc_) {

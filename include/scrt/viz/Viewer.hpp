@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -63,6 +64,11 @@ private:
 
     /// One-shot: the menu bar asked to reveal Settings.
     bool                                     settings_requested_ = false;
+
+    /// A scene load requested by a panel during this frame, applied once the frame is finished.
+    /// Loading in place would free the Scene and SceneEditor that the rest of the frame's panels
+    /// still hold pointers to.
+    std::optional<std::filesystem::path>     pending_load_;
 
     /// Show Polyscope's own Structures/Selection panels. Off by default: they are placed at
     /// fixed positions that collide with ours. Exposed so Settings can bring them back.

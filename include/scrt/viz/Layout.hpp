@@ -28,7 +28,7 @@ struct LayoutRects {
 /// Columns are clamped so that a narrow window keeps a usable 3D area rather than being entirely
 /// consumed by panels.
 inline LayoutRects compute_layout(ImVec2 display, float top_offset = 0.0f) {
-    constexpr float kMargin      = 8.0f;
+    constexpr float kMargin      = 0.0f;  // panels sit flush against the window edges
     constexpr float kLeftWidth   = 340.0f;
     constexpr float kRightWidth  = 430.0f;
     constexpr float kMinViewport = 320.0f;
@@ -46,8 +46,8 @@ inline LayoutRects compute_layout(ImVec2 display, float top_offset = 0.0f) {
         right = std::max(200.0f, kRightWidth * share);
     }
 
-    const float top    = top_offset + kMargin;
-    const float height = std::max(120.0f, display.y - top - kMargin);
+    const float top    = top_offset;
+    const float height = std::max(120.0f, display.y - top);
 
     LayoutRects r;
     r.left_pos   = ImVec2(kMargin, top);
@@ -55,8 +55,8 @@ inline LayoutRects compute_layout(ImVec2 display, float top_offset = 0.0f) {
     r.right_pos  = ImVec2(std::max(kMargin, display.x - right - kMargin), top);
     r.right_size = ImVec2(right, height);
 
-    r.viewport_min = ImVec2(kMargin + left + kMargin, top);
-    r.viewport_max = ImVec2(std::max(r.viewport_min.x, r.right_pos.x - kMargin), top + height);
+    r.viewport_min = ImVec2(left, top);
+    r.viewport_max = ImVec2(std::max(r.viewport_min.x, r.right_pos.x), top + height);
     return r;
 }
 

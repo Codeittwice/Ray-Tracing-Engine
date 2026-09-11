@@ -6,9 +6,102 @@
 
 #include "imgui.h"
 
+#include <cmath>
+
 namespace scrt::viz {
 
 namespace {
+
+/// Draws a sun glyph centred in `c`, radius `r`, using the draw list.
+///
+/// Drawn rather than typed: the bundled font is Lato, which has no sun, moon, gear or person
+/// glyph, so a Unicode character would render as an empty box on every machine.
+void glyph_sun(ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
+    dl->AddCircle(c, r * 0.50f, col, 0, 1.6f);
+    for (int i = 0; i < 8; ++i) {
+        const float a  = static_cast<float>(i) * 0.7853981f;   // 45 degrees
+        const ImVec2 p0(c.x + std::cos(a) * r * 0.72f, c.y + std::sin(a) * r * 0.72f);
+        const ImVec2 p1(c.x + std::cos(a) * r * 1.00f, c.y + std::sin(a) * r * 1.00f);
+        dl->AddLine(p0, p1, col, 1.6f);
+    }
+}
+
+/// Draws a crescent moon centred in `c`, radius `r`, as a disc minus an offset disc.
+void glyph_moon(ImDrawList* dl, ImVec2 c, float r, ImU32 col, ImU32 knockout) {
+    dl->AddCircleFilled(ImVec2(c.x + r * 0.10f, c.y), r * 0.78f, col, 24);
+    dl->AddCircleFilled(ImVec2(c.x + r * 0.48f, c.y - r * 0.26f), r * 0.66f, knockout, 24);
+}
+
+/// Draws a gear glyph: a ring with square teeth.
+void glyph_gear(ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
+    dl->AddCircle(c, r * 0.52f, col, 0, 1.7f);
+    for (int i = 0; i < 6; ++i) {
+        const float a = static_cast<float>(i) * 1.0471975f;    // 60 degrees
+        const ImVec2 p0(c.x + std::cos(a) * r * 0.62f, c.y + std::sin(a) * r * 0.62f);
+        const ImVec2 p1(c.x + std::cos(a) * r * 0.98f, c.y + std::sin(a) * r * 0.98f);
+        dl->AddLine(p0, p1, col, 2.4f);
+    }
+}
+
+/// Draws a person glyph: head over shoulders.
+void glyph_account(ImDrawList* dl, ImVec2 c, float r, ImU32 col) {
+    dl->AddCircle(ImVec2(c.x, c.y - r * 0.34f), r * 0.36f, col, 0, 1.7f);
+    dl->PathArcTo(ImVec2(c.x, c.y + r * 0.86f), r * 0.72f, 3.3161f, 6.1087f, 20);  // shoulders
+    dl->PathStroke(col, 0, 1.7f);
+}
+
+/// A pill-shaped sun/moon theme switch: two halves, with the active one highlighted.
+///
+/// Returns true when clicked. Reads as a switch rather than a label, which a text button showing
+/// either the current or the target theme never quite does.
+bool theme_switch(bool dark, float height) {
+    const float w = height * 2.05f;
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+
+    ImGui::InvisibleButton("##theme_switch", ImVec2(w, height));
+    const bool clicked = ImGui::IsItemClicked();
+    const bool hover   = ImGui::IsItemHovered();
+
+    ImDrawList*       dl = ImGui::GetWindowDrawList();
+    const ImGuiStyle& st = ImGui::GetStyle();
+
+    const ImU32 track  = ImGui::GetColorU32(st.Colors[dark ? ImGuiCol_FrameBg : ImGuiCol_Header]);
+    const ImU32 knob   = ImGui::GetColorU32(st.Colors[hover ? ImGuiCol_HeaderHovered : ImGuiCol_HeaderActive]);
+    const ImU32 on     = ImGui::GetColorU32(st.Colors[ImGuiCol_Text]);
+    const ImU32 off    = ImGui::GetColorU32(st.Colors[ImGuiCol_TextDisabled]);
+
+    const float rad = height * 0.5f;
+    dl->AddRectFilled(p, ImVec2(p.x + w, p.y + height), track, rad);
+
+    // The knob sits over the ACTIVE half: sun on the left in light, moon on the right in dark.
+    const float half = w * 0.5f;
+    const ImVec2 kp(p.x + (dark ? half : 0.0f), p.y);
+    dl->AddRectFilled(kp, ImVec2(kp.x + half, kp.y + height), knob, rad);
+
+    const float gr = height * 0.30f;
+    glyph_sun(dl, ImVec2(p.x + half * 0.5f, p.y + rad), gr, dark ? off : on);
+    glyph_moon(dl, ImVec2(p.x + half * 1.5f, p.y + rad), gr, dark ? on : off,
+               dark ? knob : track);
+
+    return clicked;
+}
+
+/// An icon-only menu-bar button. Returns true when clicked.
+bool icon_button(const char* id, float size, void (*draw)(ImDrawList*, ImVec2, float, ImU32),
+                 bool enabled) {
+    const ImVec2 p = ImGui::GetCursorScreenPos();
+    ImGui::InvisibleButton(id, ImVec2(size, size));
+    const bool clicked = enabled && ImGui::IsItemClicked();
+    const bool hover   = ImGui::IsItemHovered();
+
+    const ImGuiStyle& st = ImGui::GetStyle();
+    ImU32 col = ImGui::GetColorU32(st.Colors[enabled ? ImGuiCol_Text : ImGuiCol_TextDisabled]);
+    if (enabled && hover) col = ImGui::GetColorU32(st.Colors[ImGuiCol_CheckMark]);
+
+    draw(ImGui::GetWindowDrawList(), ImVec2(p.x + size * 0.5f, p.y + size * 0.5f), size * 0.42f,
+         col);
+    return clicked;
+}
 
 /// Menu entries that are agreed in shape but not yet wired to anything.
 ///
@@ -76,32 +169,29 @@ float draw_top_bar(PanelContext& ctx) {
         ImGui::EndMenu();
     }
 
-    // Right-hand cluster: account, theme, settings. Laid out right-to-left from the window
-    // edge so adding or removing one does not shift the others.
+    // Right-hand cluster: account, theme switch, settings - all icons. Laid out right-to-left
+    // from the window edge so adding or removing one does not shift the others.
     {
         const ImGuiStyle& st   = ImGui::GetStyle();
         const bool        dark = (current_theme() == Theme::Dark);
 
-        // The theme toggle names the theme you would switch TO, not the one you are in - a
-        // button labelled with the current state reads as a status display, not a control.
-        const char* theme_lbl = dark ? "Light" : "Dark";
-        const char* acct_lbl  = "Account";
-        const char* set_lbl   = "Settings";
+        const float icon  = ImGui::GetFrameHeight() * 0.86f;
+        const float sw    = icon * 2.05f;                       // theme switch is a wide pill
+        const float gap   = st.ItemSpacing.x;
+        const float total = icon + gap + sw + gap + icon + st.WindowPadding.x;
 
-        auto item_w = [&](const char* t) {
-            return ImGui::CalcTextSize(t).x + st.ItemSpacing.x * 2.0f;
-        };
-        const float total = item_w(acct_lbl) + item_w(theme_lbl) + item_w(set_lbl);
-        ImGui::SetCursorPosX(ImGui::GetWindowWidth() - total - st.WindowPadding.x);
+        ImGui::SetCursorPosX(ImGui::GetWindowWidth() - total);
+        const float y = (ImGui::GetWindowHeight() - icon) * 0.5f;
 
-        ImGui::BeginDisabled();
-        ImGui::MenuItem(acct_lbl);
-        ImGui::EndDisabled();
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-            ImGui::SetTooltip("Sign-in, for the scene assistant's API key.\n\n"
+        ImGui::SetCursorPosY(y);
+        icon_button("##account", icon, glyph_account, /*enabled=*/false);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Account - sign-in, for the scene assistant's API key.\n\n"
                               "Not yet implemented.");
 
-        if (ImGui::MenuItem(theme_lbl)) {
+        ImGui::SameLine(0.0f, gap);
+        ImGui::SetCursorPosY((ImGui::GetWindowHeight() - icon) * 0.5f);
+        if (theme_switch(dark, icon)) {
             const Theme next = dark ? Theme::Light : Theme::Dark;
             apply_theme(next);
             polyscope::view::bgColor = viewport_background(next);  // panels and 3D together
@@ -110,7 +200,10 @@ float draw_top_bar(PanelContext& ctx) {
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("Switch to the %s theme.", dark ? "light" : "dark");
 
-        if (ImGui::MenuItem(set_lbl) && ctx.open_settings) ctx.open_settings();
+        ImGui::SameLine(0.0f, gap);
+        ImGui::SetCursorPosY((ImGui::GetWindowHeight() - icon) * 0.5f);
+        if (icon_button("##settings", icon, glyph_gear, /*enabled=*/true) && ctx.open_settings)
+            ctx.open_settings();
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Appearance, 3D view and built-in panels.");
     }
 
@@ -147,7 +240,13 @@ void draw_viewport_buttons(PanelContext& ctx, ImVec2 viewport_min, ImVec2 viewpo
     const float saved    = st.FrameRounding;
     st.FrameRounding     = kBtn * 0.5f;   // circular
 
-    // Assistant. Accent-filled so it reads as the primary action of the pair.
+    // Import / export on top. One button, since they are the same dialog in two directions.
+    ImGui::Button("<>", ImVec2(kBtn, kBtn));
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Import a 3D model, or export the scene and its results.\n\n"
+                          "Not yet implemented - use the Import panel on the left for now.");
+
+    // Assistant sits lowest, nearest the thumb, and is accent-filled as the primary of the pair.
     ImGui::PushStyleColor(ImGuiCol_Button,        st.Colors[ImGuiCol_CheckMark]);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, st.Colors[ImGuiCol_SeparatorHovered]);
     ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(0.10f, 0.07f, 0.02f, 1.0f));
@@ -157,12 +256,6 @@ void draw_viewport_buttons(PanelContext& ctx, ImVec2 viewport_min, ImVec2 viewpo
         ImGui::SetTooltip("Scene assistant - describe a cooker, attach reference photos and\n"
                           "specification documents, and have a scene generated.\n\n"
                           "Not yet implemented.");
-
-    // Import / export. One button, since they are the same dialog in two directions.
-    ImGui::Button("<>", ImVec2(kBtn, kBtn));
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("Import a 3D model, or export the scene and its results.\n\n"
-                          "Not yet implemented - use the Import panel on the left for now.");
 
     st.FrameRounding = saved;
     ImGui::End();
