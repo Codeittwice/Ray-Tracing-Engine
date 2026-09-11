@@ -153,9 +153,16 @@ void Viewer::load_scene_internal(io::LoadedScene ls) {
     need_retrace_ = false;
     need_rebuild_ = false;
 
-    polyscope::removeAllStructures();
     set_scene(&editor_->scene());
     cfg_ = loaded_cfg;
+
+    // set_loaded_scene() is called from main() BEFORE run() calls polyscope::init(), and
+    // every polyscope entry point throws "Polyscope has not been initialized" until then.
+    // Returning here is complete rather than partial: run() does removeAllStructures,
+    // init_surf_xforms, register_scene and the preview trace itself once init has happened.
+    if (!polyscope::isInitialized()) return;
+
+    polyscope::removeAllStructures();
     init_surf_xforms();
     register_scene();
     start_trace(10'000);
