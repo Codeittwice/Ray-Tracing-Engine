@@ -37,72 +37,64 @@ AI scene-generation helper. Optical results only.
 
 Out of scope on this track: thermal model, lat/lon geographic sun, TMY weather, day-integrated Wh.
 
-### Open findings from Wave 5
-- **Nobody has driven the GUI.** Every UI agent said so explicitly. Unverified: gizmo z-order
-  against the panel, mouse arbitration between gizmo drag and camera orbit, widget layout at the
-  real 300px width, and ImGuizmo in orthographic projection. This is the largest open risk.
-- `MeshDoc` has no `submesh` field, so split imports preview but cannot be committed. The panel
-  says so inline. Needs the field plus parser and writer support.
-- Three ~8-line copies of the `tip`/`help_line` tooltip helpers exist across panels; hoist into
-  `Panels.hpp` when someone owns that header.
-- `angles_from_direction` rejects vectors below ~1e-154 per component because the guard tests the
-  squared length and `dot()` underflows first. Harmless, documented.
+## GUI redesign (current work)
 
-### Open findings from Wave 3 (deferred)
-- **`io::LoadedScene` does not carry its `SceneDocument`** - `load_scene()` parses one and throws it
-  away. That makes the natural `SceneEditor(LoadedScene, base_dir)` constructor unable to recover the
-  document, so two extra constructors exist as a workaround. Adding a `SceneDocument doc` member to
-  `LoadedScene` fixes it and unblocks save-on-load. **Do this early in Wave 4.**
-- `Scene`'s structural mutators are public, so "the document is authoritative" is documentation, not
-  enforcement. Once the viewer migrates to `SceneEditor`, make `add_surface`/`remove_surface`
-  friend-only.
-- `Scene::add_surface` stamps an id that callers then overwrite (SceneLoader and SceneEditor both), so
-  `next_surface_id_` drifts from the ids in use. Add an `add_surface(ptr, id)` overload.
-- `build_surface` is duplicated: the loader's lives in an anonymous namespace in `SceneLoader.cpp` and
-  SceneEditor replicates it branch-for-branch. Promote one to a public `io::` helper and delete the copy.
-- `ElementDoc::visible` still has no runtime counterpart; surfaces are added regardless. Whoever owns
-  hide/show needs a Surface- or Scene-level filter.
+Driven by the first real human testing of the app. Plan and an interactive layout mockup exist;
+the mockup is the agreed target design. Phases 1 and 2 are done.
 
-### Open findings from Wave 2 (deferred)
-- **`save_scene` cannot relocate a mesh scene.** Its frozen signature has nowhere to put the
-  original directory, so it delegates with `old_base == new_base`, making the mesh-path rebase a
-  documented no-op. Any Save-As UI wired to `save_scene` will silently write unloadable scene
-  files for every mesh scene. **Wave 3/5 must call `save_scene_as(doc, path, old_base)`.**
-  Pinned by a test that fails if the behaviour changes in either direction.
-- The writer emits only the sunshape field matching the active type, so a pillbox scene's
-  authored `chi` (or a Buie scene's `half_angle_mrad`) is dropped on the first save. Round-trip
-  is still a fixed point from generation 2 on, and no corpus file is affected.
-- `build_scene` dropped legacy SceneLoader's `top_mode != "record_pass"` validation rather than
-  modify the frozen header. No scene exercises it; restore it as a strict-mode parse check.
-- `examples/box_cooker.json` is NOT a box receiver - it has no `receiver.type`, so it takes the
-  plane branch. Do not use it as a box-receiver fixture.
+- [x] Phase 1 — Scale/rotation bug fixes, placements reach the document
+- [x] Phase 2 — Polyscope panels hidden, ghost window killed, maximise on start, panels docked
+      and re-flowing on resize (`include/scrt/viz/Layout.hpp`)
+- [ ] Phase 3 — Dark/light themes + Settings panel (incl. per-panel toggles for Polyscope's own)
+- [ ] Phase 4 — Stronger selection highlight; numeric entry for translate/rotate/scale
+- [ ] Phase 5 — Left panel becomes three tabs; right column = flux / selection / contextual transform
+- [ ] Phase 6 — AI helper + import/export overlays
 
-### Open findings from Audit A1 (deferred, none blocking)
-Wire into Wave 2 (W3) unless noted:
-- `Aperture::mode` and `margin`, `SunAngles`, `auto_fit`/`covers`, `Scene::world_bounds()`,
-  `ScaleSupport` and the parameter setters have **no production call site** - referenced only from
-  tests. `mode` is a public field that currently does nothing. Wire them into SceneLoader/Tracer,
-  or drop the field until a consumer exists.
-- A below-horizon sun (`elevation < 0`) is accepted silently: a fixed +Z aperture yields 0 W with
-  no diagnostic, and `auto_fit` happily lights the cooker from underground. Reject or warn.
-- `orthonormal_frame`'s "byte-identical" comment is **false** - it re-normalizes an already-unit
-  vector, which differs in the last bit for ~15% of directions. Harmless today (all 94 scenes have
-  direction exactly [0,0,-1], where the frames agree bitwise) but the comment must be corrected.
-- A fourth un-collapsed copy of the same heuristic remains in `src/materials/RealMirror.cpp:17-20`.
-- `Paraboloid`/`CylindricalParaboloid` `local_bounds()` return an inverted AABB for negative focal
-  length (`depth = r^2/4f < 0`). `world_bounds()` still sorts via `expand()`, so nothing breaks
-  today, but `local_bounds()` is now public API and `AABB` has no normalizing constructor.
-- New parameter setters change `local_bounds()` with no BVH-invalidation hook, unlike
-  `set_transform` which the Viewer pairs with `need_rebuild_`. Couple them in Wave 3/4.
-- `ImplicitSDF`'s `hit_eps_` and its central-difference `eps = 1e-5` are absolute local lengths,
-  so effective world tolerance scales with the object. No `ImplicitSDF` coverage in test_scale.cpp.
-- `angles_from_direction({0,0,0})` returns NaN; uses `glm::normalize`, not `math::safe_normalize`.
-- `auto_fit` does not validate `margin < 0` and produces inf/NaN on an inside-out AABB.
-- `scripts/sweep.py:223` and `scripts/sweep_stl_rect_angles.py:1096` compute efficiency as
-  `power / (DNI * aperture_area)`, valid only while `cos_ap == 1`. They become wrong by `1/cos`
-  once the cosine is reachable from JSON.
-- Reasoned risk, not demonstrated: the TriangleMesh epsilon loosening admits grazing hits that the
-  fixed 1e-6 world ray offset may not clear, so watch for shadow acne on mesh scenes.
+Agreed design: dark default with a light option; a floating circular button opening a modal
+overlay for the assistant; import/export share that styling but use the native Windows dialog;
+Polyscope's own panels hidden with per-panel toggles in Settings.
+
+### OPEN BUGS — reported by the user, NOT fixed
+
+1. **The background/ground plane still changes while scaling.** `set_extents_frozen()` in
+   `TransformPanel.cpp` freezes `automaticallyComputeSceneExtents` during a drag and calls
+   `updateStructureExtents()` once on release - so the jump on release is expected, but the user
+   reports movement during the drag too. Unverified whether the freeze engages on the first drag
+   frame (it is called near the end of `draw_transform_panel`, possibly after the gizmo has
+   already run that frame). **Recommended fix, not yet applied:** pin `groundPlaneHeightMode` to
+   Manual at load so the floor stops following the scene bounding box at all. Do not re-diagnose
+   this from the code alone - two previous diagnoses were confidently wrong.
+2. **The flux map renders as RGB noise** - orange/blue/green confetti instead of a heat ramp.
+   Never investigated. Note the stale `crash.log` at the repo root complains
+   `unrecognized colormap name: plasma`, which is a likely lead.
+3. **Edge-panning is not wired to the viewport rect.** `Layout.hpp` exposes `viewport_min/max`
+   precisely so the trigger follows the viewport rather than the window, but nothing consumes it
+   yet. The user explicitly wants edge-panning during a drag PRESERVED; now that panels occupy
+   the screen edges it may have stopped working.
+
+### How to run and test
+
+`run.bat` (debug) and `run-release.bat` (optimised) at the repo root build and launch in one step.
+Use the release one for anything above ~100k rays; debug tracing is roughly 10x slower.
+`scripts/package.ps1 -Version X.Y.Z` produces the standalone zip.
+
+**`--headless` does NOT exercise the GUI** - it returns before the viewer is constructed. A
+startup crash once shipped with every headless check passing. After any viewer change, launch the
+app and confirm it holds a window.
+
+### Lessons that cost real time here
+
+- **A harness that feeds synthetic input to the component under suspicion proves nothing.** An
+  agent cleared ImGuizmo's LOCAL scale path by driving the panel's maths with matrices it made up,
+  never with ImGuizmo's own output - which is exactly where the corruption was. The conclusion was
+  reported upward and repeated to the user before anyone noticed what it had actually driven.
+- **Prefer structural impossibility to a corrected calculation.** The scale/rotation bug was
+  finally fixed by restricting each gizmo operation to its own components, not by getting the
+  decomposition right.
+- **Panels that are written but never called.** This happened three times - the import panel, the
+  save panel, and `ctx.editor` never being assigned. When adding a panel, grep that something
+  actually draws it and that its context fields are populated.
+- Trust `git diff --stat` over any agent's completion report.
 
 ## Agent orchestration
 For large parallelizable work, deploy a two-layer agent hierarchy:
