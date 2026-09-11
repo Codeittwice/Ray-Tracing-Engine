@@ -208,7 +208,10 @@ void RayRenderer::register_paths(const tracer::TraceResult& result) {
 
     auto* net = polyscope::registerCurveNetwork("ray_paths", nodes, edges);
     net->setColor({1.0f, 0.85f, 0.2f});
-    net->setRadius(0.001f);
+    // Absolute (isRelative = false). The default is relative to Polyscope's global
+    // lengthScale, so any change in scene extent rescaled every ray - a scaled-up object
+    // turned the ray paths into fat sausages that swallowed the model.
+    net->setRadius(0.0015f, false);
 }
 
 void RayRenderer::clear() {

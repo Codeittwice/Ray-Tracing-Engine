@@ -66,9 +66,6 @@ void draw_scene_browser_panel(PanelContext& ctx) {
 
     // The save panel is dispatched from here rather than from Viewer::draw_gui(), because
     // Viewer.cpp is owned by another workstream this wave. Loading and saving are neighbours in
-    // the UI anyway. If the Viewer later calls draw_save_panel(ctx) itself, delete this line -
-    // leaving both in place would draw the panel twice.
-    draw_save_panel(ctx);
 }
 
 } // namespace scrt::viz

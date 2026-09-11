@@ -38,7 +38,7 @@ public:
 
     /// Adopt a loaded scene and its document, so the viewer can mutate and save it.
     /// Prefer this over set_scene(): it is what gives the viewer a SceneEditor.
-    void set_loaded_scene(io::LoadedScene ls, std::filesystem::path scene_dir);
+    void set_loaded_scene(io::LoadedScene ls, std::filesystem::path scene_file);
 
     /// Run the viewer main loop (blocks until window closed).
     void run();
@@ -58,6 +58,8 @@ private:
     // Document-backed editor; non-null whenever the viewer owns its scene.
     std::unique_ptr<scene::SceneEditor>      editor_;
     std::filesystem::path                    scene_dir_;
+    /// Full path of the file the current document came from; empty for a synthesized scene.
+    std::filesystem::path                    scene_path_;
 
     /// Show Polyscope's own Structures/Selection panels. Off by default: they are placed at
     /// fixed positions that collide with ours. Exposed so Settings can bring them back.

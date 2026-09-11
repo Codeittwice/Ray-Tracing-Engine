@@ -134,7 +134,7 @@ int main(int argc, char* argv[]) {
     viewer.set_examples_dir(examples_dir);
     // Hand over the whole LoadedScene (scene + document) so the viewer can build a
     // SceneEditor and therefore mutate and save what it loaded.
-    viewer.set_loaded_scene(std::move(ls), scene_path.parent_path());
+    viewer.set_loaded_scene(std::move(ls), scene_path);
     viewer.run();
 
     return 0;

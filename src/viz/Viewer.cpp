@@ -106,8 +106,12 @@ void Viewer::set_scene(scene::Scene* s) {
 
 // ---- set_examples_dir --------------------------------------------------------
 
-void Viewer::set_loaded_scene(io::LoadedScene ls, std::filesystem::path scene_dir) {
-    scene_dir_ = std::move(scene_dir);
+void Viewer::set_loaded_scene(io::LoadedScene ls, std::filesystem::path scene_file) {
+    // Takes the scene FILE, not its directory: the save panel needs a path to write back to,
+    // and the mesh-path rebase needs the directory. Deriving one from the other here keeps
+    // the two from drifting apart.
+    scene_path_ = std::move(scene_file);
+    scene_dir_  = scene_path_.empty() ? std::filesystem::path{} : scene_path_.parent_path();
     load_scene_internal(std::move(ls));
 }
 
@@ -134,6 +138,9 @@ void Viewer::scan_examples_dir() {
 
 void Viewer::load_from_file(const std::filesystem::path& path) {
     auto ls = io::load_scene(path);
+    // Remember where it came from: Save writes here and Revert reloads from here.
+    scene_path_ = path;
+    scene_dir_  = path.parent_path();
     load_scene_internal(std::move(ls));
 }
 
@@ -342,6 +349,11 @@ PanelContext Viewer::make_panel_context() {
     // Import needs the scene's own directory so mesh paths stay relative to the file,
     // and a SceneEditor so a committed element reaches both document and live scene.
     ctx.scene_dir             = &scene_dir_;
+    // Without these the save panel has no document and reports "No document to save".
+    ctx.editor         = editor_.get();
+    ctx.scene_path     = &scene_path_;
+    ctx.set_scene_path = [this](const std::filesystem::path& p) { scene_path_ = p; };
+
     if (editor_) {
         ctx.commit_transform = [this](std::uint64_t id, const math::mat4& world) {
             editor_->commit_transform(id, world);

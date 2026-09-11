@@ -283,6 +283,28 @@ bool run_gizmo(ObjectEditState& st, surfaces::ScaleSupport support, bool uniform
         st.rot_deg[i] = r0[i];
         st.scale[i]   = s0[i];
     }
+
+    // Each operation may only change its own components. ImGuizmo's LOCAL path orthonormalises
+    // the model before applying a scale, which discards the scale already present and makes the
+    // decomposed rotation of the result unreliable - in practice a scale drag was rewriting
+    // Rotate to values like -129.6 deg and mirroring the object. Pinning the other two triples
+    // to their drag-start values makes that impossible by construction rather than by trusting
+    // the decomposition, and costs nothing: a drag that is scaling should not move or turn
+    // anything anyway.
+    switch (g_tool.op) {
+        case GizmoOp::Scale:
+            std::copy(t0, t0 + 3, st.trans);
+            std::copy(r0, r0 + 3, st.rot_deg);
+            break;
+        case GizmoOp::Translate:
+            std::copy(r0, r0 + 3, st.rot_deg);
+            std::copy(s0, s0 + 3, st.scale);
+            break;
+        case GizmoOp::Rotate:
+            std::copy(t0, t0 + 3, st.trans);
+            std::copy(s0, s0 + 3, st.scale);
+            break;
+    }
     if (uniform_scale) collapse_uniform(st.scale, scale_at_drag_start);
     for (int i = 0; i < 3; ++i) st.scale[i] = std::max(kMinScale, st.scale[i]);
     return true;
