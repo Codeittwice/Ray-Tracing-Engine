@@ -33,7 +33,7 @@ AI scene-generation helper. Optical results only.
 - [x] Wave 3 — SceneEditor & mutation ∥ Viewer decomposition + outliner
 - [x] Wave 4 — ImGuizmo & transform UI ∥ model import & units
 - [x] Wave 5 — Async trace, save UI, polish, packaging
-- [ ] Wave 6 — AI helper
+- [x] Wave 6 — AI helper
 
 Out of scope on this track: thermal model, lat/lon geographic sun, TMY weather, day-integrated Wh.
 
@@ -48,7 +48,7 @@ the mockup is the agreed target design. Phases 1 and 2 are done.
 - [x] Phase 3 — Dark/light themes + Settings panel (incl. toggle for Polyscope's own panels)
 - [x] Phase 4 — Stronger selection highlight; numeric entry for translate/rotate/scale
 - [x] Phase 5 — Left panel becomes three tabs; right column = flux / selection / contextual transform
-- [ ] Phase 6 — AI helper + import/export overlays
+- [x] Phase 6 — AI helper + import/export overlays
 
 Also done outside the phase list: an embedded Font Awesome subset (`scripts/gen_icon_font.py`
 regenerates `include/scrt/viz/Icons.hpp` and `src/viz/IconFontData.cpp`), and DPI scaling, which
@@ -58,6 +58,25 @@ nobody had ever looked at the app on a high-DPI screen.
 Agreed design: dark default with a light option; a floating circular button opening a modal
 overlay for the assistant; import/export share that styling but use the native Windows dialog;
 Polyscope's own panels hidden with per-panel toggles in Settings.
+
+### The scene assistant
+
+`src/viz/panels/AiOverlay.cpp` + `src/viz/ClaudeClient.cpp` (WinHTTP) + `src/viz/AppConfig.cpp`.
+Runs on the user's own Anthropic API key, kept in `%APPDATA%\solar-cooker-rt\config.json` as plain
+text; generated scenes land in `generated/` beside it and are loaded by path, through the same
+deferred loader everything else uses.
+
+**The system prompt is a contract with `io::parse_document`, and `tests/test_assistant_schema.cpp`
+is the only thing holding the two together.** Replies are parsed with `strict=true`, so a key the
+prompt invents is a hard failure — which is the point, but it also means a stale prompt breaks
+*every* generation, and only for a user who has a key. Whenever a surface type, material type or
+key changes in `SceneDocument.cpp`, update the prompt and that test. The test earned its place on
+its first run: the prompt said `{"type": "absorber", "reflectance": 0.05}` and an absorber takes no
+parameters at all.
+
+**Untested by anyone: the HTTP request itself.** No key was ever used here, so
+`send_claude_request` has never round-tripped. The schema, the threading, the overlay and the
+file hand-off are exercised; the wire call is not.
 
 ### OPEN BUGS — reported by the user, NOT fixed
 
