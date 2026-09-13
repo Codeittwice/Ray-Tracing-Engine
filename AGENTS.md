@@ -46,9 +46,14 @@ the mockup is the agreed target design. Phases 1 and 2 are done.
 - [x] Phase 2 — Polyscope panels hidden, ghost window killed, maximise on start, panels docked
       and re-flowing on resize (`include/scrt/viz/Layout.hpp`)
 - [x] Phase 3 — Dark/light themes + Settings panel (incl. toggle for Polyscope's own panels)
-- [ ] Phase 4 — Stronger selection highlight; numeric entry for translate/rotate/scale
-- [ ] Phase 5 — Left panel becomes three tabs; right column = flux / selection / contextual transform
+- [x] Phase 4 — Stronger selection highlight; numeric entry for translate/rotate/scale
+- [x] Phase 5 — Left panel becomes three tabs; right column = flux / selection / contextual transform
 - [ ] Phase 6 — AI helper + import/export overlays
+
+Also done outside the phase list: an embedded Font Awesome subset (`scripts/gen_icon_font.py`
+regenerates `include/scrt/viz/Icons.hpp` and `src/viz/IconFontData.cpp`), and DPI scaling, which
+matters more than it sounds — at 250% the interface was unusable and nobody had seen it, because
+nobody had ever looked at the app on a high-DPI screen.
 
 Agreed design: dark default with a light option; a floating circular button opening a modal
 overlay for the assistant; import/export share that styling but use the native Windows dialog;
@@ -68,7 +73,13 @@ Polyscope's own panels hidden with per-panel toggles in Settings.
 3. **Edge-panning is not wired to the viewport rect.** `Layout.hpp` exposes `viewport_min/max`
    precisely so the trigger follows the viewport rather than the window, but nothing consumes it
    yet. The user explicitly wants edge-panning during a drag PRESERVED; now that panels occupy
-   the screen edges it may have stopped working.
+   the screen edges it may have stopped working. Note that no code in this repo implements
+   edge-panning, so whatever the user is seeing comes from Polyscope's own camera handling -
+   do not "restore" a feature by writing a new one without first confirming what it actually is.
+4. **The interface does not re-scale when the window is dragged to a differently-scaled
+   monitor.** `ui_scale()` is fixed at startup because the font atlas is rasterised once and
+   Polyscope shares it across every ImGui context it creates. Re-scaling means rebuilding the
+   atlas, which Polyscope owns.
 
 ### How to run and test
 
@@ -79,6 +90,23 @@ Use the release one for anything above ~100k rays; debug tracing is roughly 10x 
 **`--headless` does NOT exercise the GUI** - it returns before the viewer is constructed. A
 startup crash once shipped with every headless check passing. After any viewer change, launch the
 app and confirm it holds a window.
+
+`scripts/screenshot_app.ps1` launches the app, photographs its own window and closes it:
+
+```
+powershell -ExecutionPolicy Bypass -File scripts/screenshot_app.ps1 `
+    -Exe build/debug/scrt_app.exe -Out build/shot.png -WaitSeconds 30 -Clicks "0.07,0.20"
+```
+
+`-Clicks` is a `;`-separated list of `x,y` fractions of the window rect, clicked in order before
+the shot, so a panel that only appears with something selected can actually be photographed. It
+raises the window topmost first, because Windows refuses `SetForegroundWindow` to a background
+process and a terminal left sitting over the app otherwise ends up in the picture. It must NOT
+use `SW_RESTORE` - that un-maximises the window it is about to photograph, which cost an hour
+of chasing a maximise bug that did not exist.
+
+Every layout problem fixed in the icon-font pass was found this way and none of them were
+visible in a normal-DPI window.
 
 ### Lessons that cost real time here
 
@@ -93,6 +121,10 @@ app and confirm it holds a window.
   save panel, and `ctx.editor` never being assigned. When adding a panel, grep that something
   actually draws it and that its context fields are populated.
 - Trust `git diff --stat` over any agent's completion report.
+- **A diagnostic harness can be the thing that is broken.** The screenshot script reported the
+  window as 1302x776 and not maximised; the app was maximised at 3862x2110 and the script's own
+  `SW_RESTORE` was un-maximising it. Before concluding the program is wrong, check that the
+  instrument is not.
 
 ## Agent orchestration
 For large parallelizable work, deploy a two-layer agent hierarchy:
