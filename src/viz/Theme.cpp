@@ -141,6 +141,10 @@ void apply_palette(const Palette& p) {
     c[ImGuiCol_PlotHistogram]   = p.accent;
     c[ImGuiCol_PlotHistogramHovered] = p.accent_hover;
 
+    // Dim behind a modal. Without it the import/export and assistant overlays read as another
+    // floating panel rather than as something that has taken over the window.
+    c[ImGuiCol_ModalWindowDimBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.45f);
+
     c[ImGuiCol_TextSelectedBg]  = ImVec4(p.accent.x, p.accent.y, p.accent.z, 0.35f);
     c[ImGuiCol_NavHighlight]    = p.accent;
 

@@ -66,6 +66,15 @@ private:
     /// button write this same flag.
     bool                                     settings_open_ = false;
 
+    /// Whether the import/export overlay is open.
+    bool                                     io_overlay_open_ = false;
+    /// Whether the scene-assistant overlay is open.
+    bool                                     ai_overlay_open_ = false;
+
+    /// Left-column tab to select on the next frame, or empty. Set by the import/export overlay
+    /// so that picking a model drops the user on the tab where it is waiting to be placed.
+    const char*                              focus_tab_ = nullptr;
+
     /// Height the selection column asked for last frame, in pixels, smoothed toward the height
     /// it wants now. Applying it raw made the flux plot jump by 300px the instant an object was
     /// selected, which reads as a glitch rather than as a panel growing.

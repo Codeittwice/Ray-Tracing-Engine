@@ -1,4 +1,6 @@
 #include "scrt/viz/Panels.hpp"
+#include "scrt/viz/FileDialog.hpp"
+#include "scrt/viz/Icons.hpp"
 
 #include "scrt/io/MeshImporter.hpp"
 #include "scrt/materials/Material.hpp"
@@ -20,20 +22,23 @@ namespace scrt::viz {
 namespace {
 
 // ---- File selection ----------------------------------------------------------------------
-//
-// There is no file-dialog dependency in this project yet, so "Browse..." is a single stub
-// function and nothing else in this panel knows how the path was obtained. Registering
-// `nativefiledialog-extended` (vcpkg) and replacing the body of browse_for_mesh_file() with an
-// NFD::OpenDialog call — plus flipping kFileDialogAvailable to true — is the whole change.
 
-/// True when browse_for_mesh_file() can actually open a dialog; false while it is a stub.
-constexpr bool kFileDialogAvailable = false;
+/// Extensions Assimp is asked for. Not Assimp's full list: these are the formats a user of this
+/// app actually exports from CAD, and a dialog offering ninety filters helps nobody.
+const std::vector<FileFilter> kMeshFilters = {
+    {"3D model", "stl,obj,ply,3ds,dae,fbx,glb,gltf"},
+    {"STL", "stl"},
+    {"Wavefront OBJ", "obj"},
+};
 
 /// Asks the OS for a mesh file and writes it to `path_out`; returns false when cancelled.
-/// STUB: no file-dialog library is linked yet, so this always returns false.
-bool browse_for_mesh_file(std::string& path_out) {
-    (void)path_out;
-    return false;
+/// `error_out` is filled only on a real failure, so a cancel leaves the panel's message alone.
+bool browse_for_mesh_file(std::string& path_out, const std::filesystem::path& start_dir,
+                          std::string& error_out) {
+    std::filesystem::path picked;
+    if (!open_file_dialog(kMeshFilters, start_dir, picked, error_out)) return false;
+    path_out = picked.string();
+    return true;
 }
 
 // ---- Unit choices ------------------------------------------------------------------------
@@ -256,29 +261,39 @@ void draw_submesh_section() {
 
 } // namespace
 
+void set_import_file(const std::filesystem::path& path) {
+    std::snprintf(g_import.path_buf, sizeof(g_import.path_buf), "%s", path.string().c_str());
+    inspect_selected_file();
+}
+
 /// Draws the 3D model import panel (file, unit detection, submesh split, placement).
 void draw_import_panel(PanelContext& ctx) {
-    if (!ImGui::CollapsingHeader("Import model")) return;
+    if (!ImGui::CollapsingHeader(ICON_FA_CUBE "  Import a 3D model")) return;
 
     // ---- File --
     ImGui::InputText("File", g_import.path_buf,
                      static_cast<std::size_t>(IM_ARRAYSIZE(g_import.path_buf)));
-    ImGui::BeginDisabled(!kFileDialogAvailable);
-    if (ImGui::Button("Browse...")) {
+
+    ImGui::BeginDisabled(!file_dialogs_available());
+    if (ImGui::Button(ICON_FA_FOLDER_OPEN "  Browse...")) {
         std::string picked;
-        if (browse_for_mesh_file(picked)) {
+        // Start where the scene lives, which is where its meshes are: every shipped scene
+        // reads "../assets/meshes/...", so the model the user wants is one folder away.
+        const std::filesystem::path start = ctx.scene_dir ? *ctx.scene_dir
+                                                          : std::filesystem::path{};
+        if (browse_for_mesh_file(picked, start, g_import.error)) {
             std::snprintf(g_import.path_buf, sizeof(g_import.path_buf), "%s", picked.c_str());
             inspect_selected_file();
         }
     }
     ImGui::EndDisabled();
-    if (!kFileDialogAvailable) {
+    if (!file_dialogs_available()) {
         ImGui::SameLine();
-        ImGui::TextDisabled("(no file-dialog library linked - type a path)");
+        ImGui::TextDisabled("(file dialog unavailable - type a path)");
     }
 
     ImGui::SameLine();
-    if (ImGui::Button("Inspect")) inspect_selected_file();
+    if (ImGui::Button(ICON_FA_MAGNIFYING_GLASS "  Inspect")) inspect_selected_file();
 
     if (g_import.have_info && g_import.inspected_path != g_import.path_buf)
         ImGui::TextDisabled("Path edited since the last inspect.");

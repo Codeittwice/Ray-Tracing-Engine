@@ -181,6 +181,7 @@ add_library(scrt_viz STATIC
     src/viz/Viewer.cpp
     src/viz/Theme.cpp
     src/viz/Fonts.cpp
+    src/viz/FileDialog.cpp
     src/viz/IconFontData.cpp
     src/viz/RayRenderer.cpp
     src/viz/FluxPlotter.cpp
@@ -194,6 +195,7 @@ add_library(scrt_viz STATIC
     src/viz/panels/SavePanel.cpp
     src/viz/panels/SettingsPanel.cpp
     src/viz/panels/SelectionPanel.cpp
+    src/viz/panels/IoOverlay.cpp
     src/viz/panels/TopBarPanel.cpp
 )
 # glfw is PRIVATE on the polyscope target, so link it here too: Viewer::run() needs

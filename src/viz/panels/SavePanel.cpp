@@ -1,4 +1,5 @@
 #include "scrt/viz/Panels.hpp"
+#include "scrt/viz/FileDialog.hpp"
 
 #include "scrt/io/ScenePaths.hpp"
 #include "scrt/scene/SceneEditor.hpp"
@@ -11,7 +12,6 @@
 #include <system_error>
 
 #include "imgui.h"
-#include <nfd.h>
 
 namespace scrt::viz {
 
@@ -39,58 +39,10 @@ namespace {
 // Saving in place is then just the degenerate case where destination.parent_path() == doc_base
 // and the rebase is a correct no-op, so there is one code path and no special case to forget.
 
-// ---- NFD lifetime ---------------------------------------------------------------------------
-
-/// Owns the process-wide NFD session: NFD_Init() on first use, NFD_Quit() at process teardown.
-///
-/// NFD_Init/NFD_Quit are COM (CoInitializeEx/CoUninitialize) on Windows and must be paired on
-/// one thread. Making this a function-local static means init happens exactly once, lazily, on
-/// the GUI thread that first opens a dialog - never per click, and never at all in a headless
-/// run that draws no panels - and quit happens once during static destruction on that same
-/// thread. CoInitializeEx is per-thread reference counted, so coexisting with GLFW's own COM use
-/// is fine; if it fails anyway (RPC_E_CHANGED_MODE), ok stays false and the panel falls back to
-/// the typed-path field rather than losing the ability to save.
-struct NfdSession {
-    NfdSession() : ok(NFD_Init() == NFD_OKAY) {}
-    ~NfdSession() { if (ok) NFD_Quit(); }
-    NfdSession(const NfdSession&)            = delete;
-    NfdSession& operator=(const NfdSession&) = delete;
-    bool ok;  ///< True when NFD_Init() succeeded and dialogs may be opened.
-};
-
-/// The lazily created NFD session; the first caller initialises it, later callers reuse it.
-const NfdSession& nfd_session() {
-    static NfdSession session;
-    return session;
-}
-
-/// Opens a native "save as" dialog seeded with `dir`/`name`; false on cancel or error.
-/// `error_out` is set only on a real error, so a cancel leaves the panel's message untouched.
-bool ask_for_save_path(const std::filesystem::path& dir, const std::string& name,
-                       std::filesystem::path& out, std::string& error_out) {
-    if (!nfd_session().ok) {
-        error_out = "Could not initialise the native file dialog; type a path instead.";
-        return false;
-    }
-
-    const nfdu8filteritem_t filters[1] = {{"Scene JSON", "json"}};
-    const std::string       dir_str    = dir.string();
-
-    nfdu8char_t*      picked = nullptr;
-    const nfdresult_t r      = NFD_SaveDialogU8(&picked, filters, static_cast<nfdfiltersize_t>(1),
-                                                dir_str.empty() ? nullptr : dir_str.c_str(),
-                                                name.empty() ? nullptr : name.c_str());
-    if (r == NFD_OKAY) {
-        out = std::filesystem::path(std::string(picked));
-        NFD_FreePathU8(picked);
-        return true;
-    }
-    if (r == NFD_ERROR) {
-        const char* msg = NFD_GetError();
-        error_out       = std::string("File dialog failed: ") + (msg ? msg : "unknown error");
-        NFD_ClearError();
-    }
-    return false;  // NFD_CANCEL, or the error already reported above.
+/// Opens a native "save as" dialog for a scene JSON file.
+bool ask_for_scene_save_path(const std::filesystem::path& dir, const std::string& name,
+                             std::filesystem::path& out, std::string& error_out) {
+    return save_file_dialog({{"Scene JSON", "json"}}, dir, name, out, error_out);
 }
 
 // ---- Panel state ------------------------------------------------------------------------------
@@ -310,7 +262,7 @@ void draw_save_panel(PanelContext& ctx) {
 
         std::filesystem::path picked;
         std::string           err;
-        if (ask_for_save_path(dir, name, picked, err)) {
+        if (ask_for_scene_save_path(dir, name, picked, err)) {
             perform_save_as(ctx, picked);
         } else if (!err.empty()) {
             g_save.message    = err;

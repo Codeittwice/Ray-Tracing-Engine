@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstring>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -381,8 +382,11 @@ PanelContext Viewer::make_panel_context() {
     // and a SceneEditor so a committed element reaches both document and live scene.
     ctx.scene_dir             = &scene_dir_;
     // Without these the save panel has no document and reports "No document to save".
-    ctx.settings_open = &settings_open_;
-    ctx.open_settings = [this]() { settings_open_ = !settings_open_; };
+    ctx.settings_open   = &settings_open_;
+    ctx.open_settings   = [this]() { settings_open_ = !settings_open_; };
+    ctx.io_overlay_open = &io_overlay_open_;
+    ctx.ai_overlay_open = &ai_overlay_open_;
+    ctx.focus_tab       = [this](const char* tab) { focus_tab_ = tab; };
     ctx.editor         = editor_.get();
     ctx.scene_path     = &scene_path_;
     ctx.set_scene_path = [this](const std::filesystem::path& p) { scene_path_ = p; };
@@ -453,7 +457,14 @@ void Viewer::draw_gui() {
     ImGuizmo::Enable(!busy);
 
     if (ImGui::BeginTabBar("##workspace", ImGuiTabBarFlags_None)) {
-        if (ImGui::BeginTabItem(ICON_FA_LAYER_GROUP "  Scene")) {
+        // A tab the import/export overlay asked for, honoured once. SetSelected has to be
+        // supplied to BeginTabItem on the frame the switch happens, not set afterwards.
+        const auto wants = [this](const char* name) {
+            return (focus_tab_ && std::strcmp(focus_tab_, name) == 0)
+                       ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None;
+        };
+
+        if (ImGui::BeginTabItem(ICON_FA_LAYER_GROUP "  Scene", nullptr, wants("Scene"))) {
             draw_outliner_panel(ctx, /*boxed=*/false);   // selection only: no scene mutation
             ImGui::Spacing();
             ImGui::BeginDisabled(busy);
@@ -462,14 +473,14 @@ void Viewer::draw_gui() {
             ImGui::EndDisabled();
             ImGui::EndTabItem();
         }
-        if (ImGui::BeginTabItem(ICON_FA_PALETTE "  Design")) {
+        if (ImGui::BeginTabItem(ICON_FA_PALETTE "  Design", nullptr, wants("Design"))) {
             ImGui::BeginDisabled(busy);
             draw_materials_panel(ctx);
             draw_import_panel(ctx);
             ImGui::EndDisabled();
             ImGui::EndTabItem();
         }
-        if (ImGui::BeginTabItem(ICON_FA_PLAY "  Simulate")) {
+        if (ImGui::BeginTabItem(ICON_FA_PLAY "  Simulate", nullptr, wants("Simulate"))) {
             ImGui::BeginDisabled(busy);
             draw_sun_panel(ctx);
             ImGui::EndDisabled();
@@ -477,6 +488,7 @@ void Viewer::draw_gui() {
             ImGui::EndTabItem();
         }
         ImGui::EndTabBar();
+        focus_tab_ = nullptr;   // one-shot; the user owns the tab again from here
     }
     ImGui::End();
 
@@ -512,6 +524,7 @@ void Viewer::draw_gui() {
     }
 
     draw_settings_window(ctx);
+    draw_io_overlay(ctx);
     draw_viewport_buttons(ctx, lay.viewport_min, lay.viewport_max);
 
     // Apply a deferred scene load now that no panel holds a pointer into the old scene.

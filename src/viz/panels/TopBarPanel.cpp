@@ -218,15 +218,17 @@ void draw_viewport_buttons(PanelContext& ctx, ImVec2 viewport_min, ImVec2 viewpo
     ImFont* big = font_icons_large();
     if (big) ImGui::PushFont(big);
 
-    // Import / export on top. One button, since they are the same dialog in two directions.
-    ImGui::Button(ICON_FA_RIGHT_LEFT "##io", ImVec2(kBtn, kBtn));
+    // Import / export on top. One button, since they are the same overlay in two directions.
+    if (ImGui::Button(ICON_FA_RIGHT_LEFT "##io", ImVec2(kBtn, kBtn)) && ctx.io_overlay_open)
+        *ctx.io_overlay_open = true;
     const bool io_hover = ImGui::IsItemHovered();
 
     // Assistant sits lowest, nearest the thumb, and is accent-filled as the primary of the pair.
     ImGui::PushStyleColor(ImGuiCol_Button, st.Colors[ImGuiCol_CheckMark]);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, st.Colors[ImGuiCol_SeparatorHovered]);
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.10f, 0.07f, 0.02f, 1.0f));
-    ImGui::Button(ICON_FA_WAND_MAGIC_SPARKLES "##ai", ImVec2(kBtn, kBtn));
+    if (ImGui::Button(ICON_FA_WAND_MAGIC_SPARKLES "##ai", ImVec2(kBtn, kBtn)) && ctx.ai_overlay_open)
+        *ctx.ai_overlay_open = true;
     ImGui::PopStyleColor(3);
     const bool ai_hover = ImGui::IsItemHovered();
 
@@ -242,7 +244,6 @@ void draw_viewport_buttons(PanelContext& ctx, ImVec2 viewport_min, ImVec2 viewpo
 
     st.FrameRounding = save;
     ImGui::End();
-    (void)ctx;
 }
 
 } // namespace scrt::viz

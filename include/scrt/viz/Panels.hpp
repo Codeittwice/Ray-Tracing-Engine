@@ -120,6 +120,18 @@ struct PanelContext {
 
     /// Asks the Viewer to open the Settings window (from the top bar's gear). Optional.
     std::function<void()> open_settings;
+
+    /// Whether the import/export overlay is open, owned by the Viewer so the floating button and
+    /// the overlay's own close button write the same flag.
+    bool* io_overlay_open = nullptr;
+
+    /// Whether the scene-assistant overlay is open. Same arrangement as io_overlay_open.
+    bool* ai_overlay_open = nullptr;
+
+    /// Asks the left column to select a tab by its label ("Scene", "Design", "Simulate") on the
+    /// next frame. The import/export overlay uses it to drop the user where the model it just
+    /// picked is waiting to be placed. Optional.
+    std::function<void(const char*)> focus_tab;
 };
 
 /// What the outliner currently has selected, for panels that only need to describe it.
@@ -178,8 +190,17 @@ void draw_sun_panel(PanelContext& ctx);
 void draw_trace_panel(PanelContext& ctx);
 /// Draws the 3D model import panel (file, unit detection, submesh split, placement).
 void draw_import_panel(PanelContext& ctx);
+
+/// Hands the import panel a file to inspect, as if the user had typed it and pressed Inspect.
+///
+/// The import/export overlay owns the file dialog but not the placement UI, so it picks the
+/// file and passes it here; the Design tab then already has it loaded when the user arrives.
+void set_import_file(const std::filesystem::path& path);
 /// Draws the save / save-as / revert panel. Dispatched from draw_scene_browser_panel().
 void draw_save_panel(PanelContext& ctx);
+/// Draws the import/export overlay: a modal opened from the floating button over the viewport.
+void draw_io_overlay(PanelContext& ctx);
+
 /// Draws the Settings window (theme, ground plane, Polyscope's own panels).
 ///
 /// A free-floating, closable window rather than another entry in the left column: it is opened
