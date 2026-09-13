@@ -163,6 +163,7 @@ target_sources(scrt_tests PRIVATE
     tests/test_scene_editor.cpp
     tests/test_mesh_import.cpp
     tests/test_sun_validation.cpp
+    tests/test_assistant_schema.cpp
 )
 
 target_compile_definitions(scrt_tests PRIVATE
@@ -182,6 +183,8 @@ add_library(scrt_viz STATIC
     src/viz/Theme.cpp
     src/viz/Fonts.cpp
     src/viz/FileDialog.cpp
+    src/viz/AppConfig.cpp
+    src/viz/ClaudeClient.cpp
     src/viz/IconFontData.cpp
     src/viz/RayRenderer.cpp
     src/viz/FluxPlotter.cpp
@@ -196,6 +199,7 @@ add_library(scrt_viz STATIC
     src/viz/panels/SettingsPanel.cpp
     src/viz/panels/SelectionPanel.cpp
     src/viz/panels/IoOverlay.cpp
+    src/viz/panels/AiOverlay.cpp
     src/viz/panels/TopBarPanel.cpp
 )
 # glfw is PRIVATE on the polyscope target, so link it here too: Viewer::run() needs
@@ -204,7 +208,9 @@ target_link_libraries(scrt_viz PUBLIC scrt_core polyscope implot_lib imguizmo_li
 # dwmapi: the window's own title bar is the shell's to paint, and DwmSetWindowAttribute is the
 # only way to ask for a dark one under a dark interface.
 if(WIN32)
-    target_link_libraries(scrt_viz PUBLIC dwmapi)
+    # dwmapi: the dark title bar. winhttp: the scene assistant's HTTPS client - it ships with
+    # Windows, so the assistant costs the build no new third-party dependency.
+    target_link_libraries(scrt_viz PUBLIC dwmapi winhttp)
 endif()
 set_project_warnings(scrt_viz)
 

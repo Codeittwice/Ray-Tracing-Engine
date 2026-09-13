@@ -201,6 +201,12 @@ void draw_save_panel(PanelContext& ctx);
 /// Draws the import/export overlay: a modal opened from the floating button over the viewport.
 void draw_io_overlay(PanelContext& ctx);
 
+/// Draws the scene-assistant overlay: describe a cooker, attach references, have one designed.
+///
+/// Call every frame whether or not it is open: it also collects the reply of a request that is
+/// still in flight, and the user is free to close the overlay while one runs.
+void draw_ai_overlay(PanelContext& ctx);
+
 /// Draws the Settings window (theme, ground plane, Polyscope's own panels).
 ///
 /// A free-floating, closable window rather than another entry in the left column: it is opened

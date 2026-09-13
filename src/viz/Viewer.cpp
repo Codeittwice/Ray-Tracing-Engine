@@ -525,6 +525,7 @@ void Viewer::draw_gui() {
 
     draw_settings_window(ctx);
     draw_io_overlay(ctx);
+    draw_ai_overlay(ctx);
     draw_viewport_buttons(ctx, lay.viewport_min, lay.viewport_max);
 
     // Apply a deferred scene load now that no panel holds a pointer into the old scene.
