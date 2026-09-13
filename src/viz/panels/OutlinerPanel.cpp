@@ -1,10 +1,13 @@
 #include "scrt/viz/Panels.hpp"
+#include "scrt/viz/Icons.hpp"
 #include "scrt/viz/RayRenderer.hpp"
 
 #include "scrt/materials/Material.hpp"
 #include "scrt/scene/Receiver.hpp"
+#include "scrt/surfaces/Surface.hpp"
 
 #include <cstdint>
+#include <cstdio>
 #include <string>
 #include <tuple>
 
@@ -20,11 +23,15 @@ namespace scrt::viz {
 namespace {
 
 /// Accent colour applied to the selected structure's surface.
-const glm::vec3 kAccentColor{1.0f, 0.55f, 0.10f};
+const glm::vec3 kAccentColor{1.0f, 0.62f, 0.12f};
 /// Accent colour applied to the selected structure's edges.
-const glm::vec3 kAccentEdgeColor{1.0f, 0.90f, 0.55f};
+///
+/// Near-pure yellow, and wider than the previous pale 1.5px line. The first human to drive the
+/// app could not tell at a glance which object was selected; a tint alone does not survive a
+/// scene where half the objects are already gold-coloured mirrors, so the cue is an outline.
+const glm::vec3 kAccentEdgeColor{1.0f, 0.98f, 0.20f};
 /// Edge width applied to the selected structure.
-const double kAccentEdgeWidth = 1.5;
+const double kAccentEdgeWidth = 2.5;
 
 /// Appearance of a structure before the outliner overrode it, so it can be restored exactly.
 struct AppearanceBackup {
@@ -41,6 +48,10 @@ struct OutlinerSelection {
     std::string   row_key;         ///< Stable identifier of the selected outliner row.
     std::string   structure;       ///< Polyscope structure name, empty for rows without geometry.
     std::uint64_t surface_id = 0;  ///< Stable Scene surface id, 0 for non-surface rows.
+    std::string   kind;            ///< Human-readable category, for the selection read-out.
+    std::string   label;           ///< Display name as the row showed it.
+    const char*   icon = "";       ///< Icon literal for the row's kind.
+    std::string   detail;          ///< One line of type-specific detail; may be empty.
 };
 
 OutlinerSelection g_sel;        ///< Current selection (persists across frames).
@@ -150,14 +161,65 @@ void drop_selection_if_gone(PanelContext& ctx) {
     g_last_pick.clear();
 }
 
-/// Draws one clickable outliner row.
-void outliner_row(PanelContext& ctx, const char* label, const std::string& row_key,
-                  const std::string& structure, std::uint64_t surface_id) {
+/// Draws one clickable outliner row: icon, name, and an accent bar down the left when selected.
+///
+/// The bar is drawn rather than relying on ImGuiCol_Header alone, which in this palette is a
+/// grey only a shade off the panel and reads as "hovered" more than "selected".
+void outliner_row(PanelContext& ctx, const char* icon, const char* label,
+                  const std::string& row_key, const std::string& structure,
+                  std::uint64_t surface_id, const char* kind, const char* detail = "") {
     const bool selected = (g_sel.row_key == row_key);
     ImGui::PushID(row_key.c_str());
-    if (ImGui::Selectable(label, selected))
+
+    const ImGuiStyle& st     = ImGui::GetStyle();
+    const ImVec4      accent = st.Colors[ImGuiCol_CheckMark];
+    if (selected) {
+        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(accent.x, accent.y, accent.z, 0.28f));
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(accent.x, accent.y, accent.z, 0.38f));
+        ImGui::PushStyleColor(ImGuiCol_Text, accent);
+    }
+
+    const ImVec2 p0 = ImGui::GetCursorScreenPos();
+    char         buf[256];
+    std::snprintf(buf, sizeof(buf), "%s  %s", icon, label);
+    const bool clicked = ImGui::Selectable(buf, selected);
+    const float row_h  = ImGui::GetItemRectSize().y;
+
+    if (selected) {
+        ImGui::PopStyleColor(3);
+        ImGui::GetWindowDrawList()->AddRectFilled(
+            ImVec2(p0.x - st.WindowPadding.x * 0.5f, p0.y),
+            ImVec2(p0.x - st.WindowPadding.x * 0.5f + 3.0f, p0.y + row_h),
+            ImGui::GetColorU32(accent));
+    }
+
+    if (clicked) {
         select_row(ctx, row_key, structure, surface_id, /*push_to_pick=*/true);
+        g_sel.kind   = kind;
+        g_sel.label  = label;
+        g_sel.icon   = icon;
+        g_sel.detail = detail;
+    } else if (selected) {
+        // Keep the read-out current even when the row was selected by a 3D pick, or when the
+        // detail line has changed underneath us (a scaled reflector's extent, say).
+        g_sel.kind   = kind;
+        g_sel.label  = label;
+        g_sel.icon   = icon;
+        g_sel.detail = detail;
+    }
     ImGui::PopID();
+}
+
+/// One line describing a surface, for the selection read-out: its world-space extent.
+///
+/// Surface has no type name to report - the JSON knows "paraboloid", the runtime object does
+/// not - so this states what can actually be measured from it.
+std::string surface_detail(const surfaces::Surface& surf) {
+    const auto b = surf.world_bounds();
+    const auto d = b.max() - b.min();
+    char       buf[160];
+    std::snprintf(buf, sizeof(buf), "Extent %.2f x %.2f x %.2f m", d.x, d.y, d.z);
+    return buf;
 }
 
 /// Points the camera at the selected structure's bounding box.
@@ -177,8 +239,10 @@ void frame_selected() {
 } // namespace
 
 /// Draws the object outliner tree (reflectors, receiver faces, sun, aperture, materials).
-void draw_outliner_panel(PanelContext& ctx) {
-    if (!ImGui::CollapsingHeader("Outliner", ImGuiTreeNodeFlags_DefaultOpen)) return;
+void draw_outliner_panel(PanelContext& ctx, bool boxed) {
+    if (boxed && !ImGui::CollapsingHeader(ICON_FA_LAYER_GROUP "  Scene tree",
+                                          ImGuiTreeNodeFlags_DefaultOpen))
+        return;
     if (!ctx.scene) {
         ImGui::TextDisabled("No scene loaded.");
         return;
@@ -191,7 +255,7 @@ void draw_outliner_panel(PanelContext& ctx) {
     const auto& reg = StructureRegistry::instance();
 
     // ---- Reflectors --
-    if (ImGui::TreeNodeEx("Reflectors", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::TreeNodeEx(ICON_FA_SOLAR_PANEL "  Reflectors", ImGuiTreeNodeFlags_DefaultOpen)) {
         auto surfs = ctx.scene->surfaces();
         if (surfs.empty()) ImGui::TextDisabled("(none)");
         for (const auto& surf : surfs) {
@@ -201,49 +265,64 @@ void draw_outliner_panel(PanelContext& ctx) {
                 ps_name.empty()
                     ? (surf->name().empty() ? "surface_" + std::to_string(id) : surf->name())
                     : ps_name;
-            outliner_row(ctx, label.c_str(), "surface:" + std::to_string(id), ps_name, id);
+            const std::string detail = surface_detail(*surf);
+            outliner_row(ctx, ICON_FA_CUBE, label.c_str(), "surface:" + std::to_string(id),
+                         ps_name, id, "Reflector", detail.c_str());
         }
         ImGui::TreePop();
     }
 
     // ---- Receiver (faces as children) --
     if (const auto* recv = ctx.scene->receiver()) {
-        if (ImGui::TreeNodeEx("Receiver", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (ImGui::TreeNodeEx(ICON_FA_BOWL_FOOD "  Receiver", ImGuiTreeNodeFlags_DefaultOpen)) {
             const bool multi = recv->is_multi_face();
             for (const auto& face : recv->faces()) {
                 const std::string structure =
                     receiver_flux_structure_name(multi, face->name());
-                outliner_row(ctx, face->name().c_str(), "face:" + face->name(),
-                             structure, 0);
+                outliner_row(ctx, ICON_FA_FIRE, face->name().c_str(), "face:" + face->name(),
+                             structure, 0, "Receiver face",
+                             "Where the light is collected. Flux is measured here.");
             }
             ImGui::TreePop();
         }
     }
 
     // ---- Sun / Aperture / Materials --
-    outliner_row(ctx, "Sun", "sun", std::string{}, 0);
-    outliner_row(ctx, "Aperture", "aperture", aperture_structure_name(), 0);
+    outliner_row(ctx, ICON_FA_MOUNTAIN_SUN, "Sun", "sun", std::string{}, 0, "Light source",
+                 "Direction and strength of the incoming sunlight.");
+    outliner_row(ctx, ICON_FA_SQUARE, "Aperture", "aperture", aperture_structure_name(), 0,
+                 "Aperture", "The window rays are fired through. Sets the collected power.");
 
-    if (ImGui::TreeNodeEx("Materials")) {
+    if (ImGui::TreeNodeEx(ICON_FA_PALETTE "  Materials")) {
         auto mats = ctx.scene->mutable_materials();
         if (mats.empty()) ImGui::TextDisabled("(none)");
         for (const auto& mat : mats)
-            outliner_row(ctx, mat->name().c_str(), "material:" + mat->name(),
-                         std::string{}, 0);
+            outliner_row(ctx, ICON_FA_PALETTE, mat->name().c_str(), "material:" + mat->name(),
+                         std::string{}, 0, "Material",
+                         "Edit its reflectance and slope error on the Design tab.");
         ImGui::TreePop();
     }
 
     // ---- Actions --
     ImGui::Separator();
     ImGui::BeginDisabled(g_sel.structure.empty());
-    if (ImGui::Button("Frame selected", ImVec2(-1, 0)))
+    if (ImGui::Button(ICON_FA_CROSSHAIRS "  Frame selected", ImVec2(-1, 0)))
         frame_selected();
     ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("Fly the camera to the selected object.");
+}
 
-    if (g_sel.row_key.empty())
-        ImGui::TextDisabled("Nothing selected");
-    else
-        ImGui::TextDisabled("Selected: %s", g_sel.row_key.c_str());
+SelectionInfo current_selection() {
+    SelectionInfo info;
+    info.any        = !g_sel.row_key.empty();
+    info.kind       = g_sel.kind;
+    info.label      = g_sel.label;
+    info.structure  = g_sel.structure;
+    info.surface_id = g_sel.surface_id;
+    info.icon       = g_sel.icon;
+    info.detail     = g_sel.detail;
+    return info;
 }
 
 } // namespace scrt::viz

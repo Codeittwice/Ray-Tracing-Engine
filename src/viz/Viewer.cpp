@@ -1,5 +1,7 @@
 #include "scrt/viz/Viewer.hpp"
 #include "scrt/viz/FluxPlotter.hpp"
+#include "scrt/viz/Fonts.hpp"
+#include "scrt/viz/Icons.hpp"
 #include "scrt/viz/Panels.hpp"
 #include "scrt/viz/RayRenderer.hpp"
 #include "scrt/viz/Layout.hpp"
@@ -379,8 +381,8 @@ PanelContext Viewer::make_panel_context() {
     // and a SceneEditor so a committed element reaches both document and live scene.
     ctx.scene_dir             = &scene_dir_;
     // Without these the save panel has no document and reports "No document to save".
-    ctx.settings_requested = &settings_requested_;
-    ctx.open_settings      = [this]() { settings_requested_ = true; };
+    ctx.settings_open = &settings_open_;
+    ctx.open_settings = [this]() { settings_open_ = !settings_open_; };
     ctx.editor         = editor_.get();
     ctx.scene_path     = &scene_path_;
     ctx.set_scene_path = [this](const std::filesystem::path& p) { scene_path_ = p; };
@@ -403,6 +405,14 @@ PanelContext Viewer::make_panel_context() {
 // ---- draw_gui ----------------------------------------------------------------
 
 void Viewer::draw_gui() {
+    // Fill the screen on launch. Done from the first drawn frame rather than from run(), where
+    // Polyscope's GLFW window is still hidden (GLFW_VISIBLE=false until show() runs) and a
+    // maximise request has no window on screen to act on.
+    if (!maximized_) {
+        maximized_ = true;
+        if (GLFWwindow* win = glfwGetCurrentContext()) glfwMaximizeWindow(win);
+    }
+
     // Pick up a finished worker before anything reads result_ or acc_ this frame.
     poll_trace();
 
@@ -415,11 +425,23 @@ void Viewer::draw_gui() {
     // they were last left and ignored a resize.
     // A little more vertical room than ImGui's default menu bar, so the icon controls on the
     // right have somewhere to sit.
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(9.0f, 9.0f));
-    const float       bar = draw_top_bar(ctx);
+    const float k = ui_scale();
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(9.0f * k, 9.0f * k));
+    const float bar = draw_top_bar(ctx);
     ImGui::PopStyleVar();
-    const LayoutRects lay = compute_layout(ImGui::GetIO().DisplaySize, bar);
 
+    const LayoutRects lay =
+        compute_layout(ImGui::GetIO().DisplaySize, bar, selection_height_, k);
+
+    // ImGuizmo must be primed every frame, before anything can manipulate. It is primed inside
+    // draw_transform_panel, which the selection window calls - and that window draws after the
+    // left column. Nothing in the left column manipulates, so the order holds.
+
+    // ---- left column: one window, three tabs --
+    //
+    // Tabs rather than the previous stack of nine collapsing headers. The stack meant the
+    // controls a user wanted were usually below the fold, and which ones were open was
+    // remembered from whatever they last did rather than from what they are doing now.
     ImGui::SetNextWindowPos(lay.left_pos, ImGuiCond_Always);
     ImGui::SetNextWindowSize(lay.left_size, ImGuiCond_Always);
     ImGui::Begin("Solar Cooker RT", nullptr, docked_panel_flags());
@@ -430,25 +452,66 @@ void Viewer::draw_gui() {
     // ignores BeginDisabled, so it gets its own switch.
     ImGuizmo::Enable(!busy);
 
-    draw_outliner_panel(ctx);   // selection and visibility only: no scene mutation
-
-    ImGui::BeginDisabled(busy);
-    draw_scene_browser_panel(ctx);
-    draw_save_panel(ctx);
-    draw_transform_panel(ctx);
-    draw_materials_panel(ctx);
-    draw_sun_panel(ctx);
-    ImGui::EndDisabled();
-
-    draw_trace_panel(ctx);      // owns the Cancel button, so it must stay live
-
-    ImGui::BeginDisabled(busy);
-    draw_import_panel(ctx);
-    draw_settings_panel(ctx);
-    ImGui::EndDisabled();
-
+    if (ImGui::BeginTabBar("##workspace", ImGuiTabBarFlags_None)) {
+        if (ImGui::BeginTabItem(ICON_FA_LAYER_GROUP "  Scene")) {
+            draw_outliner_panel(ctx, /*boxed=*/false);   // selection only: no scene mutation
+            ImGui::Spacing();
+            ImGui::BeginDisabled(busy);
+            draw_scene_browser_panel(ctx);
+            draw_save_panel(ctx);
+            ImGui::EndDisabled();
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem(ICON_FA_PALETTE "  Design")) {
+            ImGui::BeginDisabled(busy);
+            draw_materials_panel(ctx);
+            draw_import_panel(ctx);
+            ImGui::EndDisabled();
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem(ICON_FA_PLAY "  Simulate")) {
+            ImGui::BeginDisabled(busy);
+            draw_sun_panel(ctx);
+            ImGui::EndDisabled();
+            draw_trace_panel(ctx);   // owns the Cancel button, so it must stay live
+            ImGui::EndTabItem();
+        }
+        ImGui::EndTabBar();
+    }
     ImGui::End();
 
+    // ---- right column, bottom: what is selected, and how to place it --
+    ImGui::SetNextWindowPos(lay.right_bottom_pos, ImGuiCond_Always);
+    ImGui::SetNextWindowSize(lay.right_bottom_size, ImGuiCond_Always);
+    ImGui::Begin("Selection", nullptr, docked_panel_flags());
+    ImGui::BeginDisabled(busy);
+    const float wanted = draw_selection_panel(ctx);
+    ImGui::EndDisabled();
+    ImGui::End();
+
+    // Ease toward the requested height rather than snapping to it, so selecting an object grows
+    // the panel instead of making the flux plot above it jump.
+    selection_height_ += (wanted - selection_height_) * 0.25f;
+    if (std::abs(wanted - selection_height_) < 0.5f) selection_height_ = wanted;
+
+    // ---- right column, top: flux analysis --
+    ImGui::SetNextWindowPos(lay.right_top_pos, ImGuiCond_Always);
+    ImGui::SetNextWindowSize(lay.right_top_size, ImGuiCond_Always);
+    if (traced_ && acc_) {
+        static FluxPlotter plotter;
+        plotter.draw(*acc_, result_);
+    } else {
+        // The window exists even before the first trace lands, so the column does not visibly
+        // assemble itself a second after launch.
+        ImGui::Begin("Flux Analysis", nullptr, docked_panel_flags());
+        ImGui::TextDisabled("No results yet");
+        ImGui::Spacing();
+        ImGui::TextWrapped("Run a trace from the Simulate tab to see how much sunlight reaches "
+                           "the pot and where it lands.");
+        ImGui::End();
+    }
+
+    draw_settings_window(ctx);
     draw_viewport_buttons(ctx, lay.viewport_min, lay.viewport_max);
 
     // Apply a deferred scene load now that no panel holds a pointer into the old scene.
@@ -456,17 +519,9 @@ void Viewer::draw_gui() {
         const auto path = *pending_load_;
         pending_load_.reset();
         load_from_file(path);
-        return;   // this frame's remaining widgets referred to the scene that just went away
-    }
-
-    // ---- Flux Analysis window --
-    if (traced_ && acc_) {
-        ImGui::SetNextWindowPos(lay.right_pos, ImGuiCond_Always);
-        ImGui::SetNextWindowSize(lay.right_size, ImGuiCond_Always);
-        static FluxPlotter plotter;
-        plotter.draw(*acc_, result_);
     }
 }
+
 
 // ---- run ---------------------------------------------------------------------
 
@@ -495,18 +550,28 @@ void Viewer::run() {
     // hook that lands on every context and early enough to stop imgui.ini being read at all.
     // Mutating ImGui::GetStyle() between init() and show() is silently discarded.
     polyscope::options::configureImGuiStyleCallback = []() {
-        ImGui::GetIO().IniFilename = nullptr;           // no saved window positions, ever
+        ImGuiIO& io   = ImGui::GetIO();
+        io.IniFilename = nullptr;                       // no saved window positions, ever
+        // A plain click on a numeric field types into it; a drag still drags. The default
+        // wants Ctrl+click, which nobody discovers, so the numeric fields read as drag-only.
+        io.ConfigDragClickToInputText = true;
         // Our own palette, not Polyscope's green/teal. Re-applied here rather than once after
         // init() because show() builds a fresh ImGuiContext with a fresh ImGuiStyle.
         apply_theme(current_theme());
     };
 
+    // Adds Font Awesome to Polyscope's Lato. Unlike the style callback this runs exactly once,
+    // when the render engine builds its shared atlas - the atlas survives the per-show() context
+    // churn, so the ImFont pointers it hands back stay valid.
+    polyscope::options::prepareImGuiFontsCallback = []() { return prepare_fonts(); };
+
     polyscope::init();
     ImPlot::CreateContext();
 
-    // Fill the screen on launch. Polyscope never creates a maximised window, and the GLFW
-    // handle is not exposed - but the context it made current is.
-    if (GLFWwindow* win = glfwGetCurrentContext()) glfwMaximizeWindow(win);
+    // Maximising happens on the first drawn frame instead (see draw_gui). Polyscope creates
+    // its GLFW window hidden and only shows it from inside show(); a maximise request against a
+    // hidden window is dropped, which is why the app came up at 1302x776 with this call in
+    // place and every option below correctly set.
 
     // This project is Z-up throughout: +Z is the zenith in the sun model, and the box receiver
     // walls are named north/south/east/west in the XY plane. Polyscope defaults to Y-up, which

@@ -1,4 +1,5 @@
 #include "scrt/viz/Panels.hpp"
+#include "scrt/viz/Icons.hpp"
 #include "scrt/viz/Theme.hpp"
 
 #include "polyscope/options.h"
@@ -30,27 +31,33 @@ void tip(const char* text) {
 
 } // namespace
 
-// ---- draw_settings_panel -------------------------------------------------------------------
+// ---- draw_settings_window ------------------------------------------------------------------
 
-void draw_settings_panel(PanelContext& ctx) {
-    // The menu bar can ask for this panel. Consume the request here so it fires once and the
-    // user can still collapse the panel again afterwards.
-    if (ctx.settings_requested && *ctx.settings_requested) {
-        *ctx.settings_requested = false;
-        ImGui::SetNextItemOpen(true);
-        ImGui::SetScrollHereY(1.0f);
+void draw_settings_window(PanelContext& ctx) {
+    if (!ctx.settings_open || !*ctx.settings_open) return;
+
+    // Floating and movable, unlike every other window here: it is opened from the top bar's
+    // gear, has nothing to do with the scene being edited, and is closed again immediately.
+    // Centred on first appearance only, so dragging it somewhere sticks for the session.
+    const ImVec2 centre(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f);
+    ImGui::SetNextWindowPos(centre, ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(420.0f, 0.0f), ImGuiCond_FirstUseEver);
+
+    if (!ImGui::Begin(ICON_FA_GEAR "  Settings", ctx.settings_open,
+                      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::End();
+        return;
     }
-    if (!ImGui::CollapsingHeader("Settings###settings")) return;
 
     // ---- appearance ----
     ImGui::TextDisabled("Appearance");
 
     Theme      theme = current_theme();
     const bool dark  = (theme == Theme::Dark);
-    if (ImGui::RadioButton("Dark", dark)) set_theme_and_viewport(Theme::Dark);
+    if (ImGui::RadioButton(ICON_FA_MOON "  Dark", dark)) set_theme_and_viewport(Theme::Dark);
     tip("Darker panels, easier on the eyes for long sessions.");
     ImGui::SameLine();
-    if (ImGui::RadioButton("Light", !dark)) set_theme_and_viewport(Theme::Light);
+    if (ImGui::RadioButton(ICON_FA_SUN "  Light", !dark)) set_theme_and_viewport(Theme::Light);
     tip("Lighter panels. Screenshots for reports and printed documentation read better on a\n"
         "light ground.");
 
@@ -105,7 +112,10 @@ void draw_settings_panel(PanelContext& ctx) {
     ImGui::TextDisabled("Window layout is fixed and follows the window size.\n"
                         "Positions are not saved between runs.");
 
-    (void)ctx;
+    ImGui::Spacing();
+    if (ImGui::Button(ICON_FA_XMARK "  Close", ImVec2(-1, 0))) *ctx.settings_open = false;
+
+    ImGui::End();
 }
 
 } // namespace scrt::viz

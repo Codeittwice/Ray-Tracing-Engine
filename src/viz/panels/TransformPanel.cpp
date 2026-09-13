@@ -1,4 +1,5 @@
 #include "scrt/viz/Panels.hpp"
+#include "scrt/viz/Icons.hpp"
 #include "scrt/viz/RayRenderer.hpp"
 
 #include "scrt/core/AABB.hpp"
@@ -144,20 +145,55 @@ void set_mouse_grab(bool grab) {
 /// Three-component drag row that greys out the components whose axis is locked.
 bool locked_drag3(const char* label, float* v, float speed, float lo, float hi,
                   const char* fmt, const bool lock[3]) {
-    static const char* kAxisId[3] = {"##x", "##y", "##z"};
+    // Axis colours, the convention every 3D tool shares: X red, Y green, Z blue. They are
+    // deliberately desaturated - three saturated bars in a row fight the amber accent that means
+    // "selected" everywhere else in this interface.
+    static const ImVec4 kAxis[3] = {
+        ImVec4(0.78f, 0.30f, 0.32f, 1.0f),
+        ImVec4(0.36f, 0.66f, 0.38f, 1.0f),
+        ImVec4(0.33f, 0.52f, 0.80f, 1.0f),
+    };
+    static const char* kAxisId[3]   = {"##x", "##y", "##z"};
+    static const char* kAxisName[3] = {"X", "Y", "Z"};
+
     bool changed = false;
     ImGui::PushID(label);
-    const float sp    = ImGui::GetStyle().ItemInnerSpacing.x;
-    const float width = std::max(1.0f, (ImGui::CalcItemWidth() - sp * 2.0f) / 3.0f);
+
+    // Label above the fields, not beside them. Beside, it was the first thing to be clipped
+    // when the column narrowed, leaving three anonymous number boxes.
+    ImGui::TextUnformatted(label);
+
+    const ImGuiStyle& st = ImGui::GetStyle();
+    const float sp    = st.ItemInnerSpacing.x;
+    const float avail = ImGui::GetContentRegionAvail().x;
+    const float width = std::max(1.0f, (avail - sp * 2.0f) / 3.0f);
+
     for (int i = 0; i < 3; ++i) {
         if (i) ImGui::SameLine(0.0f, sp);
         ImGui::SetNextItemWidth(width);
         ImGui::BeginDisabled(lock[i]);
+        ImGui::PushStyleColor(ImGuiCol_FrameBg,
+                              ImVec4(kAxis[i].x, kAxis[i].y, kAxis[i].z, 0.22f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered,
+                              ImVec4(kAxis[i].x, kAxis[i].y, kAxis[i].z, 0.34f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive,
+                              ImVec4(kAxis[i].x, kAxis[i].y, kAxis[i].z, 0.46f));
         if (ImGui::DragFloat(kAxisId[i], &v[i], speed, lo, hi, fmt)) changed = true;
+        ImGui::PopStyleColor(3);
         ImGui::EndDisabled();
+
+        // The axis letter, drawn into the field's left edge. A separate label would cost a
+        // third of the row's width, and these rows are already the tightest thing on screen.
+        const ImVec2 p0 = ImGui::GetItemRectMin();
+        const ImVec2 p1 = ImGui::GetItemRectMax();
+        ImGui::GetWindowDrawList()->AddText(
+            ImVec2(p0.x + 4.0f, p0.y + (p1.y - p0.y - ImGui::GetFontSize()) * 0.5f),
+            ImGui::GetColorU32(lock[i] ? st.Colors[ImGuiCol_TextDisabled] : kAxis[i]),
+            kAxisName[i]);
+
+        if (lock[i] && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("%s is locked. Clear the lock below to edit it.", kAxisName[i]);
     }
-    ImGui::SameLine(0.0f, sp);
-    ImGui::TextUnformatted(label);
     ImGui::PopID();
     return changed;
 }
@@ -366,15 +402,41 @@ bool centre_button(const char* label, int axis, float width) {
 
 /// Draws the gizmo mode, space and axis-lock controls.
 void draw_tool_controls(surfaces::ScaleSupport support) {
-    ImGui::Checkbox("Show gizmo", &g_tool.enabled);
-
-    int op = static_cast<int>(g_tool.op);
-    ImGui::RadioButton("Move", &op, 0); ImGui::SameLine();
-    ImGui::RadioButton("Rotate", &op, 1); ImGui::SameLine();
-    ImGui::BeginDisabled(support == surfaces::ScaleSupport::None);
-    ImGui::RadioButton("Scale", &op, 2);
-    ImGui::EndDisabled();
+    // The three tools as a segmented row of toggle buttons rather than radio dots: this is the
+    // control the user reaches for most, and it should be a target, not a 13px circle.
+    int         op    = static_cast<int>(g_tool.op);
+    const float third = (ImGui::GetContentRegionAvail().x -
+                         ImGui::GetStyle().ItemSpacing.x * 2.0f) / 3.0f;
+    struct Tool { const char* label; const char* tip; };
+    static const Tool kTools[3] = {
+        {ICON_FA_ARROWS_UP_DOWN_LEFT_RIGHT "  Move",  "Drag the arrows to move the object."},
+        {ICON_FA_ROTATE "  Turn",                     "Drag a ring to rotate about the object."},
+        {ICON_FA_UP_RIGHT_AND_DOWN_LEFT_FROM_CENTER "  Size",
+                                                      "Drag a handle to resize the object."},
+    };
+    for (int i = 0; i < 3; ++i) {
+        if (i) ImGui::SameLine();
+        const bool on = (op == i);
+        ImGui::BeginDisabled(i == 2 && support == surfaces::ScaleSupport::None);
+        if (on) {
+            const ImVec4 a = ImGui::GetStyle().Colors[ImGuiCol_CheckMark];
+            ImGui::PushStyleColor(ImGuiCol_Button, a);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, a);
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.10f, 0.07f, 0.02f, 1.0f));
+        }
+        if (ImGui::Button(kTools[i].label, ImVec2(third, 0))) op = i;
+        if (on) ImGui::PopStyleColor(3);
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            if (i == 2 && support == surfaces::ScaleSupport::None)
+                ImGui::SetTooltip("This surface has no size to change.");
+            else
+                ImGui::SetTooltip("%s", kTools[i].tip);
+        }
+    }
     g_tool.op = static_cast<GizmoOp>(op);
+
+    ImGui::Checkbox("Show handles in the 3D view", &g_tool.enabled);
 
     // Scale is always local (see run_gizmo), so the choice is meaningless there rather than
     // merely unused - greying it out says so instead of silently ignoring the user.
@@ -543,40 +605,41 @@ void draw_transform_panel(PanelContext& ctx) {
     else                      set_mouse_grab(false);
 
     // ---- panel --
-    if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen)) {
-        if (!st) {
-            ImGui::TextDisabled("Select an object in the Outliner to place it.");
-        } else {
-            const std::string name =
-                surf->name().empty() ? "surface_" + std::to_string(id) : surf->name();
-            ImGui::Text("%s", name.c_str());
+    //
+    // No collapsing header: this draws inside the selection window in the right column, under
+    // the read-out of what is selected, and appears only when there is something to place.
+    if (st) {
+        ImGui::Separator();
+        ImGui::TextDisabled("Place this object");
 
-            draw_tool_controls(support);
-            ImGui::Separator();
+        draw_tool_controls(support);
+        ImGui::Spacing();
 
-            // These fields and the gizmo write the very same triples, so they cannot disagree.
-            if (locked_drag3("Translate (m)", st->trans, 0.005f, 0.0f, 0.0f, "%.4f",
-                             g_tool.lock))
-                changed = true;
-            if (locked_drag3("Rotate (deg)", st->rot_deg, 0.5f, 0.0f, 0.0f, "%.2f",
-                             g_tool.lock))
-                changed = true;
-            if (draw_scale_controls(*st, support, uniform_scale)) changed = true;
+        // These fields and the gizmo write the very same triples, so they cannot disagree.
+        // Click a field to type an exact value; drag it for fine adjustment.
+        if (locked_drag3("Move (m)", st->trans, 0.005f, 0.0f, 0.0f, "%.4f", g_tool.lock))
+            changed = true;
+        if (locked_drag3("Turn (deg)", st->rot_deg, 0.5f, 0.0f, 0.0f, "%.2f", g_tool.lock))
+            changed = true;
+        if (draw_scale_controls(*st, support, uniform_scale)) changed = true;
 
-            ImGui::Separator();
-            if (draw_centre_controls(ctx, *st, *surf)) changed = true;
+        ImGui::Separator();
+        if (draw_centre_controls(ctx, *st, *surf)) changed = true;
 
-            if (ImGui::Button("Reset transform", ImVec2(-1, 0))) {
-                for (int i = 0; i < 3; ++i) {
-                    st->trans[i]   = 0.0f;
-                    st->rot_deg[i] = 0.0f;
-                    st->scale[i]   = 1.0f;
-                }
-                changed = true;
+        if (ImGui::Button(ICON_FA_ARROW_ROTATE_LEFT "  Reset placement", ImVec2(-1, 0))) {
+            for (int i = 0; i < 3; ++i) {
+                st->trans[i]   = 0.0f;
+                st->rot_deg[i] = 0.0f;
+                st->scale[i]   = 1.0f;
             }
-            ImGui::TextDisabled("Pivot: %.3f, %.3f, %.3f m",
-                                st->pivot.x, st->pivot.y, st->pivot.z);
+            changed = true;
         }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Put the object back where the scene file had it.");
+        ImGui::TextDisabled("Pivot: %.3f, %.3f, %.3f m", st->pivot.x, st->pivot.y, st->pivot.z);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("The point turns and resizes happen about. Taken from the\n"
+                              "object's original position, so it never drifts as you edit.");
     }
 
     // Hold the global scene extents still for as long as the user is actually dragging

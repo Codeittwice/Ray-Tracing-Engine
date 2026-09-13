@@ -1,6 +1,15 @@
 #include "scrt/viz/Theme.hpp"
 
+#include "scrt/viz/Fonts.hpp"
+
 #include "imgui.h"
+
+#ifdef _WIN32
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3.h>
+#include <GLFW/glfw3native.h>
+#include <dwmapi.h>
+#endif
 
 namespace scrt::viz {
 
@@ -151,13 +160,36 @@ void apply_palette(const Palette& p) {
     s.ItemInnerSpacing  = ImVec2(6, 5);
     s.ScrollbarSize     = 13.0f;
     s.GrabMinSize       = 9.0f;
+
+    // Every number above is in pixels at 96 DPI. On a high-DPI panel the fonts are rasterised
+    // larger (see prepare_fonts) and the padding has to grow with them, or the text overflows
+    // its own frames. ScaleAllSizes is applied last so it multiplies the finished style.
+    if (const float k = ui_scale(); k != 1.0f) s.ScaleAllSizes(k);
 }
 
 } // namespace
 
+/// Asks Windows to draw the window's own title bar in dark mode.
+///
+/// The title bar is not ours to paint - it belongs to the shell - so a dark interface otherwise
+/// sits under a bright white caption. DWMWA_USE_IMMERSIVE_DARK_MODE is honoured from Windows 10
+/// 20H1 onward and simply fails on older builds, which is why the result is ignored.
+void apply_titlebar(Theme t) {
+#ifdef _WIN32
+    GLFWwindow* win = glfwGetCurrentContext();
+    if (!win) return;
+    const BOOL dark = (t == Theme::Dark) ? TRUE : FALSE;
+    ::DwmSetWindowAttribute(glfwGetWin32Window(win), 20 /*DWMWA_USE_IMMERSIVE_DARK_MODE*/,
+                            &dark, sizeof(dark));
+#else
+    (void)t;
+#endif
+}
+
 void apply_theme(Theme t) {
     g_theme = t;
     apply_palette(t == Theme::Light ? kLight : kDark);
+    apply_titlebar(t);
 }
 
 Theme current_theme() { return g_theme; }

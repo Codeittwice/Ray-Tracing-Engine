@@ -62,8 +62,19 @@ private:
     /// Full path of the file the current document came from; empty for a synthesized scene.
     std::filesystem::path                    scene_path_;
 
-    /// One-shot: the menu bar asked to reveal Settings.
-    bool                                     settings_requested_ = false;
+    /// Whether the Settings window is open. The top bar's gear and the window's own close
+    /// button write this same flag.
+    bool                                     settings_open_ = false;
+
+    /// Height the selection column asked for last frame, in pixels, smoothed toward the height
+    /// it wants now. Applying it raw made the flux plot jump by 300px the instant an object was
+    /// selected, which reads as a glitch rather than as a panel growing.
+    float                                    selection_height_ = 150.0f;
+
+    /// False until the window has been maximised. Polyscope creates its GLFW window hidden and
+    /// only shows it once show() is running, and a maximise request against a hidden window is
+    /// silently dropped - so it has to be re-issued from inside the first drawn frame.
+    bool                                     maximized_ = false;
 
     /// A scene load requested by a panel during this frame, applied once the frame is finished.
     /// Loading in place would free the Scene and SceneEditor that the rest of the frame's panels

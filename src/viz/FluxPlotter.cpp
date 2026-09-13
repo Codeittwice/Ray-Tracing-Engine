@@ -1,8 +1,10 @@
 #include "scrt/viz/FluxPlotter.hpp"
+#include "scrt/viz/Icons.hpp"
 #include "scrt/viz/Layout.hpp"
 #include "scrt/io/ResultsExporter.hpp"
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <vector>
 
 #include "imgui.h"
@@ -22,6 +24,24 @@ void help_line(const char* text) {
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
     ImGui::TextWrapped("%s", text);
     ImGui::PopStyleColor();
+}
+
+/// A headline figure with its explanation behind an info icon.
+///
+/// The explanations used to be printed under every number as a wrapped grey paragraph. Three of
+/// those filled the column and left the flux map itself a 40px strip - the one thing the panel
+/// exists to show. The words are worth keeping for a first-time reader; the space is not.
+void figure(const char* value, const char* help) {
+    ImGui::TextUnformatted(value);
+    ImGui::SameLine();
+    ImGui::TextDisabled(ICON_FA_CIRCLE_INFO);
+    if (ImGui::IsItemHovered()) {
+        ImGui::BeginTooltip();
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 22.0f);
+        ImGui::TextUnformatted(help);
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
 }
 
 } // namespace
@@ -62,8 +82,10 @@ void FluxPlotter::draw(const tracer::FluxAccumulator& acc,
         ImGui::EndTabBar();
     }
 
-    // Export row
+    // Export row, collapsed by default: it is used once a session and was costing the plot
+    // above it four rows of permanent vertical space.
     ImGui::Separator();
+    if (!ImGui::CollapsingHeader(ICON_FA_FILE_EXPORT "  Export results")) { ImGui::End(); return; }
     help_line("Save the numbers: CSV is one row per patch of the pot, JSON is the summary.");
     static char out_csv[256] = "flux.csv";
     static char out_json[256] = "summary.json";
@@ -104,31 +126,30 @@ void FluxPlotter::draw_heatmap_tab(const tracer::FluxAccumulator& acc, double dn
     double vmax = acc.peak_flux_wm2();
     if (vmax <= 0.0) vmax = 1.0;
 
-    // ---- Plain-language summary, then the same numbers at full precision --------
-    ImGui::Text("Power reaching the pot: %.0f W", acc.total_power_w());
-    help_line("The sunlight the cooker actually delivers to the target, after every "
-              "reflection and loss. A 1 kW electric hob is 1000 W.");
+    // ---- Headline figures, explanations on hover --------
+    char buf[128];
 
-    ImGui::Text("Hottest spot: %.0f W/m²", acc.peak_flux_wm2());
-    help_line("Intensity where the light is most tightly focused. Bare midday sun is "
-              "around 1000 W/m².");
+    std::snprintf(buf, sizeof(buf), "Power reaching the pot: %.0f W", acc.total_power_w());
+    figure(buf, "The sunlight the cooker actually delivers to the target, after every "
+                "reflection and loss. A 1 kW electric hob is 1000 W.");
 
-    ImGui::Text("Concentration: %.1f× (at %.0f W/m² sunlight)",
-                acc.concentration_ratio(dni_wm2), dni_wm2);
-    if (scene_dni_known() || dni_wm2 > 0.0) {
-        help_line("How many suns' worth of intensity the hot spot sees. Follows the DNI "
-                  "slider in the Sun panel.");
-    } else {
-        help_line("No scene sunlight strength known yet; 1000 W/m² assumed.");
-    }
+    std::snprintf(buf, sizeof(buf), "Hottest spot: %.0f W/m²", acc.peak_flux_wm2());
+    figure(buf, "Intensity where the light is most tightly focused. Bare midday sun is "
+                "around 1000 W/m².");
+
+    std::snprintf(buf, sizeof(buf), "Concentration: %.1fx (at %.0f W/m² sunlight)",
+                  acc.concentration_ratio(dni_wm2), dni_wm2);
+    figure(buf, (scene_dni_known() || dni_wm2 > 0.0)
+                    ? "How many suns' worth of intensity the hot spot sees. Follows the DNI "
+                      "slider on the Simulate tab."
+                    : "No scene sunlight strength known yet; 1000 W/m² assumed.");
+
+    ImGui::TextDisabled("Exact: %.6f W   %.6f W/m²   CR %.6f",
+                        acc.total_power_w(), acc.peak_flux_wm2(),
+                        acc.concentration_ratio(dni_wm2));
 
     ImGui::Separator();
-    ImGui::Text("Exact: total %.6f W   peak %.6f W/m²   CR %.6f×",
-                acc.total_power_w(), acc.peak_flux_wm2(),
-                acc.concentration_ratio(dni_wm2));
-
-    help_line("Map of where the light lands on the pot. Bright = hot.");
-    if (ImPlot::BeginPlot("Flux map", ImVec2(-1, -1),
+    if (ImPlot::BeginPlot("Where the light lands (bright = hot)", ImVec2(-1, -1),
                           ImPlotFlags_Equal | ImPlotFlags_NoLegend)) {
         ImPlot::SetupAxis(ImAxis_X1, "x (m)");
         ImPlot::SetupAxis(ImAxis_Y1, "y (m)");

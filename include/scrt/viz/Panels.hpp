@@ -114,14 +114,32 @@ struct PanelContext {
     /// directory, and the save panel keeps tracking that separately. Optional.
     std::function<void(const std::filesystem::path&)> set_scene_path;
 
-    /// Set by the Viewer when the menu bar asked for Settings; the settings panel opens itself
-    /// and clears it. A one-shot request rather than a persistent "is open" flag, so the user can
-    /// still collapse the panel afterwards.
-    bool* settings_requested = nullptr;
+    /// Whether the Settings window is open. Owned by the Viewer so the gear icon in the top bar
+    /// and the window's own close button write the same flag.
+    bool* settings_open = nullptr;
 
-    /// Asks the Viewer to reveal the settings panel (from the menu bar). Optional.
+    /// Asks the Viewer to open the Settings window (from the top bar's gear). Optional.
     std::function<void()> open_settings;
 };
+
+/// What the outliner currently has selected, for panels that only need to describe it.
+///
+/// A copy taken per frame rather than a pointer into the outliner's own state: the selection is
+/// resolved while the outliner draws, and the selection panel draws in a different window later
+/// in the same frame.
+struct SelectionInfo {
+    bool          any = false;     ///< False when nothing is selected.
+    std::string   kind;            ///< "Reflector", "Receiver face", "Sun", "Material", ...
+    std::string   label;           ///< Display name of the selected row.
+    std::string   structure;       ///< Polyscope structure name; empty for rows without geometry.
+    std::uint64_t surface_id = 0;  ///< Stable Scene surface id; 0 for non-surface rows.
+    const char*   icon = "";       ///< Icon literal for the row's kind.
+    std::string   detail;          ///< One line of type-specific detail; may be empty.
+};
+
+/// The outliner's current selection. Valid from the moment draw_outliner_panel() has run this
+/// frame; before that it still holds last frame's, which is what an early-drawn panel wants.
+SelectionInfo current_selection();
 
 /// Outcome of a save attempt: whether the file is really on disk, plus a message for the user.
 struct SaveOutcome {
@@ -140,10 +158,17 @@ SaveOutcome save_document_to(const io::SceneDocument& doc, const std::filesystem
 void note_scene_loaded(const std::filesystem::path& path);
 
 /// Draws the object outliner tree (reflectors, receiver faces, sun, aperture, materials).
-void draw_outliner_panel(PanelContext& ctx);
+///
+/// `boxed` wraps the tree in a collapsing header; pass false where the tree is already the whole
+/// point of its container, as it is in the left column's Scene tab.
+void draw_outliner_panel(PanelContext& ctx, bool boxed = true);
 /// Draws the scene browser panel (load example scenes).
 void draw_scene_browser_panel(PanelContext& ctx);
-/// Draws the per-object transform editor panel.
+/// Runs the 3D manipulator gizmo and draws the transform editor.
+///
+/// MUST be called exactly once per frame, whether or not anything is selected: ImGuizmo has to be
+/// primed with a fresh frame and draw list before anything can manipulate, and skipping it leaves
+/// it drawing into the previous frame's list.
 void draw_transform_panel(PanelContext& ctx);
 /// Draws the material parameter editor panel.
 void draw_materials_panel(PanelContext& ctx);
@@ -155,8 +180,15 @@ void draw_trace_panel(PanelContext& ctx);
 void draw_import_panel(PanelContext& ctx);
 /// Draws the save / save-as / revert panel. Dispatched from draw_scene_browser_panel().
 void draw_save_panel(PanelContext& ctx);
-/// Draws the settings panel (theme, ground plane, Polyscope's own panels).
-void draw_settings_panel(PanelContext& ctx);
+/// Draws the Settings window (theme, ground plane, Polyscope's own panels).
+///
+/// A free-floating, closable window rather than another entry in the left column: it is opened
+/// from the top bar's gear, used rarely, and has nothing to do with the scene being edited.
+void draw_settings_window(PanelContext& ctx);
+
+/// Draws the selection read-out, and the transform editor beneath it when a surface is selected.
+/// Returns the height the panel would like, so the layout can give the flux plot the rest.
+float draw_selection_panel(PanelContext& ctx);
 /// Draws the main menu bar. Returns its height so the layout can sit beneath it.
 float draw_top_bar(PanelContext& ctx);
 /// Draws the floating assistant / import-export buttons over the 3D viewport.

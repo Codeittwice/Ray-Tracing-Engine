@@ -180,6 +180,8 @@ set_project_warnings(scrt_compare)
 add_library(scrt_viz STATIC
     src/viz/Viewer.cpp
     src/viz/Theme.cpp
+    src/viz/Fonts.cpp
+    src/viz/IconFontData.cpp
     src/viz/RayRenderer.cpp
     src/viz/FluxPlotter.cpp
     src/viz/panels/OutlinerPanel.cpp
@@ -191,11 +193,17 @@ add_library(scrt_viz STATIC
     src/viz/panels/ImportPanel.cpp
     src/viz/panels/SavePanel.cpp
     src/viz/panels/SettingsPanel.cpp
+    src/viz/panels/SelectionPanel.cpp
     src/viz/panels/TopBarPanel.cpp
 )
 # glfw is PRIVATE on the polyscope target, so link it here too: Viewer::run() needs
 # glfwMaximizeWindow, and Polyscope exposes no accessor for its own window handle.
 target_link_libraries(scrt_viz PUBLIC scrt_core polyscope implot_lib imguizmo_lib nfd::nfd glfw)
+# dwmapi: the window's own title bar is the shell's to paint, and DwmSetWindowAttribute is the
+# only way to ask for a dark one under a dark interface.
+if(WIN32)
+    target_link_libraries(scrt_viz PUBLIC dwmapi)
+endif()
 set_project_warnings(scrt_viz)
 
 # ---------- scrt_app (desktop entry point) ----------
