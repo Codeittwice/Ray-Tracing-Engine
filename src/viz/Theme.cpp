@@ -4,6 +4,8 @@
 
 #include "imgui.h"
 
+#include <cmath>
+
 #ifdef _WIN32
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3.h>
@@ -30,6 +32,7 @@ struct Palette {
     ImVec4 title, title_active;
     ImVec4 text, text_dim;
     ImVec4 accent, accent_hover, accent_active;
+    ImVec4 accent_fill;   ///< Same hue, tuned for covering a whole control rather than a tick.
     ImVec4 header, header_hover, header_active;
     ImVec4 separator, scrollbar, scrollbar_grab;
 };
@@ -51,6 +54,7 @@ const Palette kDark{
     /*accent*/       rgba(232, 163, 61),
     /*accent_hover*/ rgba(244, 180, 86),
     /*accent_active*/rgba(214, 145, 44),
+    /*accent_fill*/  rgba(232, 163, 61),
     /*header*/       rgba(33, 44, 55),
     /*header_hover*/ rgba(44, 58, 71),
     /*header_active*/rgba(54, 70, 86),
@@ -76,6 +80,10 @@ const Palette kLight{
     /*accent*/       rgba(176, 110, 16),
     /*accent_hover*/ rgba(196, 126, 26),
     /*accent_active*/rgba(150, 92, 10),
+    // Brighter than the mark colour above. The mark has to carry against a near-white ground,
+    // which pushes it dark; that same dark amber covering a whole button reads as mud, which is
+    // exactly what the light theme's active tool button and assistant disc looked like.
+    /*accent_fill*/  rgba(232, 150, 30),
     /*header*/       rgba(224, 231, 238),
     /*header_hover*/ rgba(211, 221, 230),
     /*header_active*/rgba(198, 211, 223),
@@ -197,6 +205,28 @@ void apply_theme(Theme t) {
 }
 
 Theme current_theme() { return g_theme; }
+
+ImVec4 accent_fill() { return (g_theme == Theme::Light ? kLight : kDark).accent_fill; }
+
+ImVec4 readable_on(const ImVec4& bg) {
+    // WCAG relative luminance: undo the sRGB transfer curve, then weight by the eye's response.
+    const auto lin = [](float c) {
+        return (c <= 0.04045f) ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f);
+    };
+    const auto lum = [&lin](const ImVec4& c) {
+        return 0.2126f * lin(c.x) + 0.7152f * lin(c.y) + 0.0722f * lin(c.z);
+    };
+
+    const ImVec4 dark(0.09f, 0.07f, 0.03f, 1.0f);
+    const ImVec4 light(0.99f, 0.99f, 0.98f, 1.0f);
+
+    const float L = lum(bg);
+    // Contrast ratio is (lighter + 0.05) / (darker + 0.05); whichever candidate scores higher
+    // against this background is the one a reader can actually make out.
+    const float c_dark  = (L + 0.05f) / (lum(dark) + 0.05f);
+    const float c_light = (lum(light) + 0.05f) / (L + 0.05f);
+    return (c_light > c_dark) ? light : dark;
+}
 
 std::array<float, 4> viewport_background(Theme t) {
     // A shade darker than the panels in dark, a shade lighter in light, so the panels still read

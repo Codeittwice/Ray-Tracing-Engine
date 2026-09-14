@@ -1,4 +1,6 @@
 #pragma once
+#include "imgui.h"
+
 #include <array>
 #include <string>
 
@@ -27,5 +29,19 @@ std::array<float, 4> viewport_background(Theme t);
 
 /// Human-readable name, for the Settings panel.
 const char* theme_name(Theme t);
+
+/// Fill colour for a control that is ON or primary - the active transform tool, the assistant
+/// button. Not the same as ImGuiCol_CheckMark: a tick mark and a solid 44px disc want different
+/// amounts of the same hue, and the light theme's mark colour is dark enough to read as mud when
+/// it covers a whole button.
+ImVec4 accent_fill();
+
+/// The readable foreground for text or an icon drawn on `bg`: near-black or near-white,
+/// whichever has the higher WCAG contrast ratio against it.
+///
+/// Computed rather than hard-coded. The previous near-black was chosen against the dark theme's
+/// light amber and carried over unchanged to the light theme's dark amber, where it left the
+/// active tool button and the assistant icon hard to read.
+ImVec4 readable_on(const ImVec4& bg);
 
 } // namespace scrt::viz

@@ -149,6 +149,14 @@ struct SelectionInfo {
     std::string   detail;          ///< One line of type-specific detail; may be empty.
 };
 
+/// Reconciles the selection with the 3D view: adopts a click in the viewport, drops a selection
+/// whose object is gone, and re-paints the highlight after a structure was re-registered.
+///
+/// Call once per frame from the Viewer, BEFORE any panel draws - not from the outliner. The
+/// outliner only draws while its tab is open, and a click in the viewport has to land whichever
+/// tab the user is on.
+void update_selection_from_view(PanelContext& ctx);
+
 /// The outliner's current selection. Valid from the moment draw_outliner_panel() has run this
 /// frame; before that it still holds last frame's, which is what an early-drawn panel wants.
 SelectionInfo current_selection();

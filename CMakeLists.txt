@@ -181,6 +181,7 @@ set_project_warnings(scrt_compare)
 add_library(scrt_viz STATIC
     src/viz/Viewer.cpp
     src/viz/Theme.cpp
+    src/viz/ViewSettings.cpp
     src/viz/Fonts.cpp
     src/viz/FileDialog.cpp
     src/viz/AppConfig.cpp

@@ -6,6 +6,7 @@
 #include "scrt/viz/RayRenderer.hpp"
 #include "scrt/viz/Layout.hpp"
 #include "scrt/viz/Theme.hpp"
+#include "scrt/viz/ViewSettings.hpp"
 #include "scrt/core/Transform.hpp"
 #include "scrt/io/SceneLoader.hpp"
 #include "scrt/math/Constants.hpp"
@@ -45,7 +46,13 @@ void register_receiver_face_flux(const scene::ReceiverFace& face,
     const int nx = acc.nx(), ny = acc.ny();
     const double hw = acc.half_width(), hh = acc.half_height();
     const auto& xf = face.surface()->transform();
-    const auto& flux = acc.flux_map_wm2();
+    // Display only: the same blur the analysis plot uses, so the receiver in the 3D view and the
+    // heatmap beside it show one result rather than two. Every reported and exported number
+    // still comes from the accumulator's raw bins.
+    const std::vector<double> smoothed =
+        gaussian_smooth(acc.flux_map_wm2(), nx, ny,
+                        static_cast<double>(flux_smoothing_sigma()));
+    const auto& flux = smoothed;
 
     std::vector<std::array<double, 3>>        pv;
     std::vector<std::array<std::uint32_t, 3>> pf;
@@ -91,7 +98,7 @@ void register_receiver_face_flux(const scene::ReceiverFace& face,
 
     auto* mesh = polyscope::registerSurfaceMesh(mesh_name, pv, pf);
     auto* q = mesh->addVertexScalarQuantity("flux_Wm2", fvals);
-    q->setColorMap("viridis");
+    q->setColorMap(flux_colormap());
     q->setEnabled(true);
 }
 
@@ -430,6 +437,10 @@ void Viewer::draw_gui() {
     // A little more vertical room than ImGui's default menu bar, so the icon controls on the
     // right have somewhere to sit.
     const float k = ui_scale();
+    // Before anything draws: a click in the viewport must reach the selection whichever tab is
+    // open, and the outliner - which used to own this - only runs on one of the three.
+    update_selection_from_view(ctx);
+
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(9.0f * k, 9.0f * k));
     const float bar = draw_top_bar(ctx);
     ImGui::PopStyleVar();

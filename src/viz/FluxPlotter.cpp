@@ -1,6 +1,7 @@
 #include "scrt/viz/FluxPlotter.hpp"
 #include "scrt/viz/Icons.hpp"
 #include "scrt/viz/Layout.hpp"
+#include "scrt/viz/ViewSettings.hpp"
 #include "scrt/io/ResultsExporter.hpp"
 #include <algorithm>
 #include <cmath>
@@ -118,12 +119,24 @@ void FluxPlotter::draw_heatmap_tab(const tracer::FluxAccumulator& acc, double dn
 
     const int nx = acc.nx(), ny = acc.ny();
 
-    // Convert to float for ImPlot
-    std::vector<float> data(flux.size());
-    for (std::size_t i = 0; i < flux.size(); ++i)
-        data[i] = static_cast<float>(flux[i]);
+    // Smooth for display only, with the same sigma the 3D receiver uses. The scale below is
+    // taken from the SMOOTHED array, because a blur lowers the peak and colouring a blurred map
+    // against the raw peak would leave it permanently dim; the headline figures above still
+    // report the raw values.
+    const double sigma = static_cast<double>(flux_smoothing_sigma());
+    const std::vector<double> shown = gaussian_smooth(flux, nx, ny, sigma);
 
-    double vmax = acc.peak_flux_wm2();
+    std::vector<float> data(shown.size());
+    for (std::size_t i = 0; i < shown.size(); ++i)
+        data[i] = static_cast<float>(shown[i]);
+
+    // Taken over the FLOATS that are actually handed to ImPlot, not the doubles they came from.
+    // ImPlot maps a value to a colour with (siz-1)*t + 0.5 and does not clamp the result, so a
+    // sample even a rounding step above scale_max indexes past the end of the colour table - and
+    // (float)x can round up above the double max of the same array.
+    float vmaxf = 0.0f;
+    for (float v : data) vmaxf = std::max(vmaxf, v);
+    double vmax = static_cast<double>(vmaxf);
     if (vmax <= 0.0) vmax = 1.0;
 
     // ---- Headline figures, explanations on hover --------
@@ -149,8 +162,13 @@ void FluxPlotter::draw_heatmap_tab(const tracer::FluxAccumulator& acc, double dn
                         acc.concentration_ratio(dni_wm2));
 
     ImGui::Separator();
-    if (ImPlot::BeginPlot("Where the light lands (bright = hot)", ImVec2(-1, -1),
-                          ImPlotFlags_Equal | ImPlotFlags_NoLegend)) {
+
+    // Polyscope's own ramp, sampled - so the plot and the receiver in the 3D view are the same
+    // colours rather than two libraries' idea of "viridis".
+    ImPlot::PushColormap(implot_flux_colormap());
+    const char* title = (sigma > 0.0f) ? "Where the light lands (smoothed for viewing)"
+                                       : "Where the light lands (bright = hot)";
+    if (ImPlot::BeginPlot(title, ImVec2(-1, -1), ImPlotFlags_Equal | ImPlotFlags_NoLegend)) {
         ImPlot::SetupAxis(ImAxis_X1, "x (m)");
         ImPlot::SetupAxis(ImAxis_Y1, "y (m)");
         double hw = acc.half_width(), hh = acc.half_height();
@@ -160,6 +178,7 @@ void FluxPlotter::draw_heatmap_tab(const tracer::FluxAccumulator& acc, double dn
                             ImPlotPoint( hw,  hh));
         ImPlot::EndPlot();
     }
+    ImPlot::PopColormap();
 }
 
 void FluxPlotter::draw_profile_tab(const tracer::FluxAccumulator& acc,

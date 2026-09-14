@@ -1,6 +1,9 @@
 #include "scrt/viz/Panels.hpp"
 #include "scrt/viz/Icons.hpp"
+#include "scrt/viz/Fonts.hpp"
+#include "scrt/viz/RayRenderer.hpp"
 #include "scrt/viz/Theme.hpp"
+#include "scrt/viz/ViewSettings.hpp"
 
 #include "polyscope/options.h"
 #include "polyscope/polyscope.h"
@@ -41,7 +44,7 @@ void draw_settings_window(PanelContext& ctx) {
     // Centred on first appearance only, so dragging it somewhere sticks for the session.
     const ImVec2 centre(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f);
     ImGui::SetNextWindowPos(centre, ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(420.0f, 0.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(560.0f * ui_scale(), 0.0f), ImGuiCond_FirstUseEver);
 
     if (!ImGui::Begin(ICON_FA_GEAR "  Settings", ctx.settings_open,
                       ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize)) {
@@ -89,6 +92,74 @@ void draw_settings_window(PanelContext& ctx) {
         tip("Fixed height of the floor. It deliberately does NOT follow the model: letting it\n"
             "track the scene bounds made the whole background shift whenever an object was\n"
             "scaled.");
+    }
+
+    ImGui::Spacing();
+
+    // ---- flux map ----
+    ImGui::TextDisabled("Flux map");
+
+    {
+        const auto& names = flux_colormap_names();
+        int         current = 0;
+        for (std::size_t i = 0; i < names.size(); ++i)
+            if (names[i] == flux_colormap()) current = static_cast<int>(i);
+
+        if (ImGui::BeginCombo("Colours", flux_colormap_label(names[static_cast<std::size_t>(current)]))) {
+            for (std::size_t i = 0; i < names.size(); ++i) {
+                const bool sel = (static_cast<int>(i) == current);
+                if (ImGui::Selectable(flux_colormap_label(names[i]), sel)) {
+                    set_flux_colormap(names[i]);
+                    // The receiver mesh carries the colormap on its scalar quantity, so it only
+                    // changes on the next registration - which the retrace flag brings about.
+                    if (ctx.need_rebuild) *ctx.need_rebuild = true;
+                }
+                if (sel) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+        tip("Applies to both the heatmap in the analysis panel and the receiver in the 3D\n"
+            "view - they are sampled from the same ramp, so they always agree.");
+    }
+
+    {
+        float sigma = flux_smoothing_sigma();
+        if (ImGui::SliderFloat("Smoothing", &sigma, 0.0f, 4.0f,
+                               sigma <= 0.0f ? "off" : "%.1f bins")) {
+            set_flux_smoothing_sigma(sigma);
+            if (ctx.need_rebuild) *ctx.need_rebuild = true;
+        }
+        tip("Gaussian blur over the flux map, in receiver bins.\n\n"
+            "The speckle is Poisson noise - with few rays per bin, neighbouring bins differ by\n"
+            "chance rather than by physics. Blurring makes the shape of the hot spot legible.\n\n"
+            "It changes the PICTURE only. The hottest-spot figure, the CSV and the JSON summary\n"
+            "are all still computed from the raw bins, and a blur would lower the peak.\n"
+            "More rays is the real fix; this makes what you have readable.");
+    }
+
+    ImGui::Spacing();
+
+    // ---- ray paths ----
+    ImGui::TextDisabled("Ray paths");
+
+    {
+        float r_mm = ray_radius_m() * 1000.0f;
+        if (ImGui::SliderFloat("Ray thickness", &r_mm, 0.2f, 20.0f, "%.1f mm",
+                               ImGuiSliderFlags_Logarithmic)) {
+            set_ray_radius_m(r_mm / 1000.0f);
+            apply_ray_appearance();
+        }
+        tip("Thickness of the drawn light paths, in millimetres.\n"
+            "Absolute, so it does not change when an object is scaled.");
+    }
+
+    {
+        float a = ray_opacity();
+        if (ImGui::SliderFloat("Ray opacity", &a, 0.05f, 1.0f, "%.2f")) {
+            set_ray_opacity(a);
+            apply_ray_appearance();
+        }
+        tip("Turn this down when the rays hide the cooker they are bouncing off.");
     }
 
     ImGui::Spacing();

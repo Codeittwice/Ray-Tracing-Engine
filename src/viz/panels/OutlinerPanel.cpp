@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <string>
 #include <tuple>
+#include <unordered_map>
 
 #include "imgui.h"
 #include "polyscope/pick.h"
@@ -125,19 +126,60 @@ void clear_selection(PanelContext& ctx) {
     if (ctx.selected_id) *ctx.selected_id = 0;
 }
 
+/// Polyscope structure name -> the outliner row key that draws it.
+///
+/// A 3D pick gives a structure name; the rows are keyed by what they ARE ("surface:7",
+/// "face:top"). Without this table the pick set a row_key of its own invention that no row could
+/// ever match, so clicking an object in the viewport highlighted it in 3D and left the tree
+/// looking as though nothing was selected.
+std::unordered_map<std::string, std::string> g_row_for_structure;
+
+/// Rebuilds that table by walking the scene the same way the tree does.
+///
+/// Walked rather than recorded while drawing: the tree only draws while the Scene tab is open,
+/// and a pick made from the Design tab must still land.
+void refresh_row_table(const PanelContext& ctx) {
+    g_row_for_structure.clear();
+    if (!ctx.scene) return;
+
+    const auto& reg = StructureRegistry::instance();
+    for (const auto& surf : ctx.scene->surfaces()) {
+        const std::string& ps_name = reg.name_for(surf->id());
+        if (!ps_name.empty())
+            g_row_for_structure[ps_name] = "surface:" + std::to_string(surf->id());
+    }
+    if (const auto* recv = ctx.scene->receiver()) {
+        const bool multi = recv->is_multi_face();
+        for (const auto& face : recv->faces())
+            g_row_for_structure[receiver_flux_structure_name(multi, face->name())] =
+                "face:" + face->name();
+    }
+    g_row_for_structure[aperture_structure_name()] = "aperture";
+}
+
 /// Adopts a selection made by clicking in the 3D view, once per distinct pick.
+///
+/// An empty pick is a click on the background, and it clears the selection - that is the only
+/// way to get back to "nothing selected" without reloading the scene.
 void sync_from_pick(PanelContext& ctx) {
-    auto pick = polyscope::pick::getSelection();
+    auto              pick   = polyscope::pick::getSelection();
     const std::string picked = pick.first ? pick.first->getName() : std::string{};
     if (picked == g_last_pick) return;
     g_last_pick = picked;
-    if (picked.empty()) return;
+
+    if (picked.empty()) {
+        clear_selection(ctx);
+        return;
+    }
     // Only surface meshes are outliner rows; ignore picks on e.g. the ray-path curve network
     // so the selection invariant (structure is empty, or names a live surface mesh) holds.
     if (!mesh_or_null(picked)) return;
 
+    const auto it = g_row_for_structure.find(picked);
+    if (it == g_row_for_structure.end()) return;   // a structure the tree does not list
+
     const std::uint64_t id = StructureRegistry::instance().id_for(picked);
-    select_row(ctx, "structure:" + picked, picked, id, /*push_to_pick=*/false);
+    select_row(ctx, it->second, picked, id, /*push_to_pick=*/false);
 }
 
 /// Re-paints the highlight when the selected structure was re-registered under the same
@@ -248,10 +290,6 @@ void draw_outliner_panel(PanelContext& ctx, bool boxed) {
         return;
     }
 
-    drop_selection_if_gone(ctx);
-    sync_from_pick(ctx);
-    reassert_highlight();
-
     const auto& reg = StructureRegistry::instance();
 
     // ---- Reflectors --
@@ -311,6 +349,14 @@ void draw_outliner_panel(PanelContext& ctx, bool boxed) {
     ImGui::EndDisabled();
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
         ImGui::SetTooltip("Fly the camera to the selected object.");
+}
+
+void update_selection_from_view(PanelContext& ctx) {
+    if (!polyscope::isInitialized()) return;
+    refresh_row_table(ctx);
+    drop_selection_if_gone(ctx);
+    sync_from_pick(ctx);
+    reassert_highlight();
 }
 
 SelectionInfo current_selection() {

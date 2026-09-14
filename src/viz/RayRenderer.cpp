@@ -1,4 +1,5 @@
 #include "scrt/viz/RayRenderer.hpp"
+#include "scrt/viz/ViewSettings.hpp"
 #include "scrt/materials/Material.hpp"
 #include "scrt/math/Constants.hpp"
 #include "scrt/scene/Aperture.hpp"
@@ -208,10 +209,27 @@ void RayRenderer::register_paths(const tracer::TraceResult& result) {
 
     auto* net = polyscope::registerCurveNetwork("ray_paths", nodes, edges);
     net->setColor({1.0f, 0.85f, 0.2f});
-    // Absolute (isRelative = false). The default is relative to Polyscope's global
-    // lengthScale, so any change in scene extent rescaled every ray - a scaled-up object
-    // turned the ray paths into fat sausages that swallowed the model.
-    net->setRadius(0.0015f, false);
+    apply_ray_appearance();
+}
+
+void apply_ray_appearance() {
+    if (!polyscope::isInitialized()) return;
+    if (!polyscope::hasCurveNetwork("ray_paths")) return;
+    auto* net = polyscope::getCurveNetwork("ray_paths");
+
+    // Absolute (isRelative = false). The default is relative to Polyscope's global lengthScale,
+    // so any change in scene extent rescaled every ray - a scaled-up object turned the ray paths
+    // into fat sausages that swallowed the model.
+    net->setRadius(ray_radius_m(), false);
+
+    const float a = ray_opacity();
+    net->setTransparency(a);
+    // Polyscope only composites transparency when the render engine is in a transparency mode;
+    // the aperture already turns it on for every scene, so this is a no-op re-assertion rather
+    // than a global change made on the rays' behalf.
+    if (a < 1.0f && polyscope::options::transparencyMode == polyscope::TransparencyMode::None)
+        polyscope::options::transparencyMode = polyscope::TransparencyMode::Pretty;
+    polyscope::requestRedraw();
 }
 
 void RayRenderer::clear() {

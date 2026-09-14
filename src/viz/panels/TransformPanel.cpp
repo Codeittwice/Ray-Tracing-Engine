@@ -1,6 +1,7 @@
 #include "scrt/viz/Panels.hpp"
 #include "scrt/viz/Icons.hpp"
 #include "scrt/viz/RayRenderer.hpp"
+#include "scrt/viz/Theme.hpp"
 
 #include "scrt/core/AABB.hpp"
 #include "scrt/core/Transform.hpp"
@@ -419,10 +420,13 @@ void draw_tool_controls(surfaces::ScaleSupport support) {
         const bool on = (op == i);
         ImGui::BeginDisabled(i == 2 && support == surfaces::ScaleSupport::None);
         if (on) {
-            const ImVec4 a = ImGui::GetStyle().Colors[ImGuiCol_CheckMark];
+            // accent_fill, not the tick-mark colour: in the light theme that one is dark enough
+            // to read as mud once it covers a whole button. The label colour is then chosen by
+            // contrast against whatever fill the active theme gives us.
+            const ImVec4 a = accent_fill();
             ImGui::PushStyleColor(ImGuiCol_Button, a);
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, a);
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.10f, 0.07f, 0.02f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_Text, readable_on(a));
         }
         if (ImGui::Button(kTools[i].label, ImVec2(third, 0))) op = i;
         if (on) ImGui::PopStyleColor(3);

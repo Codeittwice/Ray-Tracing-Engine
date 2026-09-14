@@ -1,0 +1,152 @@
+{
+  "scene": {
+    "aperture": {
+      "center": [
+        0.0,
+        0.0,
+        1.4
+      ],
+      "margin": 0.05,
+      "mode": "fixed",
+      "normal": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "radius": 0.12,
+      "type": "disk"
+    },
+    "elements": [
+      {
+        "material": "lens_acrylic",
+        "name": "L1_convex_f100mm",
+        "surface": {
+          "focal_length_m": 0.1,
+          "inner_radius_m": 0.005,
+          "n_lens": 1.49,
+          "n_zones": 30,
+          "pitch_m": 0.0015,
+          "type": "fresnel_zone_lens"
+        },
+        "transform": {
+          "rotation_euler_deg": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "translation": [
+            0.0,
+            0.0,
+            1.2
+          ]
+        }
+      },
+      {
+        "material": "lens_acrylic",
+        "name": "L2_concave_f-200mm",
+        "surface": {
+          "focal_length_m": -0.2,
+          "inner_radius_m": 0.004,
+          "n_lens": 1.49,
+          "n_zones": 30,
+          "pitch_m": 0.0012,
+          "type": "fresnel_zone_lens"
+        },
+        "transform": {
+          "rotation_euler_deg": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "translation": [
+            0.0,
+            0.0,
+            1.18
+          ]
+        }
+      },
+      {
+        "material": "lens_acrylic",
+        "name": "L3_convex_f150mm",
+        "surface": {
+          "focal_length_m": 0.15,
+          "inner_radius_m": 0.005,
+          "n_lens": 1.49,
+          "n_zones": 50,
+          "pitch_m": 0.0013,
+          "type": "fresnel_zone_lens"
+        },
+        "transform": {
+          "rotation_euler_deg": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "translation": [
+            0.0,
+            0.0,
+            0.83
+          ]
+        }
+      }
+    ],
+    "materials": [
+      {
+        "absorption_per_m": 1.0,
+        "id": "lens_acrylic",
+        "n": 1.49,
+        "type": "dielectric"
+      },
+      {
+        "id": "pot",
+        "type": "absorber"
+      }
+    ],
+    "name": "Three-lens relay: f=100mm convex, f=-200mm concave, f=150mm convex",
+    "receiver": {
+      "grid": {
+        "nx": 64,
+        "ny": 64
+      },
+      "surface": {
+        "half_height": 0.02,
+        "half_width": 0.02
+      },
+      "transform": {
+        "rotation_euler_deg": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "translation": [
+          0.0,
+          0.0,
+          0.3425
+        ]
+      },
+      "type": "plane"
+    },
+    "sun": {
+      "azimuth_deg": 180.0,
+      "direction": [
+        0.0,
+        0.0,
+        -1.0
+      ],
+      "dni_wm2": 1000.0,
+      "elevation_deg": 90.0,
+      "sunshape": {
+        "half_angle_mrad": 4.65,
+        "type": "pillbox"
+      }
+    }
+  },
+  "trace": {
+    "max_bounces": 8,
+    "max_paths_to_record": 200,
+    "n_primary_rays": 300000,
+    "power_cutoff_w": 1e-09,
+    "record_paths": true,
+    "rng_seed": 13
+  }
+}

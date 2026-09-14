@@ -224,9 +224,10 @@ void draw_viewport_buttons(PanelContext& ctx, ImVec2 viewport_min, ImVec2 viewpo
     const bool io_hover = ImGui::IsItemHovered();
 
     // Assistant sits lowest, nearest the thumb, and is accent-filled as the primary of the pair.
-    ImGui::PushStyleColor(ImGuiCol_Button, st.Colors[ImGuiCol_CheckMark]);
+    const ImVec4 fill = accent_fill();
+    ImGui::PushStyleColor(ImGuiCol_Button, fill);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, st.Colors[ImGuiCol_SeparatorHovered]);
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.10f, 0.07f, 0.02f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, readable_on(fill));
     if (ImGui::Button(ICON_FA_WAND_MAGIC_SPARKLES "##ai", ImVec2(kBtn, kBtn)) && ctx.ai_overlay_open)
         *ctx.ai_overlay_open = true;
     ImGui::PopStyleColor(3);

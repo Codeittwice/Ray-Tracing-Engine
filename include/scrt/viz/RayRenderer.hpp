@@ -86,6 +86,12 @@ private:
     scene::Scene* scene_;
 };
 
+/// Re-applies the ray-path radius and opacity from ViewSettings to the live structure.
+///
+/// Separate from drawing them so the settings sliders can take effect immediately instead of
+/// waiting for the next trace to re-register the curve network.
+void apply_ray_appearance();
+
 /// Polyscope structure name of the collection aperture disk.
 const char* aperture_structure_name();
 
