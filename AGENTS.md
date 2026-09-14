@@ -74,9 +74,10 @@ key changes in `SceneDocument.cpp`, update the prompt and that test. The test ea
 its first run: the prompt said `{"type": "absorber", "reflectance": 0.05}` and an absorber takes no
 parameters at all.
 
-**Untested by anyone: the HTTP request itself.** No key was ever used here, so
-`send_claude_request` has never round-tripped. The schema, the threading, the overlay and the
-file hand-off are exercised; the wire call is not.
+The wire call has now been exercised by the user - `%APPDATA%\solar-cooker-rt\generated\` holds a
+real generated scene, and it loaded. Note that the model used `aperture.mode` and
+`aperture.margin`, which the strict parser accepts but the prompt does not mention; the prompt is
+a floor on what it will use, not a ceiling.
 
 ### OPEN BUGS — reported by the user, NOT fixed
 
@@ -85,10 +86,19 @@ file hand-off are exercised; the wire call is not.
    bounding box. Polyscope was also left at its default Y-up while this project is Z-up throughout,
    which drew the ground as a tilted wall through the cooker; `UpDir::ZUp` is now set.
    **Not yet confirmed by a human at a window.**
-2. ~~Flux map renders as RGB noise~~ - NOT A BUG. It is Poisson noise from the automatic
-   preview: 10k rays over a 64x64 receiver is ~2 rays per bin. Note the trade-off runs opposite
-   to intuition - a FINER receiver grid makes it worse, since each bin catches fewer rays. The
-   preview is now 150k rays (`kPreviewRays` in `Viewer.cpp`); a full trace smooths it further.
+2. ~~Flux map renders as RGB noise~~ - FIXED, and the earlier diagnosis here was wrong.
+   It was called "not a bug, just Poisson noise". The noise is real - 10k rays over a 64x64
+   receiver is ~2 rays per bin, and note the trade-off runs opposite to intuition, since a FINER
+   grid makes it worse - but that was not why it looked like confetti. **`FluxPlotter` never
+   pushed a colormap, so `PlotHeatmap` used ImPlot's default `ImPlotColormap_Deep`: a TEN-COLOUR
+   CATEGORICAL palette.** Smooth variation was being rendered as random colour jumps, in a
+   different colour scheme from the 3D receiver beside it, which used viridis. Both views now
+   sample one ramp (`ViewSettings.cpp`), and there is a smoothing slider. The preview is also
+   150k rays (`kPreviewRays` in `Viewer.cpp`).
+
+   The lesson: "that is just noise" was a plausible explanation that fitted the symptom and
+   stopped the investigation. Viridis contains no pink and no red, and the screenshot was full
+   of both - which was visible in the very image used to dismiss it.
 3. **Edge-panning is not wired to the viewport rect.** `Layout.hpp` exposes `viewport_min/max`
    precisely so the trigger follows the viewport rather than the window, but nothing consumes it
    yet. The user explicitly wants edge-panning during a drag PRESERVED; now that panels occupy
@@ -144,6 +154,17 @@ visible in a normal-DPI window.
   window as 1302x776 and not maximised; the app was maximised at 3862x2110 and the script's own
   `SW_RESTORE` was un-maximising it. Before concluding the program is wrong, check that the
   instrument is not.
+- **Measure before concluding, even when the explanation fits.** "The flux map is just Poisson
+  noise" fitted the symptom, was written into this file as settled, and was wrong about the part
+  that actually mattered. Two minutes reading which colormap `PlotHeatmap` defaults to would have
+  found it. The same turn also burned twenty minutes guessing at a vector-subscript assert that
+  four `fprintf` calls located immediately.
+- **Polyscope's `ValueColorMap::getValue(1.0)` reads one past the end of its own table.** It
+  blends `values[lowerInd]` with `values[lowerInd + 1]` with no upper guard. Never sample a
+  Polyscope ramp at exactly 1.0; `ViewSettings.cpp` stops a hair short.
+- **ImPlot's `LerpTable` does not clamp for a continuous colormap.** `scale_max` passed to
+  `PlotHeatmap` must be >= every value in the array *as float*, or the colour lookup runs off the
+  end of the table. Take the max over the converted floats, not over the doubles they came from.
 
 ## Agent orchestration
 For large parallelizable work, deploy a two-layer agent hierarchy:
