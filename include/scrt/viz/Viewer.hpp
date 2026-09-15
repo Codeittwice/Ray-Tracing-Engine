@@ -90,6 +90,23 @@ private:
     /// still hold pointers to.
     std::optional<std::filesystem::path>     pending_load_;
 
+    /// One element mutation a panel asked for during this frame.
+    struct ElementOp {
+        enum class Kind { Add, Remove, Duplicate };
+        Kind           kind = Kind::Add;
+        std::uint64_t  id   = 0;   ///< Target, for Remove and Duplicate.
+        io::ElementDoc doc;        ///< Payload, for Add.
+    };
+
+    /// Element mutations queued this frame, applied once it is finished.
+    ///
+    /// Deferred for the same reason pending_load_ is, and it is not a theoretical worry:
+    /// Scene::add_surface and remove_surface mutate the vector that Scene::surfaces() hands out
+    /// as a span, and panels iterate that span while drawing. The outliner's own Delete button
+    /// sits inside such a loop, so acting on it immediately would invalidate the iteration that
+    /// is still running over it.
+    std::vector<ElementOp>                   pending_element_ops_;
+
     /// Show Polyscope's own Structures/Selection panels. Off by default: they are placed at
     /// fixed positions that collide with ours. Exposed so Settings can bring them back.
     bool                                     show_polyscope_panels_ = false;
@@ -119,6 +136,20 @@ private:
     std::atomic<bool>                        trace_done_{false};    ///< Worker finished; result waiting.
     tracer::TraceResult                      pending_result_;       ///< Worker-written, GUI-read after join.
     std::unique_ptr<tracer::FluxAccumulator> pending_acc_;          ///< Worker-written, GUI-read after join.
+
+    /// Applies every queued element mutation; called once at the end of draw_gui().
+    void apply_element_ops();
+
+    /// Brings an element fully into the interface: its Polyscope structure, its gizmo edit state,
+    /// and the flags that get it into the BVH and the next trace.
+    ///
+    /// This is what an added element never got. `add_element` only ever set need_rebuild_, which
+    /// is consumed solely by Scene::build_acceleration_structure - so an imported mesh was traced
+    /// and saved while being invisible, unpickable and impossible to place.
+    void adopt_element(std::uint64_t id);
+
+    /// The inverse: drops an element's structure, its edit state and its selection.
+    void release_element(std::uint64_t id);
 
     /// Launches a trace of `n_rays` on the worker thread; a no-op while one already runs.
     void start_trace(std::size_t n_rays);

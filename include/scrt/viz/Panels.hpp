@@ -86,10 +86,21 @@ struct PanelContext {
     /// Asks the running trace to stop; null when the Viewer has no worker.
     std::function<void()> cancel_trace;
 
-    /// Adds a fully-formed element to the scene and returns its new stable id (0 on failure).
-    /// Null until the Viewer owns a scene::SceneEditor; while unset the import panel builds the
-    /// io::ElementDoc, shows it, and reports that it cannot yet be committed.
-    std::function<std::uint64_t(io::ElementDoc)> add_element;
+    /// Queues a fully-formed element to be added to the scene; returns whether the request was
+    /// accepted. Null until the Viewer owns a scene::SceneEditor; while unset the import panel
+    /// builds the io::ElementDoc, shows it, and reports that it cannot yet be committed.
+    ///
+    /// QUEUED, not immediate, and so it cannot return the new element's id: the element does not
+    /// exist yet when this returns. The Viewer applies every queued mutation at the end of the
+    /// frame, because Scene::surfaces() hands out a span over the vector these mutations resize,
+    /// and panels iterate that span while they draw.
+    std::function<bool(io::ElementDoc)> add_element;
+
+    /// Queues an element for removal, by stable id. Same deferral as add_element.
+    std::function<void(std::uint64_t)> remove_element;
+
+    /// Queues an element to be copied under a fresh id and name. Same deferral as add_element.
+    std::function<void(std::uint64_t)> duplicate_element;
 
     /// Commits a world-space placement through SceneEditor so the document stays authoritative.
     /// Null when the viewer has no editor; callers must fall back to display-only.

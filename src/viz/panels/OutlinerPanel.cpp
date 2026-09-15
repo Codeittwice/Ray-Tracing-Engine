@@ -349,6 +349,29 @@ void draw_outliner_panel(PanelContext& ctx, bool boxed) {
     ImGui::EndDisabled();
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
         ImGui::SetTooltip("Fly the camera to the selected object.");
+
+    // Duplicate and Delete act on an ELEMENT, so they need a real surface id - a receiver face,
+    // the sun and a material are all selectable rows with no element behind them.
+    const bool has_element = (g_sel.surface_id != 0);
+    const float half = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+
+    ImGui::BeginDisabled(!has_element || !ctx.duplicate_element);
+    if (ImGui::Button(ICON_FA_LAYER_GROUP "  Duplicate", ImVec2(half, 0)))
+        ctx.duplicate_element(g_sel.surface_id);
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip(has_element ? "Make a second copy of this object, in the same place."
+                                      : "Select an object first. The sun, a material and a\n"
+                                        "receiver face are not objects you can copy.");
+
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!has_element || !ctx.remove_element);
+    if (ImGui::Button(ICON_FA_TRASH "  Delete", ImVec2(half, 0)))
+        ctx.remove_element(g_sel.surface_id);
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip(has_element ? "Remove this object from the scene."
+                                      : "Select an object first.");
 }
 
 void update_selection_from_view(PanelContext& ctx) {

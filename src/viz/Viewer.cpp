@@ -211,6 +211,73 @@ void Viewer::init_surf_xforms() {
     need_rebuild_ = false;
 }
 
+// ---- element lifecycle -------------------------------------------------------
+
+void Viewer::adopt_element(std::uint64_t id) {
+    if (!scene_ || !polyscope::isInitialized()) return;
+
+    // reregister_surface both registers a surface that has none and replaces one whose geometry
+    // changed, so it is the single entry point for "make the view match this element".
+    RayRenderer(scene_).reregister_surface(id, 32);
+
+    if (const auto* s = scene_->surface_by_id(id)) {
+        // A fresh base pose: the element is exactly where its document says it is, and no gizmo
+        // delta has been applied to it yet.
+        ObjectEditState st;
+        st.base    = s->transform();
+        edits_[id] = st;
+    }
+    need_rebuild_ = true;
+    need_retrace_ = true;
+}
+
+void Viewer::release_element(std::uint64_t id) {
+    if (polyscope::isInitialized()) RayRenderer(scene_).remove_surface_structure(id);
+    edits_.erase(id);
+    if (selected_id_ == id) selected_id_ = 0;
+    need_rebuild_ = true;
+    need_retrace_ = true;
+}
+
+void Viewer::apply_element_ops() {
+    if (pending_element_ops_.empty()) return;
+
+    // Drained by move before anything is applied: an op that throws must not leave the queue
+    // half-consumed and ready to re-run its first half on the next frame.
+    const auto ops = std::move(pending_element_ops_);
+    pending_element_ops_.clear();
+
+    if (!editor_) return;
+
+    for (const auto& op : ops) {
+        try {
+            switch (op.kind) {
+                case ElementOp::Kind::Add: {
+                    const std::uint64_t id = editor_->add_element(op.doc);
+                    if (id != 0) adopt_element(id);
+                    break;
+                }
+                case ElementOp::Kind::Duplicate: {
+                    const std::uint64_t id = editor_->duplicate_element(op.id);
+                    if (id != 0) adopt_element(id);
+                    break;
+                }
+                case ElementOp::Kind::Remove:
+                    // View first, then the thing itself. The structure registry is keyed by id
+                    // rather than by pointer so the order is not load-bearing, but dropping the
+                    // picture of an object before destroying the object is the readable order.
+                    release_element(op.id);
+                    editor_->remove_element(op.id);
+                    break;
+            }
+        } catch (const std::exception& e) {
+            // add_element throws on an unknown material id or an unreadable mesh, and documents
+            // that it leaves both the scene and the document untouched when it does.
+            load_error_ = e.what();
+        }
+    }
+}
+
 // ---- start_trace / poll_trace / cancel_and_join_trace ------------------------
 
 void Viewer::start_trace(std::size_t n_rays) {
@@ -402,11 +469,17 @@ PanelContext Viewer::make_panel_context() {
         ctx.commit_transform = [this](std::uint64_t id, const math::mat4& world) {
             editor_->commit_transform(id, world);
         };
+        // All three are QUEUED, not applied — see pending_element_ops_. They return only whether
+        // the request was accepted, because the element does not exist yet when they return.
         ctx.add_element = [this](io::ElementDoc d) {
-            const std::uint64_t id = editor_->add_element(std::move(d));
-            need_rebuild_ = true;
-            need_retrace_ = true;
-            return id;
+            pending_element_ops_.push_back({ElementOp::Kind::Add, 0, std::move(d)});
+            return true;
+        };
+        ctx.remove_element = [this](std::uint64_t id) {
+            pending_element_ops_.push_back({ElementOp::Kind::Remove, id, {}});
+        };
+        ctx.duplicate_element = [this](std::uint64_t id) {
+            pending_element_ops_.push_back({ElementOp::Kind::Duplicate, id, {}});
         };
     }
 
@@ -539,12 +612,18 @@ void Viewer::draw_gui() {
     draw_ai_overlay(ctx);
     draw_viewport_buttons(ctx, lay.viewport_min, lay.viewport_max);
 
-    // Apply a deferred scene load now that no panel holds a pointer into the old scene.
+    // Deferred mutations, now that no panel holds a pointer or a span into the scene.
+    //
+    // A pending load replaces the whole scene, so element ops queued against the outgoing one are
+    // dropped rather than applied to something that is about to be destroyed.
     if (pending_load_) {
+        pending_element_ops_.clear();
         const auto path = *pending_load_;
         pending_load_.reset();
         load_from_file(path);
+        return;
     }
+    apply_element_ops();
 }
 
 

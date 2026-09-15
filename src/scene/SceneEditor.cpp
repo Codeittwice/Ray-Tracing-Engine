@@ -1,89 +1,18 @@
 #include "scrt/scene/SceneEditor.hpp"
 #include "scrt/core/AABB.hpp"
 #include "scrt/core/Transform.hpp"
-#include "scrt/io/MeshImporter.hpp"
 #include "scrt/materials/Material.hpp"
 #include "scrt/math/Constants.hpp"
-#include "scrt/surfaces/CylindricalParaboloid.hpp"
-#include "scrt/surfaces/FresnelZoneLens.hpp"
-#include "scrt/surfaces/GeneralQuadric.hpp"
-#include "scrt/surfaces/Paraboloid.hpp"
-#include "scrt/surfaces/Plane.hpp"
-#include "scrt/surfaces/Sphere.hpp"
-#include "scrt/surfaces/TriangleMesh.hpp"
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
-#include <type_traits>
 #include <utility>
-#include <variant>
 
 // NOTE ON SCOPE: the class contract, including the document/scene sync discipline every
 // function here obeys, is documented on SceneEditor in SceneEditor.hpp. This file implements
 // it and nothing else.
 
 namespace scrt::scene {
-
-namespace {
-
-/// True when every field of t is still its struct default, i.e. the element has no transform.
-///
-/// Byte-for-byte copy of the private helper of the same name in SceneLoader.cpp (which is in an
-/// anonymous namespace and therefore unreachable). It exists for the same reason there: an
-/// element with no transform must keep the surface's default-constructed core::Transform rather
-/// than going through core::Transform::from_trs(), so a document-derived surface is bitwise
-/// identical to a loader-derived one.
-bool is_default_transform(const io::TransformDoc& t) {
-    return t.translation == math::vec3{0.0} &&
-           t.rotation_euler_deg == math::vec3{0.0} &&
-           t.scale == math::vec3{1.0} &&
-           !t.matrix.has_value();
-}
-
-/// Constructs the surface geometry for one element, dispatching on SurfaceDoc's active
-/// alternative; mesh paths resolve against base_dir.
-///
-/// Deliberate duplicate of build_surface() in src/io/SceneLoader.cpp, which is file-local
-/// (anonymous namespace) and so cannot be called from here. Kept branch-for-branch identical,
-/// including the shared io::import_mesh() entry point, so the editor and the loader can never
-/// disagree about what an ElementDoc means. If a future wave promotes the loader's copy to a
-/// public io:: helper, delete this one and call it.
-std::unique_ptr<surfaces::Surface> build_surface(const io::SurfaceDoc& sd,
-                                                  const std::filesystem::path& base_dir) {
-    return std::visit(
-        [&](const auto& s) -> std::unique_ptr<surfaces::Surface> {
-            using T = std::decay_t<decltype(s)>;
-            if constexpr (std::is_same_v<T, io::PlaneDoc>) {
-                return std::make_unique<surfaces::Plane>(s.half_width, s.half_height);
-            } else if constexpr (std::is_same_v<T, io::SphereDoc>) {
-                return std::make_unique<surfaces::Sphere>(s.radius);
-            } else if constexpr (std::is_same_v<T, io::ParaboloidDoc>) {
-                return std::make_unique<surfaces::Paraboloid>(s.focal_length_m,
-                                                               s.aperture_radius_m);
-            } else if constexpr (std::is_same_v<T, io::CylParaboloidDoc>) {
-                return std::make_unique<surfaces::CylindricalParaboloid>(
-                    s.focal_length_m, s.aperture_half_width_m, s.aperture_half_length_m);
-            } else if constexpr (std::is_same_v<T, io::QuadricDoc>) {
-                surfaces::QuadricCoeffs c;
-                c.A = s.A; c.B = s.B; c.C = s.C; c.D = s.D; c.E = s.E;
-                c.F = s.F; c.G = s.G; c.H = s.H; c.I = s.I; c.J = s.J;
-                return std::make_unique<surfaces::GeneralQuadric>(
-                    c, core::AABB{s.box_min, s.box_max});
-            } else if constexpr (std::is_same_v<T, io::FresnelZoneLensDoc>) {
-                return std::make_unique<surfaces::FresnelZoneLens>(
-                    s.focal_length_m, s.inner_radius_m, s.pitch_m, s.n_zones, s.n_lens);
-            } else if constexpr (std::is_same_v<T, io::MeshDoc>) {
-                // io::import_mesh() is the process-wide cached importer (src/io/MeshImporter.cpp),
-                // so duplicating a mesh element costs one vector copy, not a second Assimp parse.
-                auto imp = io::import_mesh(base_dir / s.path, s.scale_to_meters);
-                return std::make_unique<surfaces::TriangleMesh>(std::move(imp.vertices),
-                                                                 std::move(imp.indices));
-            }
-        },
-        sd);
-}
-
-} // namespace
 
 // ---- Construction --------------------------------------------------------
 
@@ -182,9 +111,9 @@ void SceneEditor::instantiate(const io::ElementDoc& d) {
         throw std::runtime_error("SceneEditor: element references unknown material id '" +
                                  d.material_id + "'");
 
-    auto surf = build_surface(d.surface, base_dir_);
+    auto surf = io::build_surface(d.surface, base_dir_);
 
-    if (!is_default_transform(d.transform))
+    if (!io::is_default_transform(d.transform))
         surf->set_transform(d.transform.to_transform());
     if (!d.name.empty())
         surf->set_name(d.name);

@@ -64,6 +64,8 @@ core::Transform frame_transform(math::vec3 origin, math::vec3 x_axis,
     return core::Transform::from_matrix(m);
 }
 
+} // namespace
+
 /// True when every field of t is still its struct default, i.e. the authored JSON had no
 /// "transform" key at all (parse_document leaves an absent transform default-constructed).
 ///
@@ -115,7 +117,6 @@ std::unique_ptr<surfaces::Surface> build_surface(const SurfaceDoc& sd,
         sd);
 }
 
-} // namespace
 
 /// Builds a fully-wired LoadedScene from an already-parsed SceneDocument, keeping a copy of the
 /// document in the result; see the Doxygen on its declaration in SceneDocument.hpp. Implemented

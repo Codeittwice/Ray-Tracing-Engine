@@ -345,17 +345,14 @@ void draw_import_panel(PanelContext& ctx) {
             static_cast<std::size_t>(g_import.material_choice)]);
 
         if (ctx.add_element) {
-            // WIRING POINT (Wave 5): this is the single call site for
-            // scene::SceneEditor::add_element. The Viewer fills ctx.add_element with
-            //     [this](io::ElementDoc d) { return editor_->add_element(std::move(d)); }
-            // in Viewer::make_panel_context(), then sets need_rebuild_/need_retrace_ so the
-            // BVH and the Polyscope structures pick the new surface up.
+            // Queued here, applied by the Viewer at the end of the frame, which is also where
+            // the new element gets its Polyscope structure and its gizmo state. Before that
+            // existed this call reached the document and the BVH and nothing else, so an
+            // imported model was traced and saved while remaining invisible on screen.
             std::size_t added = 0;
             for (auto& d : g_import.staged)
-                if (ctx.add_element(d) != 0) ++added;
+                if (ctx.add_element(d)) ++added;
             g_import.status = std::to_string(added) + " element(s) added.";
-            if (ctx.need_rebuild) *ctx.need_rebuild = true;
-            if (ctx.need_retrace) *ctx.need_retrace = true;
         } else {
             g_import.status = std::to_string(g_import.staged.size()) +
                               " element(s) built, but the Viewer owns no scene::SceneEditor "
