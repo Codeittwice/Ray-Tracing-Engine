@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -43,7 +44,10 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     csv << "scene,total_power_w,peak_flux_wm2,concentration_ratio,wall_time_s\n";
-    csv.precision(6);
+    // max_digits10, not 6: the golden tests gate at a relative 1e-9 and a corpus diff that
+    // cannot see the seventh significant digit is a thousand times coarser than the gate it
+    // exists to back up. Every double round-trips exactly at 17 digits.
+    csv.precision(std::numeric_limits<double>::max_digits10);
 
     int errors = 0;
     for (const auto& path : scene_paths) {
