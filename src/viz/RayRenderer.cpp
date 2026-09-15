@@ -1,4 +1,5 @@
 #include "scrt/viz/RayRenderer.hpp"
+#include "scrt/viz/Appearance.hpp"
 #include "scrt/viz/ViewSettings.hpp"
 #include "scrt/materials/Material.hpp"
 #include "scrt/math/Constants.hpp"
@@ -41,15 +42,6 @@ std::string lower_copy(std::string s) {
     return s;
 }
 
-bool is_transparent_lid_surface(const surfaces::Surface& surf) {
-    std::string name = lower_copy(surf.name());
-    const auto* material = surf.material();
-    if (material)
-        name += " " + lower_copy(material->name());
-    return name.find("pmma") != std::string::npos
-           || name.find("glass") != std::string::npos;
-}
-
 /// Base (pre-uniquification) display name for a surface; stable under reordering.
 std::string base_display_name(const surfaces::Surface& surf) {
     return surf.name().empty()
@@ -58,10 +50,27 @@ std::string base_display_name(const surfaces::Surface& surf) {
 }
 
 /// Re-applies the surface's default Polyscope appearance after a (re-)registration.
+///
+/// Dispatched on the MATERIAL TYPE (viz::appearance_for). The previous rule matched the strings
+/// "glass" and "pmma" in the surface's or the material's name, so a dielectric named
+/// "lens_body" drew as an opaque grey slab and an absorber named "glass_pot" drew as glass.
 void apply_default_style(polyscope::SurfaceMesh* mesh, const surfaces::Surface& surf) {
-    if (is_transparent_lid_surface(surf)) {
-        mesh->setSurfaceColor({0.75f, 0.9f, 1.0f});
-        mesh->setTransparency(0.2f);
+    const Appearance a = appearance_for(surf.material());
+    mesh->setMaterial(a.matcap);
+    mesh->setSurfaceColor({static_cast<float>(a.color.x), static_cast<float>(a.color.y),
+                           static_cast<float>(a.color.z)});
+    // Smooth shading matters for curved bodies: Polyscope defaults to flat, which makes a
+    // tessellated lens or dish look faceted at any segment count this app actually uses.
+    mesh->setSmoothShade(a.smooth);
+    if (a.identical_backface)
+        mesh->setBackFacePolicy(polyscope::BackFacePolicy::Identical);
+    if (a.transparency < 1.0f) {
+        mesh->setTransparency(a.transparency);
+        // Polyscope composites transparency only in a transparency mode. The aperture disk
+        // already turns this on for every solar scene; a bench scene may have no aperture, so
+        // assert it here too rather than rely on that.
+        if (polyscope::options::transparencyMode == polyscope::TransparencyMode::None)
+            polyscope::options::transparencyMode = polyscope::TransparencyMode::Pretty;
     }
 }
 

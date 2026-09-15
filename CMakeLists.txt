@@ -220,6 +220,8 @@ add_library(scrt_viz STATIC
     src/viz/panels/MaterialsPanel.cpp
     src/viz/panels/LibraryPanel.cpp
     src/viz/Library.cpp
+    src/viz/Appearance.cpp
+    src/viz/Preview.cpp
     src/viz/panels/SunPanel.cpp
     src/viz/panels/TracePanel.cpp
     src/viz/panels/ImportPanel.cpp
