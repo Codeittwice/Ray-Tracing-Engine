@@ -6,6 +6,7 @@
 #include "scrt/scene/Receiver.hpp"
 #include "scrt/surfaces/Surface.hpp"
 
+#include <cctype>
 #include <cstdint>
 #include <cstdio>
 #include <string>
@@ -325,11 +326,26 @@ void draw_outliner_panel(PanelContext& ctx, bool boxed) {
         }
     }
 
-    // ---- Sun / Aperture / Materials --
-    outliner_row(ctx, ICON_FA_MOUNTAIN_SUN, "Sun", "sun", std::string{}, 0, "Light source",
-                 "Direction and strength of the incoming sunlight.");
-    outliner_row(ctx, ICON_FA_SQUARE, "Aperture", "aperture", aperture_structure_name(), 0,
-                 "Aperture", "The window rays are fired through. Sets the collected power.");
+    // ---- Sources / Aperture / Materials --
+    // One row per light source, whatever it is: the sun stopped being special in Wave 2.
+    {
+        const auto srcs = ctx.scene->sources();
+        if (srcs.empty()) ImGui::TextDisabled(ICON_FA_LIGHTBULB "  (no light source)");
+        for (std::size_t i = 0; i < srcs.size(); ++i) {
+            const auto& src    = *srcs[i];
+            const bool  is_sun = src.as_sun() != nullptr;
+            std::string label  = is_sun ? "Sun" : std::string(src.type_name());
+            if (!is_sun && !label.empty()) label[0] = static_cast<char>(std::toupper(label[0]));
+            if (srcs.size() > 1) label += " " + std::to_string(i + 1);
+            outliner_row(ctx, is_sun ? ICON_FA_MOUNTAIN_SUN : ICON_FA_LIGHTBULB, label.c_str(),
+                         "source:" + std::to_string(i), std::string{}, 0, "Light source",
+                         is_sun ? "Direction and strength of the incoming sunlight."
+                                : "A laser: its own watts along one direction, no aperture.");
+        }
+    }
+    if (ctx.scene->display_aperture())
+        outliner_row(ctx, ICON_FA_SQUARE, "Aperture", "aperture", aperture_structure_name(), 0,
+                     "Aperture", "The window rays are fired through. Sets the collected power.");
 
     if (ImGui::TreeNodeEx(ICON_FA_PALETTE "  Materials")) {
         auto mats = ctx.scene->mutable_materials();

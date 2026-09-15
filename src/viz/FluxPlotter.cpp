@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <optional>
 #include <vector>
 
 #include "imgui.h"
@@ -19,6 +20,7 @@ namespace {
 double g_scene_dni_wm2 = 1000.0;
 /// False until a real scene DNI has been published; the window says so when it is false.
 bool   g_scene_dni_known = false;
+bool   g_scene_has_sun   = true;
 
 /// Grey explanatory line, wrapped to the panel width; for plain-language captions.
 void help_line(const char* text) {
@@ -51,8 +53,16 @@ void FluxPlotter::set_scene_dni(double dni_wm2) {
     if (dni_wm2 > 0.0) {
         g_scene_dni_wm2   = dni_wm2;
         g_scene_dni_known = true;
+        g_scene_has_sun   = true;
     }
 }
+
+void FluxPlotter::set_no_sun() {
+    g_scene_has_sun   = false;
+    g_scene_dni_known = false;
+}
+
+bool FluxPlotter::scene_has_sun() { return g_scene_has_sun; }
 
 double FluxPlotter::scene_dni() { return g_scene_dni_wm2; }
 
@@ -103,7 +113,11 @@ void FluxPlotter::draw(const tracer::FluxAccumulator& acc,
     if (ImGui::Button("Export JSON")) {
         // The scene's real DNI, not a hardcoded 1000: it sets concentration_ratio in the
         // exported summary, so a hardcoded value writes a fabricated figure to disk.
-        try { scrt::io::export_summary_json(acc, result, dni, out_json); }
+        try {
+            scrt::io::export_summary_json(
+                acc, result, scene_has_sun() ? std::optional<double>(dni) : std::nullopt,
+                out_json);
+        }
         catch (...) {}
     }
 
@@ -142,7 +156,12 @@ void FluxPlotter::draw_heatmap_tab(const tracer::FluxAccumulator& acc, double dn
     // ---- Headline figures, explanations on hover --------
     char buf[128];
 
-    std::snprintf(buf, sizeof(buf), "Power reaching the pot: %.0f W", acc.total_power_w());
+    // Milliwatts below one watt: a 5 mW laser used to read "0 W" here.
+    if (acc.total_power_w() < 1.0)
+        std::snprintf(buf, sizeof(buf), "Power reaching the target: %.2f mW",
+                      acc.total_power_w() * 1e3);
+    else
+        std::snprintf(buf, sizeof(buf), "Power reaching the target: %.0f W", acc.total_power_w());
     figure(buf, "The sunlight the cooker actually delivers to the target, after every "
                 "reflection and loss. A 1 kW electric hob is 1000 W.");
 
@@ -150,16 +169,24 @@ void FluxPlotter::draw_heatmap_tab(const tracer::FluxAccumulator& acc, double dn
     figure(buf, "Intensity where the light is most tightly focused. Bare midday sun is "
                 "around 1000 W/m².");
 
-    std::snprintf(buf, sizeof(buf), "Concentration: %.1fx (at %.0f W/m² sunlight)",
-                  acc.concentration_ratio(dni_wm2), dni_wm2);
-    figure(buf, (scene_dni_known() || dni_wm2 > 0.0)
-                    ? "How many suns' worth of intensity the hot spot sees. Follows the DNI "
-                      "slider on the Simulate tab."
-                    : "No scene sunlight strength known yet; 1000 W/m² assumed.");
+    if (scene_has_sun()) {
+        std::snprintf(buf, sizeof(buf), "Concentration: %.1fx (at %.0f W/m² sunlight)",
+                      acc.concentration_ratio(dni_wm2), dni_wm2);
+        figure(buf, (scene_dni_known() || dni_wm2 > 0.0)
+                        ? "How many suns' worth of intensity the hot spot sees. Follows the DNI "
+                          "slider on the Simulate tab."
+                        : "No scene sunlight strength known yet; 1000 W/m² assumed.");
 
-    ImGui::TextDisabled("Exact: %.6f W   %.6f W/m²   CR %.6f",
-                        acc.total_power_w(), acc.peak_flux_wm2(),
-                        acc.concentration_ratio(dni_wm2));
+        ImGui::TextDisabled("Exact: %.6f W   %.6f W/m²   CR %.6f",
+                            acc.total_power_w(), acc.peak_flux_wm2(),
+                            acc.concentration_ratio(dni_wm2));
+    } else {
+        figure("Concentration: not defined (no sun in this scene)",
+               "Concentration is the hottest spot divided by the sun's DNI. This scene is lit "
+               "by something other than a sun, so there is no DNI to divide by.");
+        ImGui::TextDisabled("Exact: %.6f W   %.6f W/m²",
+                            acc.total_power_w(), acc.peak_flux_wm2());
+    }
 
     ImGui::Separator();
 

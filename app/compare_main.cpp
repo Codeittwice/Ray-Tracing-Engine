@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -71,19 +72,24 @@ int main(int argc, char* argv[]) {
             scrt::tracer::Tracer tracer(*ls.scene);
             auto result = tracer.run(ls.cfg, acc);
 
-            double dni = ls.scene->primary_sun() ? ls.scene->primary_sun()->dni() : 1000.0;
+            // The concentration column is peak flux over the sun's DNI. A scene with no sun
+            // (a laser bench) has no DNI, so the cell is left empty rather than computed
+            // against a fictitious 1000 W/m2; the column itself stays, so every solar row
+            // is byte-identical to what this tool wrote before sources became a list.
+            std::optional<double> dni;
+            if (const auto* sun = ls.scene->primary_sun()) dni = sun->dni();
 
             csv << path.string()              << ','
                 << acc.total_power_w()        << ','
-                << acc.peak_flux_wm2()        << ','
-                << acc.concentration_ratio(dni) << ','
-                << result.wall_time_s         << '\n';
+                << acc.peak_flux_wm2()        << ',';
+            if (dni) csv << acc.concentration_ratio(*dni);
+            csv << ',' << result.wall_time_s  << '\n';
 
             std::cout << "[OK] " << path.filename().string()
                       << "  power=" << acc.total_power_w()    << " W"
-                      << "  peak="  << acc.peak_flux_wm2()    << " W/m²"
-                      << "  CR="    << acc.concentration_ratio(dni) << 'x'
-                      << "  t="     << result.wall_time_s     << " s\n";
+                      << "  peak="  << acc.peak_flux_wm2()    << " W/m²";
+            if (dni) std::cout << "  CR=" << acc.concentration_ratio(*dni) << 'x';
+            std::cout << "  t=" << result.wall_time_s << " s\n";
         } catch (const std::exception& e) {
             std::cerr << "[ERR] " << path.string() << ": " << e.what() << '\n';
             ++errors;

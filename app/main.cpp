@@ -5,6 +5,7 @@
 #include "scrt/viz/Viewer.hpp"
 #include <filesystem>
 #include <iostream>
+#include <optional>
 #include <stdexcept>
 #include <string>
 
@@ -86,7 +87,10 @@ int main(int argc, char* argv[]) {
         }
         scrt::tracer::Tracer tracer(*ls.scene);
         std::filesystem::create_directories(out_dir);
-        double dni = ls.scene->primary_sun() ? ls.scene->primary_sun()->dni() : 1000.0;
+        // No sun means no DNI, and a concentration ratio against a stand-in 1000 W/m2 is a
+        // figure someone will cite. Leave it out instead.
+        std::optional<double> dni;
+        if (const auto* sun = ls.scene->primary_sun()) dni = sun->dni();
 
         if (recv->is_multi_face()) {
             auto result = tracer.run(ls.cfg);
@@ -119,7 +123,8 @@ int main(int argc, char* argv[]) {
 
         std::cout << "Total power    : " << acc.total_power_w()          << " W\n";
         std::cout << "Peak flux      : " << acc.peak_flux_wm2()          << " W/m2\n";
-        std::cout << "Concentration  : " << acc.concentration_ratio(dni) << "x\n";
+        if (dni)
+            std::cout << "Concentration  : " << acc.concentration_ratio(*dni) << "x\n";
         std::cout << "Wall time      : " << result.wall_time_s            << " s\n";
         std::cout << "Results written to " << out_dir.string()            << '\n';
         return 0;

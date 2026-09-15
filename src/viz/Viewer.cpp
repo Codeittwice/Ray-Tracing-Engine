@@ -384,6 +384,14 @@ void Viewer::register_scene() {
     renderer.register_aperture();
     update_receiver_flux(); // registers zeroed heatmap mesh
 
+    // Tell the flux window whether a concentration ratio even exists for this scene. It is
+    // peak flux over the sun's DNI, and a laser bench has no DNI to divide by; without this
+    // the window would print a ratio against an assumed 1000 W/m2 for a 5 mW laser.
+    if (scene_) {
+        if (const auto* sun = scene_->primary_sun()) FluxPlotter::set_scene_dni(sun->dni());
+        else                                          FluxPlotter::set_no_sun();
+    }
+
     // Pin the ground plane to a fixed height taken from the scene we just loaded.
     //
     // In Automatic mode the floor sits a fixed offset under the scene's bounding box, so it

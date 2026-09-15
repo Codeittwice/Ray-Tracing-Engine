@@ -5,6 +5,7 @@
 #include "scrt/viz/FluxPlotter.hpp"
 
 #include <cmath>
+#include <string>
 
 #include "imgui.h"
 
@@ -133,6 +134,16 @@ void draw_sun_panel(PanelContext& ctx) {
                 help_line("Elevation 90 is straight overhead; bearing 0 is north and 180 "
                           "is south.");
             }
+        } else if (ctx.scene) {
+            // No sun: say so, and list what does light the scene. The sun stopped being
+            // special in Wave 2; this panel is the one place that still is.
+            help_line("This scene has no sun. Its light comes from the sources below, and "
+                      "a concentration ratio (peak flux over the sun's DNI) is not defined.");
+            const auto srcs = ctx.scene->sources();
+            if (srcs.empty()) ImGui::TextDisabled("(no light source at all)");
+            for (const auto& src : srcs)
+                ImGui::BulletText("%s: %.4g W", std::string(src->type_name()).c_str(),
+                                  src->total_power_w());
         }
     }
 }

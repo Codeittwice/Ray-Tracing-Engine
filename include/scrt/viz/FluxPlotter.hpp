@@ -36,6 +36,17 @@ public:
     /// still the 1000 W/m^2 placeholder, which the window labels as an assumption.
     static bool scene_dni_known();
 
+    /// Declare that the scene on screen has no sun at all (a laser bench, say).
+    ///
+    /// A concentration ratio is peak flux over the sun's DNI; with no sun there is nothing to
+    /// divide by, and the window says so instead of printing a ratio against an assumed
+    /// 1000 W/m^2. The Viewer calls this from register_scene(); set_scene_dni() undoes it.
+    static void set_no_sun();
+
+    /// False after set_no_sun() until the next set_scene_dni(); true otherwise (the default,
+    /// so a caller that never says either keeps the pre-Wave-2 behaviour).
+    static bool scene_has_sun();
+
 private:
     void draw_heatmap_tab(const tracer::FluxAccumulator& acc, double dni_wm2);
     void draw_profile_tab(const tracer::FluxAccumulator& acc,

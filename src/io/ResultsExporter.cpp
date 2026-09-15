@@ -76,7 +76,7 @@ void export_flux_npy(const tracer::FluxAccumulator& acc,
 
 void export_summary_json(const tracer::FluxAccumulator& acc,
                          const tracer::TraceResult& result,
-                         double dni_wm2,
+                         std::optional<double> dni_wm2,
                          const std::filesystem::path& out) {
     std::ofstream f(out);
     if (!f)
@@ -85,7 +85,8 @@ void export_summary_json(const tracer::FluxAccumulator& acc,
     nlohmann::json j;
     j["total_power_w"]          = acc.total_power_w();
     j["peak_flux_wm2"]          = acc.peak_flux_wm2();
-    j["concentration_ratio"]    = acc.concentration_ratio(dni_wm2);
+    if (dni_wm2)  // absent when the scene has no sun; see the header
+        j["concentration_ratio"] = acc.concentration_ratio(*dni_wm2);
     j["primary_rays_traced"]    = result.primary_rays_traced;
     j["total_hits"]             = result.total_hits;
     j["wall_time_s"]            = result.wall_time_s;
@@ -110,7 +111,7 @@ void export_receiver_flux_csvs(const scene::Receiver& receiver,
 
 void export_receiver_summary_json(const scene::Receiver& receiver,
                                   const tracer::TraceResult& result,
-                                  double dni_wm2,
+                                  std::optional<double> dni_wm2,
                                   const std::filesystem::path& out) {
     std::ofstream f(out);
     if (!f)
@@ -138,7 +139,8 @@ void export_receiver_summary_json(const scene::Receiver& receiver,
         fj["total_power_w"] = acc.total_power_w();
         fj["peak_flux_wm2"] = acc.peak_flux_wm2();
         fj["mean_flux_wm2"] = mean_flux;
-        fj["concentration_ratio"] = acc.concentration_ratio(dni_wm2);
+        if (dni_wm2)
+            fj["concentration_ratio"] = acc.concentration_ratio(*dni_wm2);
         fj["grid_nx"] = acc.nx();
         fj["grid_ny"] = acc.ny();
         fj["half_width_m"] = acc.half_width();

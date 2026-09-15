@@ -3,6 +3,7 @@
 #include "scrt/tracer/FluxAccumulator.hpp"
 #include "scrt/tracer/Tracer.hpp"
 #include <filesystem>
+#include <optional>
 
 namespace scrt::io {
 
@@ -17,7 +18,7 @@ void export_flux_npy(const tracer::FluxAccumulator& acc,
 /// Write a JSON summary: total power, peak flux, concentration ratio, MC wall time.
 void export_summary_json(const tracer::FluxAccumulator& acc,
                          const tracer::TraceResult& result,
-                         double dni_wm2,
+                         std::optional<double> dni_wm2,
                          const std::filesystem::path& out);
 
 /// Write one CSV per receiver face into out_dir.
@@ -25,9 +26,13 @@ void export_receiver_flux_csvs(const scene::Receiver& receiver,
                                const std::filesystem::path& out_dir);
 
 /// Write a JSON summary for a multi-face receiver.
+///
+/// `dni_wm2` is the sun's DNI, or nullopt when the scene has no sun: concentration_ratio is
+/// peak flux over DNI, and a scene lit by a laser has no DNI to divide by, so the field is
+/// omitted rather than computed against a fictitious 1000 W/m^2 that someone would cite.
 void export_receiver_summary_json(const scene::Receiver& receiver,
                                   const tracer::TraceResult& result,
-                                  double dni_wm2,
+                                  std::optional<double> dni_wm2,
                                   const std::filesystem::path& out);
 
 /// Write tessellated scene geometry as a Wavefront OBJ file (for debugging in Blender).

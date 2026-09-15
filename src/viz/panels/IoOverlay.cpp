@@ -10,6 +10,7 @@
 
 #include <exception>
 #include <filesystem>
+#include <optional>
 #include <string>
 
 #include "imgui.h"
@@ -130,7 +131,9 @@ void do_export_summary(PanelContext& ctx) {
     // The scene's own DNI, never a hardcoded 1000: it sets concentration_ratio in the exported
     // summary, so a stand-in value writes a fabricated figure to a file someone will cite. The
     // sun panel publishes it each frame; FluxPlotter is where it is kept.
-    const double dni = FluxPlotter::scene_dni();
+    const std::optional<double> dni = FluxPlotter::scene_has_sun()
+                                          ? std::optional<double>(FluxPlotter::scene_dni())
+                                          : std::nullopt;
     try {
         io::export_summary_json(*ctx.acc, *ctx.result, dni, picked.string());
         ok("Wrote " + picked.filename().string());

@@ -128,9 +128,10 @@ void draw_trace_panel(PanelContext& ctx) {
             // The scene's real DNI, never a hardcoded 1000: the concentration ratio is
             // peak flux divided by it, so a stale literal here would misreport the ratio
             // by DNI/1000 the moment the Sun panel's slider moved.
-            const double dni =
-                (ctx.scene && ctx.scene->primary_sun()) ? ctx.scene->primary_sun()->dni()
-                                                         : 1000.0;
+            // And no sun at all means no ratio: it is peak flux over DNI, and a laser
+            // bench has no DNI to divide by, so the line is dropped rather than faked.
+            const bool   has_sun = ctx.scene && ctx.scene->primary_sun();
+            const double dni     = has_sun ? ctx.scene->primary_sun()->dni() : 1000.0;
 
             // Plain-language names, with the physical quantity kept in parentheses and
             // the original precision unchanged. Nothing here is rounded more than before.
@@ -148,13 +149,19 @@ void draw_trace_panel(PanelContext& ctx) {
                 "spot scorches, while the power above decides how fast the whole pot "
                 "heats.");
 
-            ImGui::Text("Concentration          : %.1f× (at %.0f W/m² sun)",
-                        ctx.acc->concentration_ratio(dni), dni);
-            tip("How many suns' worth of intensity the hottest spot sees: the peak flux "
-                "divided by the DNI set in the Sun panel (concentration_ratio).\n\n"
-                "10x means the brightest point is ten times as intense as unfocused "
-                "sunlight. It follows the DNI slider, so it describes the optics rather "
-                "than the weather.");
+            if (has_sun) {
+                ImGui::Text("Concentration          : %.1f× (at %.0f W/m² sun)",
+                            ctx.acc->concentration_ratio(dni), dni);
+                tip("How many suns' worth of intensity the hottest spot sees: the peak flux "
+                    "divided by the DNI set in the Sun panel (concentration_ratio).\n\n"
+                    "10x means the brightest point is ten times as intense as unfocused "
+                    "sunlight. It follows the DNI slider, so it describes the optics rather "
+                    "than the weather.");
+            } else {
+                ImGui::TextDisabled("Concentration          : not defined (no sun)");
+                tip("Concentration is peak flux divided by the sun's DNI. This scene has no "
+                    "sun, so there is nothing to divide by.");
+            }
 
             ImGui::Text("Time taken             : %.2f s", ctx.result->wall_time_s);
             tip("Wall-clock seconds the trace took (wall_time_s).");
@@ -175,9 +182,13 @@ void draw_trace_panel(PanelContext& ctx) {
             // Full precision, unrounded, for anyone transcribing a result. The readouts
             // above are the same numbers; this line exists so the plain-language framing
             // never costs a significant figure.
-            ImGui::TextDisabled("Exact: total %.6f W   peak %.6f W/m²   CR %.6f×",
-                                ctx.acc->total_power_w(), ctx.acc->peak_flux_wm2(),
-                                ctx.acc->concentration_ratio(dni));
+            if (has_sun)
+                ImGui::TextDisabled("Exact: total %.6f W   peak %.6f W/m²   CR %.6f×",
+                                    ctx.acc->total_power_w(), ctx.acc->peak_flux_wm2(),
+                                    ctx.acc->concentration_ratio(dni));
+            else
+                ImGui::TextDisabled("Exact: total %.6f W   peak %.6f W/m²",
+                                    ctx.acc->total_power_w(), ctx.acc->peak_flux_wm2());
             help_line("Optical results only: this model tracks where light goes, not how "
                       "hot the pot gets or how fast it cools.");
         }
