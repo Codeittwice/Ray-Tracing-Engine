@@ -4,6 +4,7 @@
 #include "scrt/io/MeshImporter.hpp"
 #include "scrt/io/SceneDocument.hpp"
 #include "scrt/materials/Absorber.hpp"
+#include "scrt/materials/BeamSplitter.hpp"
 #include "scrt/materials/Dielectric.hpp"
 #include "scrt/materials/PerfectMirror.hpp"
 #include "scrt/materials/RealMirror.hpp"
@@ -171,6 +172,10 @@ const json params = md.params.is_object() ? md.params : json::object();
         mat = std::make_unique<materials::ThinDielectricPane>(n, thickness, alpha);
     } else if (md.type == "absorber") {
         mat = std::make_unique<materials::Absorber>();
+    } else if (md.type == "beam_splitter") {
+        // A designed ratio, not a Fresnel-derived one; the constructor refuses R + A > 1.
+        mat = std::make_unique<materials::BeamSplitter>(params.value("reflectance", 0.5),
+                                                        params.value("absorptance", 0.0));
     } else {
         throw std::runtime_error("SceneLoader: unknown material type '" + md.type + "'");
     }

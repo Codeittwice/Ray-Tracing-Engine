@@ -1,6 +1,7 @@
 #include "scrt/viz/Panels.hpp"
 #include "scrt/scene/SceneEditor.hpp"
 
+#include "scrt/materials/BeamSplitter.hpp"
 #include "scrt/materials/Dielectric.hpp"
 #include "scrt/materials/RealMirror.hpp"
 
@@ -110,6 +111,26 @@ void draw_materials_panel(PanelContext& ctx) {
                         "This is why a thick lens can beat a thin one on focusing and "
                         "still deliver less power.");
 
+                    ImGui::Unindent();
+                } else if (auto* bs = dynamic_cast<materials::BeamSplitter*>(mat_ptr.get())) {
+                    float refl = static_cast<float>(bs->reflectance());
+                    float absn = static_cast<float>(bs->absorptance());
+                    ImGui::Indent();
+
+                    if (ImGui::SliderFloat("Reflected fraction##bs", &refl, 0.0f, 1.0f))
+                        set_param(mat_id, "reflectance", refl);
+                    tip("The share of light this splitter sends back, at every angle. A "
+                        "50:50 splitter is 0.5; a 90:10 pickoff reflects 0.1.\n\n"
+                        "What is neither reflected nor absorbed goes straight through with no "
+                        "bend and no offset: exact for a pellicle, an approximation for a "
+                        "plate, which would also make a faint ghost from its second face.");
+
+                    if (ImGui::SliderFloat("Absorbed fraction##bs", &absn, 0.0f, 0.2f))
+                        set_param(mat_id, "absorptance", absn);
+                    tip("Light lost in the coating. Real splitters lose 1-5%. The slider "
+                        "refuses a value that would make reflected + absorbed exceed 1.");
+
+                    ImGui::Text("Transmitted: %.0f%%", 100.0 * bs->transmittance());
                     ImGui::Unindent();
                 }
 

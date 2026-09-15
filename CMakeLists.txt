@@ -87,6 +87,7 @@ target_sources(scrt_core PRIVATE
     src/materials/Dielectric.cpp
     src/materials/RealMirror.cpp
     src/materials/ThinDielectricPane.cpp
+    src/materials/BeamSplitter.cpp
 )
 
 # ---------- Phase 4 sources ----------
@@ -163,6 +164,7 @@ target_sources(scrt_tests PRIVATE
     tests/test_scene_editor_library.cpp
     tests/test_apertures.cpp
     tests/test_tracer_overloads.cpp
+    tests/test_beam_splitter.cpp
     tests/test_sun.cpp
     tests/test_paraxial.cpp
     tests/test_scene_io.cpp

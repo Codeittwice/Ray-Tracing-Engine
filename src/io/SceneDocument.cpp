@@ -73,6 +73,7 @@ void validate_material_strict(const std::string& type, const json& params) {
         {"dielectric", {"n", "absorption_per_m", "sellmeier", "alpha_spectrum"}},
         {"thin_dielectric_pane", {"n", "thickness_m", "absorption_per_m"}},
         {"absorber", {}},
+        {"beam_splitter", {"reflectance", "absorptance"}},
     };
     auto it = allowed.find(type);
     require(it != allowed.end(), "unknown material type '" + type + "'");

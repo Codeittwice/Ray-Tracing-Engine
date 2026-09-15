@@ -1,6 +1,7 @@
 #include "scrt/scene/SceneEditor.hpp"
 #include "scrt/core/AABB.hpp"
 #include "scrt/core/Transform.hpp"
+#include "scrt/materials/BeamSplitter.hpp"
 #include "scrt/materials/Dielectric.hpp"
 #include "scrt/materials/Material.hpp"
 #include "scrt/materials/RealMirror.hpp"
@@ -259,6 +260,15 @@ bool SceneEditor::commit_material_param(const std::string& material_id, const st
     } else if (auto* di = dynamic_cast<materials::Dielectric*>(live)) {
         if (key == "n")                      { di->set_n(value);          applied = true; }
         else if (key == "absorption_per_m")  { di->set_absorption(value);  applied = true; }
+    } else if (auto* bs = dynamic_cast<materials::BeamSplitter*>(live)) {
+        // The setters throw when R + A would exceed 1; report that as "not applied" rather
+        // than let a slider land an impossible splitter in the document.
+        try {
+            if (key == "reflectance")      { bs->set_reflectance(value); applied = true; }
+            else if (key == "absorptance") { bs->set_absorptance(value); applied = true; }
+        } catch (const std::invalid_argument&) {
+            return false;
+        }
     }
     if (!applied) return false;
 

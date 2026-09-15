@@ -162,6 +162,15 @@ TEST_CASE("assistant prompt: every material type it offers is a real one") {
     CHECK(parsed.materials.size() == 5);
 }
 
+TEST_CASE("assistant prompt: beam_splitter takes exactly reflectance and absorptance") {
+    json doc = json::parse(kPromptExample);
+    doc["scene"]["materials"].push_back(
+        {{"id", "bs"}, {"type", "beam_splitter"}, {"reflectance", 0.5}, {"absorptance", 0.02}});
+    CHECK_NOTHROW(scrt::io::parse_document(doc, true));
+    doc["scene"]["materials"].back()["n"] = 1.5;
+    CHECK_THROWS(scrt::io::parse_document(doc, true));
+}
+
 TEST_CASE("assistant prompt: a transform may carry translation, rotation and scale together") {
     json doc = json::parse(kPromptExample);
     doc["scene"]["elements"][0]["transform"] = {{"translation", {0.1, 0.2, 0.3}},

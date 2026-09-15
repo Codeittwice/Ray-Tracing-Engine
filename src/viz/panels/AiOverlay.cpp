@@ -101,6 +101,7 @@ MATERIAL TYPES - use ONLY these, with exactly these keys and no others
 - absorber                (no keys at all - it absorbs everything that reaches it)
 - dielectric              n, absorption_per_m           (glass; use only if genuinely needed)
 - thin_dielectric_pane    n, thickness_m, absorption_per_m
+- beam_splitter           reflectance, absorptance    (a designed split at every angle; the rest passes straight through)
 
 TRANSFORMS
 "transform" takes any of: "translation" [x,y,z], "rotation_euler_deg" [rx,ry,rz] (applied X then
