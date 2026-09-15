@@ -13,9 +13,12 @@ line it was checked at — re-check before relying on it, because this document 
 
 - **The five golden flux values must not move.** Where a change *could* move one, the design says
   how that is avoided and what asserts it. Use `==`, not `Approx`, for bit-identity claims.
-- **`scrt_compare` over all 94 scenes is the real gate**, not the five goldens. It writes 17
-  significant digits since Wave 2. Capture a baseline CSV before starting a wave, diff every column
-  but `wall_time_s` at each stage.
+- **`scrt_compare` over the corpus is the real gate**, not the five goldens. It writes 17
+  significant digits since Wave 2. Capture a baseline CSV before starting a wave and diff every
+  column but `wall_time_s`. **Once per wave from Wave 4 onward** (it never moved once in six
+  Wave 3 stages, and three of its scenes trace ten million rays) — plus immediately after any
+  change to `Tracer`, to a surface's `intersect`, or to a material's `interact`. The five
+  goldens stay a per-stage gate because they cost seconds. See CLAUDE.md for the full table.
 - **`--headless` does not construct the viewer.** `scripts/screenshot_app.ps1` is the only check
   that looks at a pixel; it can click into the window first with `-Clicks`.
 - **Ship what the engine can honour.** A control or library row that behaves unlike its name is
@@ -126,7 +129,84 @@ Add a snap toggle and three step values (translate m / rotate deg / scale factor
 panel, and apply the same snap to the numeric fields so the two input paths still cannot disagree —
 which is the existing invariant documented on `ObjectEditState`.
 
-## 4.6 Gates
+## 4.6 A picture of every library entry
+
+Wave 3 shipped a library of 24 components and 31 materials as a wall of text buttons. A user
+choosing between "Plano-convex lens, f = 50 mm" and "Bi-convex lens, f = 50 mm", or between
+"Matte white paint" and "Spectralon white standard", is reading names for information that is
+inherently visual. Each entry gets a small picture.
+
+**The governing rule is 4.2's, applied to the panel: the picture is GENERATED FROM THE SAME
+PARAMETERS AND THE SAME CODE the physics uses, so it cannot disagree with what a trace does.**
+No hand-drawn icons and no PNG assets: an icon drawn by hand goes stale the moment a radius
+changes, and it goes stale silently.
+
+### 4.6.1 Component thumbnails — a real render of the real geometry
+
+Not a per-type icon. One path that works for every surface, including ones added later:
+
+1. Build the entry's surface with `io::build_surface`, at identity transform.
+2. `tessellate(nseg, verts, indices)` — every surface already implements it, and it already
+   emits world-space vertices, which at identity IS local space.
+3. Project orthographically from a fixed three-quarter view (azimuth ~35 degrees, elevation ~25),
+   scaled to fit the thumbnail from the surface's own `local_bounds()`.
+4. Flat-shade each triangle from its facet normal against one fixed light direction, sort by
+   centroid depth (painter's algorithm), and emit `AddTriangleFilled` into the ImGui draw list.
+
+That is a genuine little 3D render of the actual traced geometry, in about forty lines, with no
+render target, no GPU work beyond ImGui's own, and no per-type code to keep in step.
+
+**Four things to get right, each of which has bitten this project before:**
+
+- **Never register these with Polyscope.** A thumbnail mesh folded into `state::lengthScale`
+  and `state::boundingBox` would resize the ground plane and every relative length in the
+  scene — the trap 4.4 is about. These are draw-list triangles and nothing else.
+- **Cache per entry, once.** Library entries never change during a session, so the projected
+  triangles and their colours are computed on first draw and kept. A solar dish tessellates to
+  a couple of thousand triangles at `nseg = 32`; thumbnails should use `nseg` around 10 to 14,
+  which is plenty at 48 pixels and keeps the cache small.
+- **Painter's algorithm has no depth buffer.** Centroid sorting is right for the convex-ish
+  bodies here (lens, disk, sphere, dish) and wrong for self-occluding ones. If a shape reads
+  badly, draw it as a silhouette outline rather than shipping a picture that misleads.
+- **`ImplicitSDF::tessellate` is an empty stub**, so an SDF surface would render as nothing.
+  Nothing constructs one from JSON today, so this is latent — but the thumbnail path must show
+  a placeholder rather than an empty box, or the entry looks broken.
+
+### 4.6.2 Material swatches — a picture of what the material DOES
+
+A colour chip alone would say almost nothing: a 50:50 splitter and a 90:10 pickoff are the same
+colour. Each material gets a small diagram of its interaction, **drawn by calling
+`Material::interact()` itself** with a fixed incoming ray, a fixed-seed `Rng`, and a fixed
+surface normal, then drawing the outgoing rays with line thickness (or opacity) proportional to
+the power each carries.
+
+| Material | What the diagram shows |
+|---|---|
+| `perfect_mirror`, `real_mirror` | One reflected arrow; its weight is the reflectance, so a foil mirror is visibly thinner than protected silver. `real_mirror`'s slope error shows as a small spread when several samples are drawn. |
+| `dielectric` | A bent transmitted ray at the true Snell angle for that index, plus the weak Fresnel reflection. The bend is the parameter you are choosing. |
+| `thin_dielectric_pane` | Transmitted ray UNBENT, plus the slab reflection — which makes the model's one real limitation visible rather than buried in a tooltip. |
+| `beam_splitter` | Two arrows whose weights are R and T. A 50:50 and a 90:10 look obviously different. |
+| `diffuser` | Forty sampled outgoing rays: the cosine fan, with overall opacity set by the albedo. Matte black and white card are the same shape at very different brightness, which is exactly the truth. |
+| `absorber` | An incoming arrow and nothing leaving. |
+
+Because the diagram is produced by the material's own `interact()`, a material whose behaviour
+does not match its name is visible in the panel. That is the same rule `tests/test_library.cpp`
+enforces at build time, now enforced where the user is looking.
+
+Beside the diagram, the appearance tint from 4.3, so the swatch also previews how the object
+will look in the 3D view.
+
+### 4.6.3 Where else the previews earn their place
+
+The same two widgets should be reused, not reimplemented:
+
+- The **materials panel** (Design tab), beside each material's sliders, so dragging a
+  reflectance or an albedo updates the diagram live. This is the strongest version of the
+  feature: you see the physics change as you drag.
+- The **outliner's** selection read-out, for the selected object's material.
+- The **import panel**, to preview a mesh before committing it.
+
+## 4.7 Gates
 
 - Every golden unchanged (this wave should not touch the physics at all — if a golden moves,
   something is wrong with *how* geometry is being generated, not with appearance).
@@ -134,6 +214,17 @@ which is the existing invariant documented on `ObjectEditState`.
 - Resize the window and confirm the grid does not change the ground plane height.
 - Scale an object and confirm the ray radius does not change — the regression this wave is most
   likely to reintroduce.
+- **Screenshot the library tab and LOOK at it.** Every component thumbnail must show the shape
+  its name claims, and no entry may render empty. This is the gate for 4.6 and nothing else can
+  stand in for it: the whole feature is whether a picture is right.
+- **A thumbnail must not move the scene.** Open a scene, note the ground plane height and the
+  ray radius, open the library tab, and confirm neither changed. This is the Polyscope extents
+  trap, and a draw-list-only implementation passes it by construction — so the check is really
+  asking whether the implementation stayed draw-list-only.
+- Each material diagram checked against a number it can be checked against: the splitter's two
+  arrow weights against its R and T, the dielectric's bend against Snell at its index, the
+  diffuser's fan against Lambert. If a diagram cannot be checked against the material's own
+  output, it should not be drawn.
 
 ---
 

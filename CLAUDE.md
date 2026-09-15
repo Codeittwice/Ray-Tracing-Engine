@@ -251,6 +251,26 @@ a floor on what it will use, not a ceiling.
    Polyscope shares it across every ImGui context it creates. Re-scaling means rebuilding the
    atlas, which Polyscope owns.
 
+### Gating policy from Wave 4 (agreed with the user, to cut run cost)
+
+Wave 3 ran the 96-scene corpus at every stage - eleven times, three of those scenes at ten
+million rays each - and it never once moved. That is the single most expensive habit in this
+project, and most of it was buying nothing. From Wave 4:
+
+| Gate | When |
+|---|---|
+| The five golden flux values | EVERY stage. Seconds, and they are the thing that matters. |
+| Full `ctest` | Every stage. |
+| 96-scene `scrt_compare` corpus diff | ONCE per wave, at the end - **and immediately** after any change to `Tracer`, to a surface's `intersect`, or to a material's `interact`, whatever stage that lands in. |
+| Release build | Only when the corpus runs. Debug is enough for tests and for the screenshot harness. |
+| Independent cold audit (subagent) | Only for a wave that touches the tracer, the schema, or thread-safety. |
+
+Screenshots are NOT reduced. For a visual wave they are the gate, and `--headless` proves
+nothing about the interface.
+
+Cheap habits that are worth keeping: batch independent tool calls into one message, do not
+re-read a file just written, and do not re-read `CLAUDE.md` (the harness injects it).
+
 ### How to run and test
 
 `run.bat` (debug) and `run-release.bat` (optimised) at the repo root build and launch in one step.
