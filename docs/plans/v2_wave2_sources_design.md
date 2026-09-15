@@ -273,3 +273,39 @@ Files: `SceneDocument.hpp/.cpp`, `SceneWriter.cpp`, `SceneLoader.cpp`, new `Over
    than this wave.
 4. **`EmissionPlan::entry_for` is a linear scan in the hot loop.** One compare for every scene that
    exists today; measurable only for a hypothetical 50-source scene at 10M rays.
+
+---
+
+## As built (Wave 2 complete, commits ee58456..9dd5afd)
+
+Everything above was followed as written, with these deviations and additions, each measured:
+
+- **Stage 0 also bumped `scrt_compare`'s CSV precision** from 6 to 17 significant digits. At six,
+  the corpus diff could not see a change in the seventh digit, a thousand times coarser than the
+  1e-9 golden gate it backs up. Two consecutive baseline captures were identical before any
+  engine change.
+- **`SunSource::set_wavelength_nm` exists**, and the legacy `"sun"` block accepts `wavelength_nm`
+  too. Otherwise a single sun at a non-550 wavelength would have forced the writer out of the
+  legacy shape merely to record a wavelength. The key is still omitted at exactly 550.
+- **Laser `divergence_mrad` is the FULL angle**, as datasheets quote it; the sampler uses half of
+  it. The far field is a top hat (uniform over the cap), not a Gaussian.
+- **The null-sun guard in `Tracer::run` landed in Stage 1**, not Stage 2, because the unguarded
+  dereference segfaulted and three callers already checked.
+- **`EmissionPlan` handles the single-source case in its own branch** so the proportional
+  arithmetic (a sum, a division by it, a multiplication by N) never touches the case every golden
+  value rests on. `tests/test_emission_plan.cpp` pins per_ray_w == total/N with `==`, and pins
+  that a dead second sun leaves parabolic_dish.json's golden bit-identical.
+- **Stage 4's "byte-identical re-save" gate was measured on the writer's output**, not on the
+  shipped files: write_document(parse_document(f)) for all 94 scenes, dumped before and after,
+  diffed. The shipped files themselves gain azimuth/elevation and aperture mode/margin keys on
+  any re-save, as they did before this wave; that is the writer's existing cheap-and-lossless
+  policy, not a Wave 2 change.
+- **Stage 5 went slightly past "reporting"**: the outliner lists sources by type and hides the
+  Aperture row when there is no disk, the sun panel says when there is no sun, and the flux
+  headline prints milliwatts below one watt. `FluxPlotter::g_scene_dni_wm2` survives, told by
+  the Viewer on register_scene() whether a sun exists; killing it is still the later GUI pass.
+- **Two shipped scenes were added**: `examples/laser_bench.json` (the only file spelt with
+  `"sources"`) and `examples/dispersive_lens.json`, the fifth golden at 38.763765222589399 W.
+- **Risk 1 (normalisation count) checked in review**: the aperture struct moved whole, and
+  `cosine_to`/`tangent_frame` are called the same number of times on the same fields.
+  Risk 4 (linear `entry_for`) unmeasured and unchanged: one compare per ray for every shipped scene.
