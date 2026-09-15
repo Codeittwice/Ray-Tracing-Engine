@@ -39,14 +39,15 @@ Out of scope on this track: thermal model, lat/lon geographic sun, TMY weather, 
 
 ## v2 — optical simulator (current work, branch `feat/optical-simulator`)
 
-Plan: `docs/plans/v2_optical_simulator.md`, with the Wave 2 detail in
-`docs/plans/v2_wave2_sources_design.md`. Eight waves turning the solar
+Plan: `docs/plans/v2_optical_simulator.md`, with the Wave 2 design in
+`docs/plans/v2_wave2_sources_design.md` and the Wave 3 library contents in
+`docs/plans/v2_wave3_library_contents.md`. Eight waves turning the solar
 cooker tracer into a general optical simulator — bench optics, libraries of components and
 materials, polarisation, interference, a diffraction engine, an optimiser, and an assistant with
 tools. The sun becomes one source among several; there are no modes.
 
 - [x] Wave 1 — Foundations: the scene is actually mutable
-- [ ] Wave 2 — General sources; the sun stops being special
+- [x] Wave 2 — General sources; the sun stops being special
 - [ ] Wave 3 — Components and materials as libraries
 - [ ] Wave 4 — Representative geometry, grid and snapping
 - [ ] Wave 5 — Polarisation and interference
@@ -72,6 +73,52 @@ tools. The sun becomes one source among several; there are no modes.
 - **`io::build_surface` and `io::is_default_transform` are public**; SceneEditor's hand-maintained
   copies are gone. A new surface type is now added in one place, which Wave 3 needs six times.
 - **A recorded ray path is a `RayPath` tree**, not a flat polyline, with per-edge power.
+
+### What Wave 2 changed, and the numbers that guard it
+
+Design: `docs/plans/v2_wave2_sources_design.md`, followed as written with the deviations listed
+at its end. Shipped as v1.10.0.
+
+- **A source states its own power in watts and originates its own rays.** `sources::LightSource`
+  (`total_power_w`, `sample_ray(Rng&)`, `type_name`, `as_sun`). The sun OWNS its aperture;
+  `Scene` has no aperture, only a presentation-only `display_aperture()`. `Scene::sun()` is gone;
+  `primary_sun()` returns the first solar source and every one of its callers is a place still
+  coupled to the sun. `tracer::EmissionPlan` divides the global ray index space among sources
+  by power, before the parallel region, so slot seeding is untouched.
+- **A laser exists** (`sources::Laser`: watts, wavelength, beam diameter, FULL-angle divergence
+  in mrad). `examples/laser_bench.json` is the only shipped file spelt with `"sources"`.
+- **The document is a list**: `SceneDocument::sources`, `variant<SunSourceDoc, LaserSourceDoc>`,
+  visited with `io::overloaded` and no catch-all in both the writer and the loader. Legacy
+  `"sun"` + `"aperture"` still parses; both spellings at once is a hard error in strict AND lax
+  mode. **The writer is legacy-preferring**: one sun and nothing else is written the old way, so
+  all 94 shipped scenes re-save identically and the assistant prompt did not change. That was
+  MEASURED: write_document() output for all 94 was dumped before and after Stage 4 and diffed.
+- **Reporting without a sun**: `concentration_ratio` is omitted (summary JSON, headless stdout,
+  the compare CSV cell is empty, the flux window says "not defined") rather than computed
+  against a fictitious 1000 W/m2. The exporter takes `std::optional<double>` DNI.
+- **A fifth golden**: `examples/dispersive_lens.json` (the Fresnel cooker with
+  `"sellmeier": "bk7"`) at 38.763765222589399 W. None of the four originals reads the wavelength
+  at all, so they would sit still while a source quietly changed colour. Wavelength is also
+  checked end to end in `tests/test_laser.cpp`: a 45-degree pencil beam into BK7 lands where
+  Snell says at 400 nm and at 1064 nm, read from the recorded path.
+
+Instruments used for the gates, worth keeping: `scrt_compare` now writes 17 significant digits
+(it wrote 6, a thousand times coarser than the 1e-9 golden gate). A 94-scene release CSV was
+captured twice at Stage 0 (identical) and diffed at every stage; every scene pins a non-zero
+seed, none pins a thread count, so the baseline is reproducible here (20 slots) but not on a
+different core count.
+
+**Harness gap found and NOT fixed:** `scripts/screenshot_app.ps1` photographs the desktop
+wallpaper for `examples/laser_bench.json` while the app is alive, `Responding`, and a direct
+`CopyFromScreen` of the same window captures it correctly (`build/s5_laser_scene.png`). It
+works for every solar scene. Suspect the capture path, not the app; the sun panel's no-sun
+branch was therefore checked by build and by reading, not by eye.
+
+An independent cold audit (Opus, read-only) of the Stage 1-4 diffs found no bit-identity,
+allocation, thread-safety or schema defect, and three lesser ones that were fixed: the laser
+cone was a small-angle sampler that accepted any angle (now exact over the cap and bounded at
+180 degrees), an all-dead-source scene returned without finalizing the receiver, and a null
+source reached an unchecked dereference. Details at the end of the design document.
 
 ### The measurement Wave 1 settled, worth not repeating
 
@@ -203,6 +250,14 @@ visible in a normal-DPI window.
   that actually mattered. Two minutes reading which colormap `PlotHeatmap` defaults to would have
   found it. The same turn also burned twenty minutes guessing at a vector-subscript assert that
   four `fprintf` calls located immediately.
+- **Two agent-tooling facts that cost real time in Wave 2.** A shell command over roughly
+  160 lines is truncated by the harness and fails with "unexpected EOF" without running at all;
+  split edits into short scripts or write files with the file tool. And a Python script fed on
+  stdin is decoded in the Windows code page, so a pattern containing a non-ASCII character
+  (the superscript in "W/m2", an em dash) silently matches nothing; run such scripts from a
+  file, where the source is read as UTF-8. Backslashes suffer the same way: a doubled
+  backslash in a heredoc reaches Python single, so a pattern for a C string with "\\n" never
+  matches and a replacement containing one writes a real newline into the source.
 - **Polyscope's `ValueColorMap::getValue(1.0)` reads one past the end of its own table.** It
   blends `values[lowerInd]` with `values[lowerInd + 1]` with no upper guard. Never sample a
   Polyscope ramp at exactly 1.0; `ViewSettings.cpp` stops a hair short.
