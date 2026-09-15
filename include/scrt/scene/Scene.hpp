@@ -51,10 +51,19 @@ public:
     /// entries here rather than two modes.
     std::size_t add_source(std::unique_ptr<sources::LightSource> s);
 
+    /// Removes the source at `index`; returns false when out of range. The tracer's plan and
+    /// the viewer's aperture disk are rebuilt from sources() on their next use.
+    bool remove_source(std::size_t index);
+
+    /// Removes the first material named `name`; returns false when none is. The caller must
+    /// ensure no surface still borrows it: surfaces hold raw Material pointers.
+    bool remove_material(const std::string& name);
+
     /// Build BVH over all currently added surfaces. Must be called before run().
     void build_acceleration_structure();
 
     std::span<const std::unique_ptr<surfaces::Surface>> surfaces()  const;
+    std::span<const std::unique_ptr<materials::Material>> materials() const { return materials_; }
     /// Non-const span over materials — for live parameter editing in the viewer.
     std::span<std::unique_ptr<materials::Material>>       mutable_materials();
     /// Non-const span over surfaces — for live transform editing in the viewer.

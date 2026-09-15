@@ -120,6 +120,114 @@ std::unique_ptr<surfaces::Surface> build_surface(const SurfaceDoc& sd,
 }
 
 
+std::unique_ptr<materials::Material> build_material(const MaterialDoc& md) {
+// A MaterialDoc built by hand (the editor, a library preset) may carry a null params;
+// treat it as an empty object so value() lookups behave.
+const json params = md.params.is_object() ? md.params : json::object();
+
+    std::unique_ptr<materials::Material> mat;
+    if (md.type == "perfect_mirror") {
+        mat = std::make_unique<materials::PerfectMirror>();
+    } else if (md.type == "real_mirror") {
+        double rho = params.value("reflectance", 1.0);
+        double se  = params.value("slope_error_mrad", 0.0);
+        mat = std::make_unique<materials::RealMirror>(rho, se);
+    } else if (md.type == "dielectric") {
+        double n     = params.value("n", 1.5);
+        double alpha = params.value("absorption_per_m", 0.0);
+        auto di = std::make_unique<materials::Dielectric>(n, alpha);
+        if (params.contains("sellmeier")) {
+            std::string preset = params["sellmeier"].get<std::string>();
+            if (preset == "bk7")
+                di->set_sellmeier(materials::SellmeierCoeffs::bk7());
+            else if (preset == "fused_silica")
+                di->set_sellmeier(materials::SellmeierCoeffs::fused_silica());
+            else
+                throw std::runtime_error(
+                    "SceneLoader: unknown Sellmeier preset '" + preset + "'");
+        }
+        if (params.contains("alpha_spectrum")) {
+            std::vector<std::pair<double, double>> spec;
+            for (const auto& pt : params["alpha_spectrum"]) {
+                require(pt.is_array() && pt.size() == 2,
+                        "alpha_spectrum entry must be [wavelength_nm, alpha_per_m]");
+                spec.push_back({pt[0].get<double>(), pt[1].get<double>()});
+            }
+            di->set_alpha_spectrum(std::move(spec));
+        }
+        mat = std::move(di);
+    } else if (md.type == "thin_dielectric_pane") {
+        const double n         = params.value("n", 1.49);
+        const double thickness = params.value("thickness_m", 0.003);
+        const double alpha     = params.value("absorption_per_m", 0.0);
+        mat = std::make_unique<materials::ThinDielectricPane>(n, thickness, alpha);
+    } else if (md.type == "absorber") {
+        mat = std::make_unique<materials::Absorber>();
+    } else {
+        throw std::runtime_error("SceneLoader: unknown material type '" + md.type + "'");
+    }
+    mat->set_name(md.id);
+    return mat;
+}
+
+std::unique_ptr<sources::LightSource> build_source(const SourceDoc& sd,
+                                                   const scene::Scene& scene) {
+    // One lambda per SourceDoc alternative and no catch-all (io::overloaded), so a source type
+    // that reaches the document but not this builder is a compile error here.
+return std::visit(
+        overloaded{
+            [&](const SunSourceDoc& d) -> std::unique_ptr<sources::LightSource> {
+                std::unique_ptr<sources::SunSource> sun;
+                if (d.sunshape_type == "pillbox") {
+                    sun = std::make_unique<sources::Pillbox>(d.half_angle_mrad * 1e-3);
+                } else if (d.sunshape_type == "buie") {
+                    sun = std::make_unique<sources::Buie>(d.chi);
+                } else {
+                    throw std::runtime_error(
+                        "SceneLoader: unknown sunshape type '" + d.sunshape_type + "'");
+                }
+                if (d.direction.has_value())
+                    sun->set_sun_direction(math::safe_normalize(*d.direction));
+                else
+                    sun->set_sun_angles(sources::SunAngles{d.azimuth_deg, d.elevation_deg});
+                sun->set_dni(d.dni_wm2);
+                if (d.wavelength_nm != 550.0)
+                    sun->set_wavelength_nm(d.wavelength_nm);
+
+                // The sun's own aperture. world_bounds() covers surfaces and receiver
+                // faces and never apertures, so there is no circularity in fitting it now.
+                if (d.aperture.mode == "auto" || d.aperture.mode == "auto_fit") {
+                    scene::Aperture ap = scene::Aperture::auto_fit(
+                        scene.world_bounds(), sun->to_sun(), d.aperture.margin);
+                    ap.mode = scene::ApertureMode::AutoFitToSun;
+                    sun->set_aperture(ap);
+                } else {
+                    // "fixed" and any unrecognized value: forward-compatible passthrough,
+                    // a fixed disk exactly as the legacy loader always built it.
+                    scene::Aperture ap;
+                    ap.center = d.aperture.center;
+                    ap.normal = math::safe_normalize(d.aperture.normal);
+                    ap.radius = d.aperture.radius;
+                    ap.mode   = scene::ApertureMode::Fixed;
+                    ap.margin = d.aperture.margin;
+                    sun->set_aperture(ap);
+                }
+                return sun;
+            },
+            [&](const LaserSourceDoc& d) -> std::unique_ptr<sources::LightSource> {
+                auto laser = std::make_unique<sources::Laser>();
+                laser->set_origin(d.origin);
+                laser->set_direction(d.direction);
+                laser->set_power_w(d.power_w);
+                laser->set_wavelength_nm(d.wavelength_nm);
+                laser->set_beam_diameter_m(d.beam_diameter_m);
+                laser->set_divergence_mrad(d.divergence_mrad);
+                return laser;
+            },
+        },
+        sd);
+}
+
 /// Builds a fully-wired LoadedScene from an already-parsed SceneDocument, keeping a copy of the
 /// document in the result; see the Doxygen on its declaration in SceneDocument.hpp. Implemented
 /// here (not in SceneDocument.cpp) by wave assignment: this is the Scene-construction half of the
@@ -130,50 +238,7 @@ LoadedScene build_scene(const SceneDocument& doc, const std::filesystem::path& b
     // ---- Materials ----------------------------------------------------
     std::unordered_map<std::string, const materials::Material*> mat_index;
     for (const auto& md : doc.materials) {
-        const json& params = md.params;
-
-        std::unique_ptr<materials::Material> mat;
-        if (md.type == "perfect_mirror") {
-            mat = std::make_unique<materials::PerfectMirror>();
-        } else if (md.type == "real_mirror") {
-            double rho = params.value("reflectance", 1.0);
-            double se  = params.value("slope_error_mrad", 0.0);
-            mat = std::make_unique<materials::RealMirror>(rho, se);
-        } else if (md.type == "dielectric") {
-            double n     = params.value("n", 1.5);
-            double alpha = params.value("absorption_per_m", 0.0);
-            auto di = std::make_unique<materials::Dielectric>(n, alpha);
-            if (params.contains("sellmeier")) {
-                std::string preset = params["sellmeier"].get<std::string>();
-                if (preset == "bk7")
-                    di->set_sellmeier(materials::SellmeierCoeffs::bk7());
-                else if (preset == "fused_silica")
-                    di->set_sellmeier(materials::SellmeierCoeffs::fused_silica());
-                else
-                    throw std::runtime_error(
-                        "SceneLoader: unknown Sellmeier preset '" + preset + "'");
-            }
-            if (params.contains("alpha_spectrum")) {
-                std::vector<std::pair<double, double>> spec;
-                for (const auto& pt : params["alpha_spectrum"]) {
-                    require(pt.is_array() && pt.size() == 2,
-                            "alpha_spectrum entry must be [wavelength_nm, alpha_per_m]");
-                    spec.push_back({pt[0].get<double>(), pt[1].get<double>()});
-                }
-                di->set_alpha_spectrum(std::move(spec));
-            }
-            mat = std::move(di);
-        } else if (md.type == "thin_dielectric_pane") {
-            const double n         = params.value("n", 1.49);
-            const double thickness = params.value("thickness_m", 0.003);
-            const double alpha     = params.value("absorption_per_m", 0.0);
-            mat = std::make_unique<materials::ThinDielectricPane>(n, thickness, alpha);
-        } else if (md.type == "absorber") {
-            mat = std::make_unique<materials::Absorber>();
-        } else {
-            throw std::runtime_error("SceneLoader: unknown material type '" + md.type + "'");
-        }
-        mat->set_name(md.id);
+        auto mat = build_material(md);
         mat_index[md.id] = mat.get();
         scene->add_material(std::move(mat));
     }
@@ -354,63 +419,8 @@ LoadedScene build_scene(const SceneDocument& doc, const std::filesystem::path& b
     }
 
     // ---- Sources (after surfaces and receiver: a sun's auto_fit unions world_bounds) ------
-    // One lambda per SourceDoc alternative and no catch-all (io::overloaded), so a source type
-    // that reaches the document but not this loader is a compile error here.
-    for (const auto& sd : doc.sources) {
-        std::unique_ptr<sources::LightSource> src = std::visit(
-            overloaded{
-                [&](const SunSourceDoc& d) -> std::unique_ptr<sources::LightSource> {
-                    std::unique_ptr<sources::SunSource> sun;
-                    if (d.sunshape_type == "pillbox") {
-                        sun = std::make_unique<sources::Pillbox>(d.half_angle_mrad * 1e-3);
-                    } else if (d.sunshape_type == "buie") {
-                        sun = std::make_unique<sources::Buie>(d.chi);
-                    } else {
-                        throw std::runtime_error(
-                            "SceneLoader: unknown sunshape type '" + d.sunshape_type + "'");
-                    }
-                    if (d.direction.has_value())
-                        sun->set_sun_direction(math::safe_normalize(*d.direction));
-                    else
-                        sun->set_sun_angles(sources::SunAngles{d.azimuth_deg, d.elevation_deg});
-                    sun->set_dni(d.dni_wm2);
-                    if (d.wavelength_nm != 550.0)
-                        sun->set_wavelength_nm(d.wavelength_nm);
-
-                    // The sun's own aperture. world_bounds() covers surfaces and receiver
-                    // faces and never apertures, so there is no circularity in fitting it now.
-                    if (d.aperture.mode == "auto" || d.aperture.mode == "auto_fit") {
-                        scene::Aperture ap = scene::Aperture::auto_fit(
-                            scene->world_bounds(), sun->to_sun(), d.aperture.margin);
-                        ap.mode = scene::ApertureMode::AutoFitToSun;
-                        sun->set_aperture(ap);
-                    } else {
-                        // "fixed" and any unrecognized value: forward-compatible passthrough,
-                        // a fixed disk exactly as the legacy loader always built it.
-                        scene::Aperture ap;
-                        ap.center = d.aperture.center;
-                        ap.normal = math::safe_normalize(d.aperture.normal);
-                        ap.radius = d.aperture.radius;
-                        ap.mode   = scene::ApertureMode::Fixed;
-                        ap.margin = d.aperture.margin;
-                        sun->set_aperture(ap);
-                    }
-                    return sun;
-                },
-                [&](const LaserSourceDoc& d) -> std::unique_ptr<sources::LightSource> {
-                    auto laser = std::make_unique<sources::Laser>();
-                    laser->set_origin(d.origin);
-                    laser->set_direction(d.direction);
-                    laser->set_power_w(d.power_w);
-                    laser->set_wavelength_nm(d.wavelength_nm);
-                    laser->set_beam_diameter_m(d.beam_diameter_m);
-                    laser->set_divergence_mrad(d.divergence_mrad);
-                    return laser;
-                },
-            },
-            sd);
-        scene->add_source(std::move(src));
-    }
+    for (const auto& sd : doc.sources)
+        scene->add_source(build_source(sd, *scene));
 
     // ---- Trace config and finish -------------------------------------------
     tracer::TraceConfig cfg = doc.trace;

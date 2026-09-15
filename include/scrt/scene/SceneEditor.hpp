@@ -110,6 +110,26 @@ public:
     /// live counterpart to keep in step — the Viewer holds its own tracer::TraceConfig copy.
     void commit_trace_config(const tracer::TraceConfig& cfg);
 
+    /// Appends a material to the document and derives its live materials::Material (rule 1: the
+    /// document owns its existence, the live object is derived through io::build_material).
+    /// Returns false, changing nothing, when `md.id` is empty or already names a material;
+    /// throws std::runtime_error, changing nothing, when the type cannot be built.
+    bool add_material(io::MaterialDoc md);
+
+    /// Removes an UNREFERENCED material from document and scene. Returns false when `id` names
+    /// no document material, or when any element still binds it: surfaces borrow raw Material
+    /// pointers (rule 3's cousin), so removing a bound material would leave them dangling.
+    bool remove_material(const std::string& id);
+
+    /// Appends a source to the document and the scene; returns its index in scene().sources().
+    /// A sun's auto_fit aperture is resolved against the current world bounds. Throws
+    /// std::runtime_error, changing nothing, when the source cannot be built. Document sources
+    /// and live sources stay index-aligned, which build_scene establishes and this preserves.
+    std::size_t add_source(io::SourceDoc sd);
+
+    /// Removes the source at `index` from document and scene; false when out of range.
+    bool remove_source(std::size_t index);
+
     /// The live scene: traverse, render and trace it — do not add or remove surfaces on it.
     Scene& scene() { return *scene_; }
     /// The live scene: traverse, render and trace it — do not add or remove surfaces on it.

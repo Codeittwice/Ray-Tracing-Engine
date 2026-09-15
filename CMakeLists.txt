@@ -158,6 +158,7 @@ target_sources(scrt_tests PRIVATE
     tests/test_laser.cpp
     tests/test_sources_schema.cpp
     tests/test_reporting.cpp
+    tests/test_scene_editor_library.cpp
     tests/test_sun.cpp
     tests/test_paraxial.cpp
     tests/test_scene_io.cpp

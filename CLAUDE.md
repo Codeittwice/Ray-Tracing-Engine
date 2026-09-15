@@ -121,6 +121,21 @@ cone was a small-angle sampler that accepted any angle (now exact over the cap a
 180 degrees), an all-dead-source scene returned without finalizing the receiver, and a null
 source reached an unchecked dereference. Details at the end of the design document.
 
+### Wave 3 progress (in flight)
+
+Decisions taken with the user before code: new surface types rather than a clip on `plane`
+(1-B); realistic absorbers are low-albedo diffusers rather than a parameter on `absorber` (2-C);
+the thick lens is one closed solid (3-B). Every stage gates on the five goldens (`==`) and the
+corpus diff; the tracer, `plane` and every existing material are untouched in this wave.
+
+- [x] Stage 0 - baseline: 96-scene corpus captured twice at HEAD, identical; suite green
+- [x] Stage 1 - `SceneEditor::add_material/remove_material/add_source/remove_source`; `io::build_material` and `io::build_source` factored out of `build_scene` so the editor and a file load derive through one builder
+- [ ] Stage 2 - gap G3: `disk` (optional hole = iris) and `slit_plate` surfaces, new types so `plane` is untouched; parser, writer, loader, prompt and schema test
+- [ ] Stage 3 - `beam_splitter` material: designed R, absorptance, `Split` at every angle
+- [ ] Stage 4 - `thick_lens` closed solid (two caps + rim); Sellmeier presets for N-SF11, PMMA, polycarbonate, soda-lime, low-iron, water (G2)
+- [ ] Stage 5 - `diffuser` material (Lambertian, albedo); realistic blacks are low-albedo diffusers (G1)
+- [ ] Stage 6 - material library (presets + user entries beside the AI config), component catalogue, `examples/optical_bench.json`
+
 ### The measurement Wave 1 settled, worth not repeating
 
 Only `fresnel_lens_cooker.json` splits among the golden scenes — 19617 splits per 20k-ray trace —

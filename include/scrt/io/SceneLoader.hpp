@@ -1,5 +1,7 @@
 #pragma once
 #include "scrt/io/SceneDocument.hpp"
+#include "scrt/materials/Material.hpp"
+#include "scrt/sources/LightSource.hpp"
 #include "scrt/surfaces/Surface.hpp"
 #include <filesystem>
 #include <memory>
@@ -34,5 +36,16 @@ std::unique_ptr<surfaces::Surface> build_surface(const SurfaceDoc& sd,
 /// document-derived surface is bitwise identical to a loader-derived one. Public for the same
 /// reason as build_surface() above.
 bool is_default_transform(const TransformDoc& t);
+
+/// Builds the live materials::Material for one MaterialDoc, named with its id. Throws
+/// std::runtime_error on an unknown type or Sellmeier preset. Public for the same reason as
+/// build_surface(): the editor's add_material must derive a material exactly as a load does,
+/// and a new material type must be added in one place.
+std::unique_ptr<materials::Material> build_material(const MaterialDoc& md);
+
+/// Builds the live sources::LightSource for one SourceDoc. A sun's auto_fit aperture is resolved
+/// against `scene.world_bounds()`, so call this after the scene's surfaces and receiver exist.
+/// Throws std::runtime_error when the source cannot be built.
+std::unique_ptr<sources::LightSource> build_source(const SourceDoc& sd, const scene::Scene& scene);
 
 } // namespace scrt::io

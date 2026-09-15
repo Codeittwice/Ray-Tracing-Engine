@@ -300,6 +300,56 @@ void SceneEditor::commit_sun(math::vec3 direction, double dni_wm2) {
     dirty_                 = true;
 }
 
+// ---- add_material / remove_material -------------------------------------
+
+bool SceneEditor::add_material(io::MaterialDoc md) {
+    if (md.id.empty())
+        return false;
+    for (const auto& m : doc_.materials)
+        if (m.id == md.id)
+            return false;
+    if (find_material(md.id))
+        return false;
+    auto mat = io::build_material(md);  // throws on an unknown type, before any mutation
+    scene_->add_material(std::move(mat));
+    doc_.materials.push_back(std::move(md));
+    dirty_ = true;
+    return true;
+}
+
+bool SceneEditor::remove_material(const std::string& id) {
+    auto it = std::find_if(doc_.materials.begin(), doc_.materials.end(),
+                           [&](const io::MaterialDoc& m) { return m.id == id; });
+    if (it == doc_.materials.end())
+        return false;
+    for (const auto& el : doc_.elements)
+        if (el.material_id == id)
+            return false;  // still bound: a surface borrows the raw pointer
+    doc_.materials.erase(it);
+    scene_->remove_material(id);
+    dirty_ = true;
+    return true;
+}
+
+// ---- add_source / remove_source ---------------------------------------------
+
+std::size_t SceneEditor::add_source(io::SourceDoc sd) {
+    auto src = io::build_source(sd, *scene_);  // throws before any mutation
+    const std::size_t idx = scene_->add_source(std::move(src));
+    doc_.sources.push_back(std::move(sd));
+    dirty_ = true;
+    return idx;
+}
+
+bool SceneEditor::remove_source(std::size_t index) {
+    if (index >= doc_.sources.size() || index >= scene_->sources().size())
+        return false;
+    doc_.sources.erase(doc_.sources.begin() + static_cast<std::ptrdiff_t>(index));
+    scene_->remove_source(index);
+    dirty_ = true;
+    return true;
+}
+
 // ---- commit_trace_config ------------------------------------------------
 
 void SceneEditor::commit_trace_config(const tracer::TraceConfig& cfg) {

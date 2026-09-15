@@ -63,6 +63,24 @@ std::size_t Scene::add_source(std::unique_ptr<sources::LightSource> s) {
     return sources_.size() - 1;
 }
 
+bool Scene::remove_source(std::size_t index) {
+    if (index >= sources_.size())
+        return false;
+    sources_.erase(sources_.begin() + static_cast<std::ptrdiff_t>(index));
+    return true;
+}
+
+bool Scene::remove_material(const std::string& name) {
+    auto it = std::find_if(materials_.begin(), materials_.end(),
+                           [&](const std::unique_ptr<materials::Material>& m) {
+                               return m && m->name() == name;
+                           });
+    if (it == materials_.end())
+        return false;
+    materials_.erase(it);
+    return true;
+}
+
 const sources::SunSource* Scene::primary_sun() const {
     for (const auto& s : sources_)
         if (const auto* sun = s->as_sun())
