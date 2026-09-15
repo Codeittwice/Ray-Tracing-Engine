@@ -92,10 +92,12 @@ private:
 
     /// One element mutation a panel asked for during this frame.
     struct ElementOp {
-        enum class Kind { Add, Remove, Duplicate };
-        Kind           kind = Kind::Add;
-        std::uint64_t  id   = 0;   ///< Target, for Remove and Duplicate.
-        io::ElementDoc doc;        ///< Payload, for Add.
+        enum class Kind { Add, Remove, Duplicate, AddMaterial, AddSource };
+        Kind            kind = Kind::Add;
+        std::uint64_t   id   = 0;   ///< Target, for Remove and Duplicate.
+        io::ElementDoc  doc;        ///< Payload, for Add.
+        io::MaterialDoc material;   ///< Payload, for AddMaterial.
+        io::SourceDoc   source;     ///< Payload, for AddSource.
     };
 
     /// Element mutations queued this frame, applied once it is finished.

@@ -99,6 +99,16 @@ struct PanelContext {
     /// Queues an element for removal, by stable id. Same deferral as add_element.
     std::function<void(std::uint64_t)> remove_element;
 
+    /// Queues a material to be added to the document and the scene; returns whether the request
+    /// was accepted (false when the id is empty or already taken). Queued for the same reason as
+    /// add_element: Scene::materials() hands out a span the materials panel iterates while it
+    /// draws, and add_material resizes the vector behind it.
+    std::function<bool(io::MaterialDoc)> add_material;
+
+    /// Queues a light source to be added. Same deferral. A sun that asks for an auto-fitted
+    /// aperture gets it when the queue is applied, so it sees elements added in the same frame.
+    std::function<bool(io::SourceDoc)> add_source;
+
     /// Queues an element to be copied under a fresh id and name. Same deferral as add_element.
     std::function<void(std::uint64_t)> duplicate_element;
 
@@ -203,6 +213,9 @@ void draw_scene_browser_panel(PanelContext& ctx);
 void draw_transform_panel(PanelContext& ctx);
 /// Draws the material parameter editor panel.
 void draw_materials_panel(PanelContext& ctx);
+
+/// Draws the component, material and source library: ready-made things to drop into the scene.
+void draw_library_panel(PanelContext& ctx);
 /// Draws the sun controls panel (DNI, azimuth, elevation).
 void draw_sun_panel(PanelContext& ctx);
 /// Draws the trace controls and results panel.

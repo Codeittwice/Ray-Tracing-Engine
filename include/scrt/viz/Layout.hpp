@@ -37,7 +37,10 @@ inline LayoutRects compute_layout(ImVec2 display, float top_offset = 0.0f,
     // Design sizes, in pixels at 96 DPI, multiplied up for the display's scale factor. Without
     // that the left column is a 360px sliver of a 3840px-wide 4K framebuffer.
     const float kMargin      = 0.0f;   // panels sit flush against the window edges
-    const float kLeftWidth   = 360.0f * scale;
+    // 390, not 360: the workspace column gained a fourth tab in Wave 3 (Library), and at 360
+    // ImGui clipped every tab label to "Scen...", "Libra...". Thirty pixels is invisible to the
+    // 3D area and buys four legible tabs.
+    const float kLeftWidth   = 390.0f * scale;
     const float kRightWidth  = 440.0f * scale;
     const float kMinViewport = 320.0f * scale;
 

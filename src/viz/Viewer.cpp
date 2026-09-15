@@ -262,6 +262,18 @@ void Viewer::apply_element_ops() {
                     if (id != 0) adopt_element(id);
                     break;
                 }
+                case ElementOp::Kind::AddMaterial:
+                    // Nothing to adopt: a material is not drawn on its own, only through the
+                    // surfaces that borrow it.
+                    editor_->add_material(op.material);
+                    break;
+                case ElementOp::Kind::AddSource:
+                    // Applied in queue order, so a source added after elements in the same
+                    // frame sees them: a sun asking for an auto-fitted aperture needs that.
+                    editor_->add_source(op.source);
+                    need_rebuild_ = true;
+                    need_retrace_ = true;
+                    break;
                 case ElementOp::Kind::Remove:
                     // View first, then the thing itself. The structure registry is keyed by id
                     // rather than by pointer so the order is not load-bearing, but dropping the
@@ -480,14 +492,32 @@ PanelContext Viewer::make_panel_context() {
         // All three are QUEUED, not applied — see pending_element_ops_. They return only whether
         // the request was accepted, because the element does not exist yet when they return.
         ctx.add_element = [this](io::ElementDoc d) {
-            pending_element_ops_.push_back({ElementOp::Kind::Add, 0, std::move(d)});
+            pending_element_ops_.push_back({ElementOp::Kind::Add, 0, std::move(d), {}, {}});
             return true;
         };
         ctx.remove_element = [this](std::uint64_t id) {
-            pending_element_ops_.push_back({ElementOp::Kind::Remove, id, {}});
+            pending_element_ops_.push_back({ElementOp::Kind::Remove, id, {}, {}, {}});
         };
         ctx.duplicate_element = [this](std::uint64_t id) {
-            pending_element_ops_.push_back({ElementOp::Kind::Duplicate, id, {}});
+            pending_element_ops_.push_back({ElementOp::Kind::Duplicate, id, {}, {}, {}});
+        };
+        ctx.add_material = [this](io::MaterialDoc m) {
+            // Refused here rather than at apply time so the panel can report it on the click.
+            // A duplicate id is the common case - the same component dropped twice - and is not
+            // an error, but the caller still needs to know nothing was added.
+            if (m.id.empty()) return false;
+            if (editor_) {
+                for (const auto& d : editor_->doc().materials)
+                    if (d.id == m.id) return false;
+            }
+            pending_element_ops_.push_back(
+                {ElementOp::Kind::AddMaterial, 0, {}, std::move(m), {}});
+            return true;
+        };
+        ctx.add_source = [this](io::SourceDoc s) {
+            pending_element_ops_.push_back(
+                {ElementOp::Kind::AddSource, 0, {}, {}, std::move(s)});
+            return true;
         };
     }
 
@@ -556,7 +586,7 @@ void Viewer::draw_gui() {
                        ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None;
         };
 
-        if (ImGui::BeginTabItem(ICON_FA_LAYER_GROUP "  Scene", nullptr, wants("Scene"))) {
+        if (ImGui::BeginTabItem(ICON_FA_LAYER_GROUP " Scene", nullptr, wants("Scene"))) {
             draw_outliner_panel(ctx, /*boxed=*/false);   // selection only: no scene mutation
             ImGui::Spacing();
             ImGui::BeginDisabled(busy);
@@ -565,14 +595,20 @@ void Viewer::draw_gui() {
             ImGui::EndDisabled();
             ImGui::EndTabItem();
         }
-        if (ImGui::BeginTabItem(ICON_FA_PALETTE "  Design", nullptr, wants("Design"))) {
+        if (ImGui::BeginTabItem(ICON_FA_CUBE " Library", nullptr, wants("Library"))) {
+            ImGui::BeginDisabled(busy);
+            draw_library_panel(ctx);
+            ImGui::EndDisabled();
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem(ICON_FA_PALETTE " Design", nullptr, wants("Design"))) {
             ImGui::BeginDisabled(busy);
             draw_materials_panel(ctx);
             draw_import_panel(ctx);
             ImGui::EndDisabled();
             ImGui::EndTabItem();
         }
-        if (ImGui::BeginTabItem(ICON_FA_PLAY "  Simulate", nullptr, wants("Simulate"))) {
+        if (ImGui::BeginTabItem(ICON_FA_PLAY " Simulate", nullptr, wants("Simulate"))) {
             ImGui::BeginDisabled(busy);
             draw_sun_panel(ctx);
             ImGui::EndDisabled();

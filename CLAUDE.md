@@ -144,7 +144,7 @@ and passed.
 - [x] Stage 3 - `beam_splitter` material: designed R, absorptance, `Split` at every angle
 - [x] Stage 4 - `thick_lens` closed solid (two caps + rim); Sellmeier presets for N-SF11, PMMA, polycarbonate, soda-lime, low-iron, water (G2)
 - [x] Stage 5 - `diffuser` material (Lambertian, albedo); realistic blacks are low-albedo diffusers (G1)
-- [ ] Stage 6 - material library (presets + user entries beside the AI config), component catalogue, `examples/optical_bench.json`
+- [x] Stage 6 - material library (presets + user entries beside the AI config), component catalogue, `examples/optical_bench.json`
 
 ### The measurement Wave 1 settled, worth not repeating
 
@@ -175,6 +175,30 @@ nobody had ever looked at the app on a high-DPI screen.
 Agreed design: dark default with a light option; a floating circular button opening a modal
 overlay for the assistant; import/export share that styling but use the native Windows dialog;
 Polyscope's own panels hidden with per-panel toggles in Settings.
+
+### The library tab (Wave 3 Stage 6)
+
+A fourth tab in the workspace column: **Components**, **Materials**, **Light sources**.
+`src/viz/Library.cpp` holds the entries as data; `src/viz/panels/LibraryPanel.cpp` draws them.
+Clicking a component adds the material it needs (when the scene lacks it) and then the element,
+both through the Viewer's existing deferred queue, which `ElementOp` grew two cases for.
+
+**Every row must behave as its name says, and `tests/test_library.cpp` is what enforces it.**
+It parses each material entry in strict mode, builds it, drops EVERY component into a real
+`SceneEditor` scene, and requires the result to survive a strict save and reload. A row with an
+invented key or an impossible lens would fail there rather than on a user's click. The entries
+the engine cannot honour are absent by design: a polarising beam splitter, a dichroic, a
+ground-glass (transmissive) diffuser and a brushed-metal lobe. Gold and the dielectric laser
+mirror ARE shipped, with their band or design wavelength in the name, because one number is
+honest there and nowhere else.
+
+User entries live in `%APPDATA%\solar-cooker-rt\materials.json`, beside the AI config. The
+panel both reads and WRITES it ("Keep this scene's materials in my library"); shipping only the
+read path would have left half the feature dead, and the round trip is in the test.
+
+**`kLeftWidth` went 360 -> 390 in `Layout.hpp`.** A fourth tab did not fit: ImGui clipped every
+label to "Scen...", "Libra..." and showed a tooltip with the full name. Found by screenshot, not
+by reading - the four-tab bar looks fine in source.
 
 ### The scene assistant
 
