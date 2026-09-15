@@ -94,6 +94,20 @@ TEST_CASE("assistant prompt: every surface type it offers is a real one") {
         CHECK_NOTHROW(scrt::io::parse_document(
             document_with_surface({{"type", "sphere"}, {"radius", 0.2}}), true));
     }
+    SUBCASE("disk") {
+        CHECK_NOTHROW(scrt::io::parse_document(
+            document_with_surface({{"type", "disk"}, {"radius", 0.0127}, {"hole_radius", 0.002}}),
+            true));
+        CHECK_NOTHROW(scrt::io::parse_document(
+            document_with_surface({{"type", "disk"}, {"radius", 0.0254}}), true));
+    }
+    SUBCASE("slit_plate") {
+        CHECK_NOTHROW(scrt::io::parse_document(
+            document_with_surface({{"type", "slit_plate"}, {"half_width", 0.02},
+                                   {"half_height", 0.02}, {"slit_width", 0.0001},
+                                   {"slit_count", 2}, {"slit_pitch", 0.0005}}),
+            true));
+    }
     SUBCASE("paraboloid") {
         CHECK_NOTHROW(scrt::io::parse_document(
             document_with_surface({{"type", "paraboloid"},

@@ -98,6 +98,26 @@ json surface_to_json(const SurfaceDoc& sd) {
                 j["scale_to_meters"] = md.scale_to_meters;
                 return j;
             },
+            [](const DiskDoc& dd) {
+                json j;
+                j["type"] = "disk";
+                j["radius"] = dd.radius;
+                // Emitted only when it means something, so a solid disk stays two keys.
+                if (dd.hole_radius > 0.0)
+                    j["hole_radius"] = dd.hole_radius;
+                return j;
+            },
+            [](const SlitPlateDoc& sp) {
+                json j;
+                j["type"] = "slit_plate";
+                j["half_width"] = sp.half_width;
+                j["half_height"] = sp.half_height;
+                j["slit_width"] = sp.slit_width;
+                j["slit_count"] = sp.slit_count;
+                if (sp.slit_count > 1)
+                    j["slit_pitch"] = sp.slit_pitch;
+                return j;
+            },
         },
         sd);
 }

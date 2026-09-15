@@ -43,6 +43,22 @@ struct PlaneDoc {
     double half_height{0.5};  ///< Metres. SceneLoader.cpp:80.
 };
 
+/// Flat circular plate, optionally with a concentric hole (an iris). Wave 3, gap G3.
+struct DiskDoc {
+    double radius{0.0127};     ///< Metres. Required key.
+    double hole_radius{0.0};   ///< Metres; 0 for a solid disk. Must be < radius.
+};
+
+/// Flat rectangular plate with `slit_count` open slots of `slit_width`, `slit_pitch` apart,
+/// running the full local height. Wave 3, gap G3; the Wave 6 slit demos.
+struct SlitPlateDoc {
+    double half_width{0.02};
+    double half_height{0.02};
+    double slit_width{0.0001};   ///< Metres. Required key.
+    int    slit_count{1};
+    double slit_pitch{0.0};      ///< Metres; required when slit_count > 1.
+};
+
 /// Sphere surface. SceneLoader.cpp "sphere" (lines 83-86).
 struct SphereDoc {
     double radius{0.5};  ///< Metres. Required key in SceneLoader.cpp (no loader default);
@@ -89,7 +105,7 @@ struct MeshDoc {
 
 /// Discriminated union of every surface geometry SceneLoader.cpp can parse under `surface.type`.
 using SurfaceDoc = std::variant<PlaneDoc, SphereDoc, ParaboloidDoc, CylParaboloidDoc,
-                                 QuadricDoc, FresnelZoneLensDoc, MeshDoc>;
+                                 QuadricDoc, FresnelZoneLensDoc, MeshDoc, DiskDoc, SlitPlateDoc>;
 
 /// One placed, named, materialed piece of scene geometry. SceneLoader.cpp "elements" (lines
 /// 255-273).

@@ -17,6 +17,8 @@
 #include "scrt/sources/Laser.hpp"
 #include "scrt/sources/Pillbox.hpp"
 #include "scrt/surfaces/CylindricalParaboloid.hpp"
+#include "scrt/surfaces/Disk.hpp"
+#include "scrt/surfaces/SlitPlate.hpp"
 #include "scrt/surfaces/FresnelZoneLens.hpp"
 #include "scrt/surfaces/GeneralQuadric.hpp"
 #include "scrt/surfaces/Paraboloid.hpp"
@@ -110,6 +112,12 @@ std::unique_ptr<surfaces::Surface> build_surface(const SurfaceDoc& sd,
             } else if constexpr (std::is_same_v<T, FresnelZoneLensDoc>) {
                 return std::make_unique<surfaces::FresnelZoneLens>(
                     s.focal_length_m, s.inner_radius_m, s.pitch_m, s.n_zones, s.n_lens);
+            } else if constexpr (std::is_same_v<T, DiskDoc>) {
+                return std::make_unique<surfaces::Disk>(s.radius, s.hole_radius);
+            } else if constexpr (std::is_same_v<T, SlitPlateDoc>) {
+                return std::make_unique<surfaces::SlitPlate>(s.half_width, s.half_height,
+                                                              s.slit_width, s.slit_count,
+                                                              s.slit_pitch);
             } else if constexpr (std::is_same_v<T, MeshDoc>) {
                 auto imp = import_mesh(base_dir / s.path, s.scale_to_meters);
                 return std::make_unique<surfaces::TriangleMesh>(std::move(imp.vertices),

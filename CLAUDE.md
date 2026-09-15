@@ -130,7 +130,7 @@ corpus diff; the tracer, `plane` and every existing material are untouched in th
 
 - [x] Stage 0 - baseline: 96-scene corpus captured twice at HEAD, identical; suite green
 - [x] Stage 1 - `SceneEditor::add_material/remove_material/add_source/remove_source`; `io::build_material` and `io::build_source` factored out of `build_scene` so the editor and a file load derive through one builder
-- [ ] Stage 2 - gap G3: `disk` (optional hole = iris) and `slit_plate` surfaces, new types so `plane` is untouched; parser, writer, loader, prompt and schema test
+- [x] Stage 2 - gap G3: `disk` (optional hole = iris) and `slit_plate` surfaces, new types so `plane` is untouched; parser, writer, loader, prompt and schema test
 **Engine bug found by Stage 2's first real scene, fixed in its own commit:** the accumulator
 overload of `Tracer::trace_one` (headless, `scrt_compare`, the GUI preview) deposited on ANY
 absorbed hit, binned by that surface's own local coordinates, so an absorbing iris in front of the

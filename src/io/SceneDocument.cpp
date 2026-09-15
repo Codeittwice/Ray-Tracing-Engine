@@ -126,6 +126,38 @@ SurfaceDoc parse_surface_doc(const json& sj, bool strict) {
         d.half_height = sj.value("half_height", 0.5);
         return d;
     }
+    if (type == "disk") {
+        if (strict)
+            reject_unknown_keys(sj, {"type", "radius", "hole_radius"}, "surface.disk");
+        require(sj.contains("radius"), "disk missing 'radius'");
+        DiskDoc d;
+        d.radius = sj["radius"].get<double>();
+        d.hole_radius = sj.value("hole_radius", 0.0);
+        require(std::isfinite(d.radius) && d.radius > 0.0, "disk 'radius' must be > 0");
+        require(std::isfinite(d.hole_radius) && d.hole_radius >= 0.0 && d.hole_radius < d.radius,
+                "disk 'hole_radius' must satisfy 0 <= hole_radius < radius");
+        return d;
+    }
+    if (type == "slit_plate") {
+        if (strict)
+            reject_unknown_keys(sj, {"type", "half_width", "half_height", "slit_width",
+                                     "slit_count", "slit_pitch"}, "surface.slit_plate");
+        require(sj.contains("slit_width"), "slit_plate missing 'slit_width'");
+        SlitPlateDoc d;
+        d.half_width  = sj.value("half_width", 0.02);
+        d.half_height = sj.value("half_height", 0.02);
+        d.slit_width  = sj["slit_width"].get<double>();
+        d.slit_count  = sj.value("slit_count", 1);
+        d.slit_pitch  = sj.value("slit_pitch", 0.0);
+        require(d.slit_count >= 1, "slit_plate 'slit_count' must be >= 1");
+        require(d.slit_width > 0.0, "slit_plate 'slit_width' must be > 0");
+        if (d.slit_count > 1) {
+            require(sj.contains("slit_pitch"), "slit_plate with several slots needs 'slit_pitch'");
+            require(d.slit_pitch > d.slit_width,
+                    "slit_plate 'slit_pitch' must exceed 'slit_width' or the slots merge");
+        }
+        return d;
+    }
     if (type == "sphere") {
         if (strict)
             reject_unknown_keys(sj, {"type", "radius"}, "surface.sphere");

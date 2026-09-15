@@ -91,6 +91,8 @@ SURFACE TYPES - use ONLY these, with exactly these keys
 - cylindrical_paraboloid  focal_length_m, aperture_half_width_m, aperture_half_length_m  (a trough)
 - fresnel_zone_lens       focal_length_m, inner_radius_m, pitch_m, n_zones, n_lens
 - quadric                 coeffs {A..J}, aperture_box {min:[x,y,z], max:[x,y,z]}
+- disk                    radius, hole_radius (optional; 0 = solid)  (a round plate; with a hole, an iris)
+- slit_plate              half_width, half_height, slit_width, slit_count, slit_pitch (needed if count > 1)
 Do NOT use a "mesh" surface: it needs a file on disk that you cannot supply.
 
 MATERIAL TYPES - use ONLY these, with exactly these keys and no others
