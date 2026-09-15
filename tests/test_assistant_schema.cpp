@@ -168,6 +168,14 @@ TEST_CASE("assistant prompt: every material type it offers is a real one") {
     CHECK(parsed.materials.size() == 5);
 }
 
+TEST_CASE("assistant prompt: diffuser takes exactly albedo") {
+    json doc = json::parse(kPromptExample);
+    doc["scene"]["materials"].push_back({{"id", "white"}, {"type", "diffuser"}, {"albedo", 0.8}});
+    CHECK_NOTHROW(scrt::io::parse_document(doc, true));
+    doc["scene"]["materials"].back()["reflectance"] = 0.8;
+    CHECK_THROWS(scrt::io::parse_document(doc, true));
+}
+
 TEST_CASE("assistant prompt: beam_splitter takes exactly reflectance and absorptance") {
     json doc = json::parse(kPromptExample);
     doc["scene"]["materials"].push_back(

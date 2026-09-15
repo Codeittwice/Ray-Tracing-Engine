@@ -2,6 +2,7 @@
 #include "scrt/scene/SceneEditor.hpp"
 
 #include "scrt/materials/BeamSplitter.hpp"
+#include "scrt/materials/Diffuser.hpp"
 #include "scrt/materials/Dielectric.hpp"
 #include "scrt/materials/RealMirror.hpp"
 
@@ -111,6 +112,21 @@ void draw_materials_panel(PanelContext& ctx) {
                         "This is why a thick lens can beat a thin one on focusing and "
                         "still deliver less power.");
 
+                    ImGui::Unindent();
+                } else if (auto* df = dynamic_cast<materials::Diffuser*>(mat_ptr.get())) {
+                    float alb = static_cast<float>(df->albedo());
+                    ImGui::Indent();
+                    if (ImGui::SliderFloat("Albedo##df", &alb, 0.0f, 1.0f))
+                        set_param(mat_id, "albedo", alb);
+                    tip("The share of light a matte surface sends back, scattered evenly in "
+                        "every direction rather than bounced like a mirror.\n\n"
+                        "A white calibration standard is 0.99, matte white paint 0.85, white "
+                        "card 0.80. Matte black stove paint is about 0.04, which is how a "
+                        "realistic black surface is modelled here: it keeps 96% and returns a "
+                        "few percent into the scene, where the ideal absorber returns none.\n\n"
+                        "This scatters over the whole hemisphere (Lambert's cosine law). A "
+                        "ground-glass diffuser, which scatters in transmission, and a brushed "
+                        "metal lobe are different models and are not implemented yet.");
                     ImGui::Unindent();
                 } else if (auto* bs = dynamic_cast<materials::BeamSplitter*>(mat_ptr.get())) {
                     float refl = static_cast<float>(bs->reflectance());

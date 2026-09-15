@@ -105,6 +105,9 @@ MATERIAL TYPES - use ONLY these, with exactly these keys and no others
                           "pmma" or "polycarbonate" for dispersion)  (glass; use only if genuinely needed)
 - thin_dielectric_pane    n, thickness_m, absorption_per_m
 - beam_splitter           reflectance, absorptance    (a designed split at every angle; the rest passes straight through)
+- diffuser                albedo    (matte: scatters over the whole hemisphere. White card 0.8; matte
+                          black paint 0.04, which is how a REALISTIC black surface is written - "absorber"
+                          is the ideal one that swallows everything)
 
 TRANSFORMS
 "transform" takes any of: "translation" [x,y,z], "rotation_euler_deg" [rx,ry,rz] (applied X then

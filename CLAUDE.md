@@ -143,7 +143,7 @@ and passed.
 
 - [x] Stage 3 - `beam_splitter` material: designed R, absorptance, `Split` at every angle
 - [x] Stage 4 - `thick_lens` closed solid (two caps + rim); Sellmeier presets for N-SF11, PMMA, polycarbonate, soda-lime, low-iron, water (G2)
-- [ ] Stage 5 - `diffuser` material (Lambertian, albedo); realistic blacks are low-albedo diffusers (G1)
+- [x] Stage 5 - `diffuser` material (Lambertian, albedo); realistic blacks are low-albedo diffusers (G1)
 - [ ] Stage 6 - material library (presets + user entries beside the AI config), component catalogue, `examples/optical_bench.json`
 
 ### The measurement Wave 1 settled, worth not repeating
