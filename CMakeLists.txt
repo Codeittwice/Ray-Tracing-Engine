@@ -164,6 +164,7 @@ target_sources(scrt_tests PRIVATE
     tests/test_mesh_import.cpp
     tests/test_sun_validation.cpp
     tests/test_assistant_schema.cpp
+    tests/test_split_paths.cpp
 )
 
 target_compile_definitions(scrt_tests PRIVATE

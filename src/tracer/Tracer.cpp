@@ -15,19 +15,24 @@
 namespace scrt::tracer {
 
 void Tracer::trace_one(core::Ray r, FluxAccumulator& acc, math::Rng& rng,
-                       std::vector<math::vec3>* path, int max_bounces,
+                       RayPath* path, std::uint32_t parent_node, int max_bounces,
                        double power_cutoff, std::size_t& hit_count) const {
-    if (path)
-        path->push_back(r.origin);
-
     for (int b = 0; b < max_bounces; ++b) {
         core::Hit h;
         if (!scene_->intersect(r, scrt::math::EPSILON_T,
                                std::numeric_limits<double>::max(), h))
             return;
 
-        if (path)
-            path->push_back(h.position);
+        if (path) {
+            // One node per hit, one edge from wherever this ray came from. Recording the edge's
+            // power here (before the material acts) is what lets the renderer show how much
+            // light each branch of a split actually carries.
+            const auto node = static_cast<std::uint32_t>(path->nodes.size());
+            path->nodes.push_back(h.position);
+            path->edges.push_back({parent_node, node});
+            path->edge_power_w.push_back(r.power);
+            parent_node = node;
+        }
 
         ++hit_count;
 
@@ -43,8 +48,17 @@ void Tracer::trace_one(core::Ray r, FluxAccumulator& acc, math::Rng& rng,
                 r = inter.transmitted;
                 break;
             case materials::InteractionKind::Split:
+                // `max_bounces - b - 1` is the budget this ray has LEFT, not a fresh one. The
+                // reflected branch used to restart at max_bounces, so total path length was
+                // bounded only by the power cutoff and a cascade of splitters could branch
+                // without limit. Measured before changing it: on the only golden scene that
+                // splits, the deepest total path is 2 against a limit of 8, so no result moves.
+                //
+                // Still a recursive call, deliberately. Rewriting this as an explicit stack
+                // would reorder the RNG draws - today the whole reflected sub-tree is traced
+                // before the transmitted ray continues - and every dielectric scene would shift.
                 if (inter.reflected.power >= power_cutoff)
-                    trace_one(inter.reflected, acc, rng, path, max_bounces,
+                    trace_one(inter.reflected, acc, rng, path, parent_node, max_bounces - b - 1,
                               power_cutoff, hit_count);
                 r = inter.transmitted;
                 break;
@@ -55,19 +69,24 @@ void Tracer::trace_one(core::Ray r, FluxAccumulator& acc, math::Rng& rng,
 }
 
 void Tracer::trace_one(core::Ray r, scene::Receiver& receiver, math::Rng& rng,
-                       std::vector<math::vec3>* path, int max_bounces,
+                       RayPath* path, std::uint32_t parent_node, int max_bounces,
                        double power_cutoff, std::size_t& hit_count) const {
-    if (path)
-        path->push_back(r.origin);
-
     for (int b = 0; b < max_bounces; ++b) {
         core::Hit h;
         if (!scene_->intersect(r, scrt::math::EPSILON_T,
                                std::numeric_limits<double>::max(), h))
             return;
 
-        if (path)
-            path->push_back(h.position);
+        if (path) {
+            // One node per hit, one edge from wherever this ray came from. Recording the edge's
+            // power here (before the material acts) is what lets the renderer show how much
+            // light each branch of a split actually carries.
+            const auto node = static_cast<std::uint32_t>(path->nodes.size());
+            path->nodes.push_back(h.position);
+            path->edges.push_back({parent_node, node});
+            path->edge_power_w.push_back(r.power);
+            parent_node = node;
+        }
 
         ++hit_count;
 
@@ -98,8 +117,8 @@ void Tracer::trace_one(core::Ray r, scene::Receiver& receiver, math::Rng& rng,
                 break;
             case materials::InteractionKind::Split:
                 if (inter.reflected.power >= power_cutoff)
-                    trace_one(inter.reflected, receiver, rng, path, max_bounces,
-                              power_cutoff, hit_count);
+                    trace_one(inter.reflected, receiver, rng, path, parent_node,
+                              max_bounces - b - 1, power_cutoff, hit_count);
                 r = inter.transmitted;
                 break;
         }
@@ -181,8 +200,8 @@ TraceResult Tracer::run(const TraceConfig& cfg, TraceControl* ctl) const {
                 check_due = false;
             }
 
-            std::vector<math::vec3>* path_ptr = nullptr;
-            std::vector<math::vec3> path_buf;
+            RayPath* path_ptr = nullptr;
+            RayPath  path_buf;
 
             {
                 if (cfg.record_paths) {
@@ -196,10 +215,11 @@ TraceResult Tracer::run(const TraceConfig& cfg, TraceControl* ctl) const {
             r.power     = ray_power;
             r.id        = static_cast<std::uint32_t>(ray_start + i);
 
-            trace_one(r, slot_receiver, slot_rng, path_ptr, cfg.max_bounces,
+            if (path_ptr) path_buf.nodes.push_back(r.origin);   // node 0: where the ray began
+            trace_one(r, slot_receiver, slot_rng, path_ptr, 0u, cfg.max_bounces,
                       cfg.power_cutoff_w, hits);
 
-            if (path_ptr && !path_buf.empty()) {
+            if (path_ptr && !path_buf.edges.empty()) {
                 std::lock_guard<std::mutex> lk(path_mutex);
                 if (result.sampled_paths.size() < cfg.max_paths_to_record)
                     result.sampled_paths.push_back(std::move(path_buf));
@@ -305,8 +325,8 @@ TraceResult Tracer::run(const TraceConfig& cfg, FluxAccumulator& acc, TraceContr
                 check_due = false;
             }
 
-            std::vector<math::vec3>* path_ptr = nullptr;
-            std::vector<math::vec3> path_buf;
+            RayPath* path_ptr = nullptr;
+            RayPath  path_buf;
 
             {
                 // Only record paths if budget allows (check under lock, record outside)
@@ -321,10 +341,11 @@ TraceResult Tracer::run(const TraceConfig& cfg, FluxAccumulator& acc, TraceContr
             r.power     = ray_power;
             r.id        = static_cast<std::uint32_t>(ray_start + i);
 
-            trace_one(r, slot_acc, slot_rng, path_ptr, cfg.max_bounces,
+            if (path_ptr) path_buf.nodes.push_back(r.origin);   // node 0: where the ray began
+            trace_one(r, slot_acc, slot_rng, path_ptr, 0u, cfg.max_bounces,
                       cfg.power_cutoff_w, hits);
 
-            if (path_ptr && !path_buf.empty()) {
+            if (path_ptr && !path_buf.edges.empty()) {
                 std::lock_guard<std::mutex> lk(path_mutex);
                 if (result.sampled_paths.size() < cfg.max_paths_to_record)
                     result.sampled_paths.push_back(std::move(path_buf));

@@ -196,13 +196,17 @@ void RayRenderer::register_paths(const tracer::TraceResult& result) {
     std::vector<std::array<double, 3>>  nodes;
     std::vector<std::array<std::size_t, 2>> edges;
 
+    // A path is a tree now, so its edges are given rather than implied by adjacency. The old
+    // "join consecutive points" loop drew a split as a line that ran out along the reflected
+    // branch and then jumped back to the split point - a picture of something that never
+    // happened, and about to become the common case once beam splitters exist.
     for (const auto& path : result.sampled_paths) {
-        if (path.size() < 2) continue;
-        std::size_t base = nodes.size();
-        for (const auto& p : path)
+        if (path.edges.empty()) continue;
+        const std::size_t base = nodes.size();
+        for (const auto& p : path.nodes)
             nodes.push_back({p.x, p.y, p.z});
-        for (std::size_t i = 0; i + 1 < path.size(); ++i)
-            edges.push_back({base + i, base + i + 1});
+        for (const auto& e : path.edges)
+            edges.push_back({base + e[0], base + e[1]});
     }
 
     if (nodes.empty()) return;

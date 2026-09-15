@@ -3,6 +3,7 @@
 #include "scrt/math/Rng.hpp"
 #include "scrt/math/Vec.hpp"
 #include <atomic>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -26,13 +27,32 @@ struct TraceConfig {
     int           num_threads          = 0;        ///< 0 → std::thread::hardware_concurrency
 };
 
+/// One primary ray's full history, as a TREE rather than a polyline.
+///
+/// A splitting surface sends a ray two ways at once, so a single sequence of points cannot
+/// describe what happened. It used to be one: both branches appended to the same vector, and the
+/// renderer drew consecutive points, so a split path was drawn as a line that ran out along the
+/// reflected branch and then teleported back to the split point to continue transmitted. With a
+/// beam splitter that is not a cosmetic flaw, it is a picture of something that did not happen.
+///
+/// INVARIANT: `edges` forms a tree rooted at node 0 (the emission point). Every node except 0
+/// appears exactly once as an edge's `to`.
+struct RayPath {
+    std::vector<math::vec3>                   nodes;         ///< nodes[0] is where the ray began.
+    std::vector<std::array<std::uint32_t, 2>> edges;         ///< (from, to) indices into nodes.
+    /// Power carried along each edge [W], parallel to `edges`. The only way a reader can tell a
+    /// 4%-reflected branch from a 96%-transmitted one, which is the point of looking at a beam
+    /// splitter at all.
+    std::vector<double>                       edge_power_w;
+};
+
 /// Summary returned after a completed run.
 struct TraceResult {
-    std::size_t                           primary_rays_traced = 0;
-    std::size_t                           total_hits          = 0;
-    double                                wall_time_s         = 0.0;
-    std::vector<std::vector<math::vec3>>  sampled_paths;
-    bool                                  cancelled           = false; ///< Stopped early on request.
+    std::size_t          primary_rays_traced = 0;
+    std::size_t          total_hits          = 0;
+    double               wall_time_s         = 0.0;
+    std::vector<RayPath> sampled_paths;
+    bool                 cancelled           = false; ///< Stopped early on request.
 };
 
 /// Cancellation and progress channel for one in-flight run; opt-in, never owned by the tracer.
@@ -108,12 +128,15 @@ public:
                     TraceControl* ctl = nullptr) const;
 
 private:
+    /// `parent_node` is the index in `path_out->nodes` this ray leaves from; a split's reflected
+    /// branch is recursed with the split point as its parent, which is what makes the record a
+    /// tree. Ignored when `path_out` is null.
     void trace_one(core::Ray r, FluxAccumulator& acc, math::Rng& rng,
-                   std::vector<math::vec3>* path_out, int max_bounces,
+                   RayPath* path_out, std::uint32_t parent_node, int max_bounces,
                    double power_cutoff, std::size_t& hit_count) const;
 
     void trace_one(core::Ray r, scene::Receiver& acc, math::Rng& rng,
-                   std::vector<math::vec3>* path_out, int max_bounces,
+                   RayPath* path_out, std::uint32_t parent_node, int max_bounces,
                    double power_cutoff, std::size_t& hit_count) const;
 
     const scene::Scene* scene_;
