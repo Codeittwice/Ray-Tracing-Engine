@@ -131,6 +131,16 @@ corpus diff; the tracer, `plane` and every existing material are untouched in th
 - [x] Stage 0 - baseline: 96-scene corpus captured twice at HEAD, identical; suite green
 - [x] Stage 1 - `SceneEditor::add_material/remove_material/add_source/remove_source`; `io::build_material` and `io::build_source` factored out of `build_scene` so the editor and a file load derive through one builder
 - [ ] Stage 2 - gap G3: `disk` (optional hole = iris) and `slit_plate` surfaces, new types so `plane` is untouched; parser, writer, loader, prompt and schema test
+**Engine bug found by Stage 2's first real scene, fixed in its own commit:** the accumulator
+overload of `Tracer::trace_one` (headless, `scrt_compare`, the GUI preview) deposited on ANY
+absorbed hit, binned by that surface's own local coordinates, so an absorbing iris in front of the
+screen was booked as light ON the screen and a headless trace read the full beam power. The
+receiver overload (the goldens) deposited only on receiver faces. Now both do. No shipped scene
+binds an absorber to an element, which is why the corpus never showed it and why the fix moves
+no corpus result; `tests/test_apertures.cpp` pins the two overloads equal with `==`. Found by
+measuring, not by reading: the unit tests built the scene by hand through the receiver overload
+and passed.
+
 - [ ] Stage 3 - `beam_splitter` material: designed R, absorptance, `Split` at every angle
 - [ ] Stage 4 - `thick_lens` closed solid (two caps + rim); Sellmeier presets for N-SF11, PMMA, polycarbonate, soda-lime, low-iron, water (G2)
 - [ ] Stage 5 - `diffuser` material (Lambertian, albedo); realistic blacks are low-albedo diffusers (G1)

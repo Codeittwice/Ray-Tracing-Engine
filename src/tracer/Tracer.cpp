@@ -37,10 +37,23 @@ void Tracer::trace_one(core::Ray r, FluxAccumulator& acc, math::Rng& rng,
 
         ++hit_count;
 
+        // Deposit only on the receiver's own faces, as the receiver overload below does. This
+        // overload used to deposit on ANY absorbed hit, binned by that surface's own local
+        // coordinates, so a black iris or a beam dump anywhere in the scene was booked as
+        // light on the screen. No shipped scene binds an absorber to an element, which is why
+        // the corpus never showed it and why this change moves no corpus result. Every
+        // receiver face is treated as record-and-stop here, as it always was.
+        const int face_index = scene_->receiver()
+            ? scene_->receiver()->face_index_for_surface(h.surface)
+            : -1;
+        if (face_index >= 0) {
+            acc.deposit(r, h);
+            return;
+        }
+
         auto inter = h.surface->material()->interact(r, h, rng);
         switch (inter.kind) {
             case materials::InteractionKind::Absorbed:
-                acc.deposit(r, h);
                 return;
             case materials::InteractionKind::Reflected:
                 r = inter.reflected;
