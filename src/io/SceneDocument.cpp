@@ -1,4 +1,5 @@
 #include "scrt/io/SceneDocument.hpp"
+#include "scrt/materials/Dielectric.hpp"
 #include "scrt/math/Constants.hpp"
 #include "scrt/sources/SunSource.hpp"
 #include <algorithm>
@@ -84,7 +85,7 @@ void validate_material_strict(const std::string& type, const json& params) {
     }
     if (type == "dielectric" && params.contains("sellmeier")) {
         std::string preset = params["sellmeier"].get<std::string>();
-        require(preset == "bk7" || preset == "fused_silica",
+        require(materials::SellmeierCoeffs::by_name(preset).has_value(),
                 "unknown Sellmeier preset '" + preset + "'");
     }
 }
@@ -125,6 +126,25 @@ SurfaceDoc parse_surface_doc(const json& sj, bool strict) {
         PlaneDoc d;
         d.half_width = sj.value("half_width", 0.5);
         d.half_height = sj.value("half_height", 0.5);
+        return d;
+    }
+    if (type == "thick_lens") {
+        if (strict)
+            reject_unknown_keys(sj, {"type", "radius1", "radius2", "center_thickness_m",
+                                     "diameter_m"}, "surface.thick_lens");
+        require(sj.contains("radius1"), "thick_lens missing 'radius1'");
+        require(sj.contains("center_thickness_m"), "thick_lens missing 'center_thickness_m'");
+        require(sj.contains("diameter_m"), "thick_lens missing 'diameter_m'");
+        ThickLensDoc d;
+        d.radius1 = sj["radius1"].get<double>();
+        d.radius2 = sj.value("radius2", 0.0);
+        d.center_thickness_m = sj["center_thickness_m"].get<double>();
+        d.diameter_m = sj["diameter_m"].get<double>();
+        require(d.center_thickness_m > 0.0 && d.diameter_m > 0.0,
+                "thick_lens thickness and diameter must be > 0");
+        for (double r : {d.radius1, d.radius2})
+            require(r == 0.0 || std::abs(r) >= 0.5 * d.diameter_m,
+                    "thick_lens: a nonzero radius must be at least the half-diameter");
         return d;
     }
     if (type == "disk") {

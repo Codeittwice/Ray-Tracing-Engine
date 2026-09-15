@@ -4,6 +4,7 @@
 #include "scrt/optics/Reflect.hpp"
 #include "scrt/optics/Refract.hpp"
 #include <optional>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -24,6 +25,36 @@ struct SellmeierCoeffs {
     static SellmeierCoeffs fused_silica() {
         return {0.6961663, 0.4079426, 0.8974794,
                 0.0046791, 0.0135121, 97.934003};
+    }
+    /// Schott N-SF11 dense flint (Abbe 25.7): the prism glass. Schott's three-term fit.
+    static SellmeierCoeffs n_sf11() {
+        return {1.73759695, 0.313747346, 1.89878101,
+                0.013188707, 0.0623068142, 155.23629};
+    }
+    /// PMMA (acrylic). Sultanova et al. 2009, a one-term fit; the unused terms are zero with
+    /// poles far outside the visible so they cannot divide by zero.
+    static SellmeierCoeffs pmma() {
+        return {1.1819, 0.0, 0.0,
+                0.011313, 1.0e6, 1.0e6};
+    }
+    /// Polycarbonate. Sultanova et al. 2009, one term, as for PMMA.
+    static SellmeierCoeffs polycarbonate() {
+        return {1.4182, 0.0, 0.0,
+                0.021304, 1.0e6, 1.0e6};
+    }
+
+    /// The preset behind a JSON `"sellmeier"` name, or nullopt. The ONE list: the strict
+    /// validator and the loader both ask here, so a preset cannot exist in one and not the
+    /// other. Water, soda-lime and low-iron glass are deliberately absent: their published
+    /// fits have four terms or a Cauchy form, and this struct has three, so they ship as
+    /// constant-index dielectrics with the library saying so rather than with invented numbers.
+    static std::optional<SellmeierCoeffs> by_name(std::string_view name) {
+        if (name == "bk7")           return bk7();
+        if (name == "fused_silica")  return fused_silica();
+        if (name == "n_sf11")        return n_sf11();
+        if (name == "pmma")          return pmma();
+        if (name == "polycarbonate") return polycarbonate();
+        return std::nullopt;
     }
 };
 

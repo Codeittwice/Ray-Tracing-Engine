@@ -98,6 +98,15 @@ json surface_to_json(const SurfaceDoc& sd) {
                 j["scale_to_meters"] = md.scale_to_meters;
                 return j;
             },
+            [](const ThickLensDoc& tl) {
+                json j;
+                j["type"] = "thick_lens";
+                j["radius1"] = tl.radius1;
+                j["radius2"] = tl.radius2;
+                j["center_thickness_m"] = tl.center_thickness_m;
+                j["diameter_m"] = tl.diameter_m;
+                return j;
+            },
             [](const DiskDoc& dd) {
                 json j;
                 j["type"] = "disk";

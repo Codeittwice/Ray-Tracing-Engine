@@ -20,6 +20,7 @@
 #include "scrt/surfaces/CylindricalParaboloid.hpp"
 #include "scrt/surfaces/Disk.hpp"
 #include "scrt/surfaces/SlitPlate.hpp"
+#include "scrt/surfaces/ThickLens.hpp"
 #include "scrt/surfaces/FresnelZoneLens.hpp"
 #include "scrt/surfaces/GeneralQuadric.hpp"
 #include "scrt/surfaces/Paraboloid.hpp"
@@ -113,6 +114,9 @@ std::unique_ptr<surfaces::Surface> build_surface(const SurfaceDoc& sd,
             } else if constexpr (std::is_same_v<T, FresnelZoneLensDoc>) {
                 return std::make_unique<surfaces::FresnelZoneLens>(
                     s.focal_length_m, s.inner_radius_m, s.pitch_m, s.n_zones, s.n_lens);
+            } else if constexpr (std::is_same_v<T, ThickLensDoc>) {
+                return std::make_unique<surfaces::ThickLens>(s.radius1, s.radius2,
+                                                              s.center_thickness_m, s.diameter_m);
             } else if constexpr (std::is_same_v<T, DiskDoc>) {
                 return std::make_unique<surfaces::Disk>(s.radius, s.hole_radius);
             } else if constexpr (std::is_same_v<T, SlitPlateDoc>) {
@@ -147,10 +151,8 @@ const json params = md.params.is_object() ? md.params : json::object();
         auto di = std::make_unique<materials::Dielectric>(n, alpha);
         if (params.contains("sellmeier")) {
             std::string preset = params["sellmeier"].get<std::string>();
-            if (preset == "bk7")
-                di->set_sellmeier(materials::SellmeierCoeffs::bk7());
-            else if (preset == "fused_silica")
-                di->set_sellmeier(materials::SellmeierCoeffs::fused_silica());
+            if (auto c = materials::SellmeierCoeffs::by_name(preset))
+                di->set_sellmeier(*c);
             else
                 throw std::runtime_error(
                     "SceneLoader: unknown Sellmeier preset '" + preset + "'");

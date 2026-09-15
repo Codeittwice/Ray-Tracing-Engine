@@ -92,6 +92,8 @@ SURFACE TYPES - use ONLY these, with exactly these keys
 - fresnel_zone_lens       focal_length_m, inner_radius_m, pitch_m, n_zones, n_lens
 - quadric                 coeffs {A..J}, aperture_box {min:[x,y,z], max:[x,y,z]}
 - disk                    radius, hole_radius (optional; 0 = solid)  (a round plate; with a hole, an iris)
+- thick_lens              radius1, radius2, center_thickness_m, diameter_m  (a real lens body; signed radii,
+                          0 = flat; plano-convex is radius1 > 0, radius2 = 0; bind a dielectric material)
 - slit_plate              half_width, half_height, slit_width, slit_count, slit_pitch (needed if count > 1)
 Do NOT use a "mesh" surface: it needs a file on disk that you cannot supply.
 
@@ -99,7 +101,8 @@ MATERIAL TYPES - use ONLY these, with exactly these keys and no others
 - perfect_mirror          (no keys at all)
 - real_mirror             reflectance, slope_error_mrad
 - absorber                (no keys at all - it absorbs everything that reaches it)
-- dielectric              n, absorption_per_m           (glass; use only if genuinely needed)
+- dielectric              n, absorption_per_m, sellmeier (optional: "bk7", "fused_silica", "n_sf11",
+                          "pmma" or "polycarbonate" for dispersion)  (glass; use only if genuinely needed)
 - thin_dielectric_pane    n, thickness_m, absorption_per_m
 - beam_splitter           reflectance, absorptance    (a designed split at every angle; the rest passes straight through)
 

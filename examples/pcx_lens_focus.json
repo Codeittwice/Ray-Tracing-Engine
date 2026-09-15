@@ -1,0 +1,63 @@
+{
+    "scene": {
+        "name": "He-Ne beam through a 1-inch BK7 plano-convex lens (f = 50 mm) onto a screen at its focus",
+        "materials": [
+            {
+                "id": "n_bk7",
+                "type": "dielectric",
+                "n": 1.5168,
+                "sellmeier": "bk7"
+            },
+            {
+                "id": "black",
+                "type": "absorber"
+            }
+        ],
+        "elements": [
+            {
+                "name": "pcx_lens_f50",
+                "material": "n_bk7",
+                "surface": {
+                    "type": "thick_lens",
+                    "radius1": 0.0,
+                    "radius2": -0.0258,
+                    "center_thickness_m": 0.0053,
+                    "diameter_m": 0.0254
+                },
+                "transform": {
+                    "translation": [0.0, 0.0, 0.1]
+                }
+            }
+        ],
+        "receiver": {
+            "surface": {
+                "type": "plane",
+                "half_width": 0.01,
+                "half_height": 0.01
+            },
+            "grid": {
+                "nx": 64,
+                "ny": 64
+            },
+            "transform": {
+                "translation": [0.0, 0.0, 0.0508]
+            }
+        },
+        "sources": [
+            {
+                "type": "laser",
+                "origin": [0.0, 0.0, 0.2],
+                "direction": [0.0, 0.0, -1.0],
+                "power_w": 0.005,
+                "wavelength_nm": 632.8,
+                "beam_diameter_m": 0.008,
+                "divergence_mrad": 0.0
+            }
+        ]
+    },
+    "trace": {
+        "n_primary_rays": 200000,
+        "max_bounces": 8,
+        "rng_seed": 11
+    }
+}

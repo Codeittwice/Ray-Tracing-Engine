@@ -59,6 +59,16 @@ struct SlitPlateDoc {
     double slit_pitch{0.0};      ///< Metres; required when slit_count > 1.
 };
 
+/// A real lens body: two spherical (or flat, radius 0) faces and a rim, one closed solid.
+/// Signed radii: positive puts the centre of curvature on the +z side of that face, so
+/// bi-convex is (R, -R) and plano-convex (R, 0). Bind a dielectric material. Wave 3.
+struct ThickLensDoc {
+    double radius1{0.0258};            ///< Metres, signed; 0 = flat. Required key.
+    double radius2{0.0};               ///< Metres, signed; 0 = flat.
+    double center_thickness_m{0.0053}; ///< Required key. 5.3 mm: what a 25.8 mm radius needs over 1".
+    double diameter_m{0.0254};         ///< Required key.
+};
+
 /// Sphere surface. SceneLoader.cpp "sphere" (lines 83-86).
 struct SphereDoc {
     double radius{0.5};  ///< Metres. Required key in SceneLoader.cpp (no loader default);
@@ -105,7 +115,8 @@ struct MeshDoc {
 
 /// Discriminated union of every surface geometry SceneLoader.cpp can parse under `surface.type`.
 using SurfaceDoc = std::variant<PlaneDoc, SphereDoc, ParaboloidDoc, CylParaboloidDoc,
-                                 QuadricDoc, FresnelZoneLensDoc, MeshDoc, DiskDoc, SlitPlateDoc>;
+                                 QuadricDoc, FresnelZoneLensDoc, MeshDoc, DiskDoc, SlitPlateDoc,
+                                 ThickLensDoc>;
 
 /// One placed, named, materialed piece of scene geometry. SceneLoader.cpp "elements" (lines
 /// 255-273).

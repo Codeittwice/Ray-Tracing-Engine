@@ -101,6 +101,12 @@ TEST_CASE("assistant prompt: every surface type it offers is a real one") {
         CHECK_NOTHROW(scrt::io::parse_document(
             document_with_surface({{"type", "disk"}, {"radius", 0.0254}}), true));
     }
+    SUBCASE("thick_lens") {
+        CHECK_NOTHROW(scrt::io::parse_document(
+            document_with_surface({{"type", "thick_lens"}, {"radius1", 0.0258}, {"radius2", 0.0},
+                                   {"center_thickness_m", 0.0053}, {"diameter_m", 0.0254}}),
+            true));
+    }
     SUBCASE("slit_plate") {
         CHECK_NOTHROW(scrt::io::parse_document(
             document_with_surface({{"type", "slit_plate"}, {"half_width", 0.02},
