@@ -49,7 +49,7 @@ tools. The sun becomes one source among several; there are no modes.
 
 - [x] Wave 1 — Foundations: the scene is actually mutable
 - [x] Wave 2 — General sources; the sun stops being special
-- [ ] Wave 3 — Components and materials as libraries
+- [x] Wave 3 — Components and materials as libraries
 - [ ] Wave 4 — Representative geometry, grid and snapping
 - [ ] Wave 5 — Polarisation and interference
 - [ ] Wave 6 — Diffraction, as a second engine
@@ -121,7 +121,7 @@ cone was a small-angle sampler that accepted any angle (now exact over the cap a
 180 degrees), an all-dead-source scene returned without finalizing the receiver, and a null
 source reached an unchecked dereference. Details at the end of the design document.
 
-### Wave 3 progress (in flight)
+### What Wave 3 added (complete, shipped as v1.11.0)
 
 Decisions taken with the user before code: new surface types rather than a clip on `plane`
 (1-B); realistic absorbers are low-albedo diffusers rather than a parameter on `absorber` (2-C);
