@@ -206,7 +206,77 @@ The same two widgets should be reused, not reimplemented:
 - The **outliner's** selection read-out, for the selected object's material.
 - The **import panel**, to preview a mesh before committing it.
 
-## 4.7 Gates
+## 4.7 Drag and drop from the library into the scene
+
+Wave 3's library drops a component at a point typed into three boxes. That is precise and it is
+also the wrong first gesture: the natural one is to drag the entry and let go where you want it.
+Keep both — typed coordinates are how you place something exactly, dragging is how you place it
+roughly and then adjust.
+
+**Both halves were checked to exist before this was planned**, because the viewport is not an
+ImGui window and a plan that assumed otherwise would have been worthless:
+
+- ImGui here is **1.90.4** (Polyscope's vendored copy), which has the full
+  `BeginDragDropSource` / `BeginDragDropTarget` / `AcceptDragDropPayload` API.
+- Polyscope exposes **`view::screenCoordsToWorldPosition`** (`view.h`), which queries the depth
+  buffer, and `view::screenCoordsToWorldRay` beside it.
+
+### 4.7.1 The target problem, and the shape of the answer
+
+The 3D view is Polyscope's render surface with our ImGui windows floating over it. There is no
+ImGui item covering it, so there is nothing for a payload to be dropped onto.
+
+**Do not create a permanent invisible window over the viewport.** It would sit between the user
+and Polyscope's camera handling and swallow rotate, pan and zoom — and edge-panning, which the
+user has asked be preserved (open bug 3).
+
+Instead, create that overlay **only while a drag is actually in flight** — `ImGui::
+GetDragDropPayload()` returns non-null — and tear it down on the same frame the drag ends. A
+borderless, background-less window over `Layout`'s `viewport_min`/`viewport_max` containing one
+`InvisibleButton`, which is the drop target. No drag, no window, no interference.
+
+This is also **the first consumer of `viewport_min`/`viewport_max`**, which `Layout.hpp` has
+exposed since the GUI redesign with nothing reading it. Note carefully: that rect was added for
+the edge-panning bug, and this is NOT that fix. Do not let one be reported as the other.
+
+### 4.7.2 Where the object lands
+
+In order, each falling through to the next:
+
+1. **`view::screenCoordsToWorldPosition(mouse)`** — a depth-buffer query, so the object lands on
+   whatever is under the cursor. Dropping a lens onto the optical table, or a mirror onto a dish,
+   puts it there, which is the whole point of dragging rather than typing.
+2. **Nothing under the cursor** (the depth query returns the far plane): intersect
+   `screenCoordsToWorldRay` with the ground plane z = 0 and drop there.
+3. **That fails too** (the ray is parallel to the ground or points at the sky): fall back to the
+   typed placement point, and say so in the panel's status line rather than dropping the object
+   somewhere arbitrary.
+
+Apply 4.5's translate snap to the result, so a dragged object lands on the grid exactly as a
+gizmo-dragged one does. The two input paths must not disagree — the same invariant
+`ObjectEditState` already documents.
+
+### 4.7.3 The one that will actually bite: coordinates
+
+**ImGui mouse positions are in points; Polyscope's buffer coordinates are in pixels**, and on
+this project's own high-DPI target those differ by the display scale — `view::bufferWidth`
+against `view::windowWidth`. Get it wrong and objects land at a consistent fraction of the way
+toward a corner, which looks like a plausible placement rather than like a bug.
+
+So the gate is not "a drop works". It is: **drop a component onto a specific, visible feature of
+an existing scene, at 100% scale and again at a scaled display, and confirm from the outliner's
+read-out that its coordinates are the feature's.** Nothing short of that distinguishes a correct
+transform from a scaled one.
+
+Two smaller ones to get right:
+
+- A payload released **outside** the viewport must be discarded cleanly, not dropped at the last
+  point inside it.
+- The drag must be **refused while a trace is running**, like every other scene mutation. The
+  existing `busy` gate greys out the library buttons, but a drag already in flight when a trace
+  starts needs its own check at the drop.
+
+## 4.8 Gates
 
 - Every golden unchanged (this wave should not touch the physics at all — if a golden moves,
   something is wrong with *how* geometry is being generated, not with appearance).
@@ -225,6 +295,11 @@ The same two widgets should be reused, not reimplemented:
   arrow weights against its R and T, the dielectric's bend against Snell at its index, the
   diffuser's fan against Lambert. If a diagram cannot be checked against the material's own
   output, it should not be drawn.
+- **Drag a component onto a named feature of a real scene and read back its coordinates** from
+  the outliner, at normal and at scaled DPI. A points-versus-pixels mistake produces a
+  plausible-looking wrong position, so only the numbers settle it.
+- With no drag in flight, the camera still rotates, pans and zooms over the whole viewport: the
+  drop overlay must not exist except during a drag.
 
 ---
 
