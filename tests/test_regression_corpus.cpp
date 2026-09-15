@@ -81,6 +81,15 @@ TEST_CASE("Golden flux: stl_rectangular_3floors_606570deg_box.json total receive
     CHECK(total_w == doctest::Approx(874.83793179836209).epsilon(1e-9));
 }
 
+// The fifth golden, added in Wave 2 for a reason the first four cannot serve: none of them is
+// dispersive (fresnel_lens_cooker.json has a constant n = 1.5), so Dielectric::n_at never reads
+// the wavelength and a source that quietly emitted 1064 nm would leave all four untouched. This
+// is the same Fresnel geometry with "sellmeier": "bk7", so the wavelength is load-bearing here.
+TEST_CASE("Golden flux: dispersive_lens.json total receiver power (BK7 Sellmeier, 550 nm)") {
+    const double total_w = trace_total_power_w(scene_file("examples/dispersive_lens.json"), 20000);
+    CHECK(total_w == doctest::Approx(38.763765222589399).epsilon(1e-9));
+}
+
 // Regression corpus -----------------------------------------------------------
 
 TEST_CASE("Regression corpus: every bundled scene loads without error") {

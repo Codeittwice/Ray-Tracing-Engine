@@ -48,7 +48,9 @@ SceneDocument empty_doc() {
     mat.type   = "absorber";
     mat.params = nlohmann::json::object();
     doc.materials.push_back(mat);
-    doc.sun.direction = scrt::math::vec3{0.0, 0.0, -1.0};
+    scrt::io::SunSourceDoc sun;
+    sun.direction = scrt::math::vec3{0.0, 0.0, -1.0};
+    doc.sources.push_back(sun);
     doc.next_id = 1;
     return doc;
 }

@@ -1,0 +1,63 @@
+{
+    "scene": {
+        "aperture": {
+            "center": [0.0, 0.0, 1.0],
+            "normal": [0.0, 0.0, 1.0],
+            "radius": 0.115,
+            "type": "disk"
+        },
+        "elements": [
+            {
+                "material": "glass",
+                "name": "fresnel_lens",
+                "surface": {
+                    "type": "fresnel_zone_lens",
+                    "focal_length_m": 0.3,
+                    "inner_radius_m": 0.005,
+                    "pitch_m": 0.005,
+                    "n_zones": 22,
+                    "n_lens": 1.5
+                },
+                "transform": {
+                    "translation": [0.0, 0.0, 0.0]
+                }
+            }
+        ],
+        "materials": [
+            {
+                "id": "glass",
+                "type": "dielectric",
+                "n": 1.5,
+                "sellmeier": "bk7",
+                "absorption_per_m": 2.0
+            }
+        ],
+        "name": "Fresnel zone lens cooker, BK7 (dispersive): the golden scene that feels wavelength",
+        "receiver": {
+            "grid": {"nx": 64, "ny": 64},
+            "surface": {
+                "type": "plane",
+                "half_width": 0.06,
+                "half_height": 0.06
+            },
+            "transform": {
+                "translation": [0.0, 0.0, -0.3]
+            }
+        },
+        "sun": {
+            "direction": [0.0, 0.0, -1.0],
+            "dni_wm2": 1000.0,
+            "sunshape": {
+                "type": "pillbox",
+                "half_angle_mrad": 4.65
+            }
+        }
+    },
+    "trace": {
+        "n_primary_rays": 100000,
+        "max_bounces": 8,
+        "rng_seed": 42,
+        "record_paths": false,
+        "max_paths_to_record": 500
+    }
+}

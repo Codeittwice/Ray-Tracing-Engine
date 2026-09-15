@@ -78,7 +78,8 @@ TEST_CASE("assistant prompt: the example document it shows the model parses in s
     CHECK(doc.name == "Panel cooker");
     CHECK(doc.elements.size() == 1);
     CHECK(doc.materials.size() == 2);
-    CHECK(doc.sun.dni_wm2 == doctest::Approx(1000.0));
+    REQUIRE(scrt::io::first_sun(doc) != nullptr);
+    CHECK(scrt::io::first_sun(doc)->dni_wm2 == doctest::Approx(1000.0));
 }
 
 TEST_CASE("assistant prompt: every surface type it offers is a real one") {

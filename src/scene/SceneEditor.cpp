@@ -280,20 +280,23 @@ bool SceneEditor::commit_material_param(const std::string& material_id, const st
 // ---- commit_sun ---------------------------------------------------------
 
 void SceneEditor::commit_sun(math::vec3 direction, double dni_wm2) {
-    auto* sun = scene_->primary_sun();
-    if (!sun) return;
+    auto* sun     = scene_->primary_sun();
+    auto* sun_doc = io::first_sun(doc_);
+    // The document is authoritative for structure, so a live sun without a document sun (or
+    // the reverse) is a sync bug; refuse to widen it by writing one side only.
+    if (!sun || !sun_doc) return;
 
     sun->set_sun_direction(direction);
     sun->set_dni(dni_wm2);
 
-    // Both halves of the document's sun, kept consistent with each other. SunDoc::direction
-    // wins over the angles on load, but SceneWriter emits whichever of the two it has, so a
-    // fresh direction beside stale angles would write a file that contradicts itself.
-    doc_.sun.direction     = direction;
+    // Both halves of the document's sun, kept consistent with each other. SunSourceDoc::
+    // direction wins over the angles on load, but SceneWriter emits whichever of the two it
+    // has, so a fresh direction beside stale angles would write a file that contradicts itself.
+    sun_doc->direction     = direction;
     const auto angles      = sources::SunSource::angles_from_direction(direction);
-    doc_.sun.azimuth_deg   = angles.azimuth_deg;
-    doc_.sun.elevation_deg = angles.elevation_deg;
-    doc_.sun.dni_wm2       = dni_wm2;
+    sun_doc->azimuth_deg   = angles.azimuth_deg;
+    sun_doc->elevation_deg = angles.elevation_deg;
+    sun_doc->dni_wm2       = dni_wm2;
     dirty_                 = true;
 }
 

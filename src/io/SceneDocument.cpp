@@ -2,6 +2,7 @@
 #include "scrt/math/Constants.hpp"
 #include "scrt/sources/SunSource.hpp"
 #include <algorithm>
+#include <cmath>
 #include <initializer_list>
 #include <stdexcept>
 #include <string>
@@ -222,6 +223,106 @@ SurfaceDoc parse_surface_doc(const json& sj, bool strict) {
 
 } // namespace
 
+/// Parses an aperture block: the legacy `scene.aperture`, or a sun entry's own `aperture`.
+ApertureDoc parse_aperture(const json& aj, bool strict) {
+    if (strict)
+        reject_unknown_keys(aj, {"type", "center", "normal", "radius", "mode", "margin"},
+                            "aperture");
+    ApertureDoc ap;
+    ap.center = read_vec3(aj, "center");
+    ap.normal = read_vec3(aj, "normal");
+    ap.radius = aj.value("radius", 1.0);
+    ap.mode = aj.value("mode", std::string("fixed"));
+    ap.margin = aj.value("margin", 0.05);
+    if (strict)
+        require(ap.mode == "fixed" || ap.mode == "auto" || ap.mode == "auto_fit",
+                "unknown aperture mode '" + ap.mode + "'");
+    return ap;
+}
+
+/// Parses one sun, either the legacy `scene.sun` object or a `{"type":"sun", ...}` entry of
+/// `scene.sources`. Only the latter may carry `type` and its own `aperture`; both accept
+/// `wavelength_nm`, so the writer never has to change spelling just to record a wavelength.
+SunSourceDoc parse_sun(const json& sj, bool strict, bool in_sources) {
+    if (strict) {
+        if (in_sources)
+            reject_unknown_keys(sj, {"type", "direction", "dni_wm2", "sunshape", "azimuth_deg",
+                                     "elevation_deg", "aperture", "wavelength_nm"}, "sun");
+        else
+            reject_unknown_keys(sj, {"direction", "dni_wm2", "sunshape", "azimuth_deg",
+                                     "elevation_deg", "wavelength_nm"}, "sun");
+    }
+    require(sj.contains("sunshape"), "sun missing 'sunshape'");
+    const json& shj = sj["sunshape"];
+    if (strict)
+        reject_unknown_keys(shj, {"type", "half_angle_mrad", "chi"}, "sunshape");
+
+    SunSourceDoc sun;
+    sun.sunshape_type = shj.value("type", std::string("pillbox"));
+    sun.half_angle_mrad = shj.value("half_angle_mrad", 4.65);
+    sun.chi = shj.value("chi", 0.05);
+    sun.dni_wm2 = sj.value("dni_wm2", 1000.0);
+    sun.wavelength_nm = sj.value("wavelength_nm", 550.0);
+    if (strict)
+        require(sun.sunshape_type == "pillbox" || sun.sunshape_type == "buie",
+                "unknown sunshape type '" + sun.sunshape_type + "'");
+    require(std::isfinite(sun.wavelength_nm) && sun.wavelength_nm > 0.0,
+            "sun 'wavelength_nm' must be finite and > 0");
+
+    if (sj.contains("direction")) {
+        // Stored verbatim, un-normalized: build_scene() normalizes on the way into
+        // SunSource. The angle fields are re-derived from the normalized direction so
+        // they are never stale relative to it.
+        math::vec3 d = read_vec3(sj, "direction");
+        sun.direction = d;
+        // Azimuth is degenerate at the pole, so pass any authored azimuth_deg as the
+        // fallback. Without it a zenith sun round-trips to the default 180 and a
+        // user's authored azimuth is silently lost on save/reload.
+        const double fallback_az = sj.value("azimuth_deg", sun.azimuth_deg);
+        sources::SunAngles angles = sources::SunSource::angles_from_direction(
+            math::safe_normalize(d), fallback_az);
+        sun.azimuth_deg = angles.azimuth_deg;
+        sun.elevation_deg = angles.elevation_deg;
+    } else {
+        if (sj.contains("azimuth_deg"))
+            sun.azimuth_deg = sj["azimuth_deg"].get<double>();
+        if (sj.contains("elevation_deg"))
+            sun.elevation_deg = sj["elevation_deg"].get<double>();
+    }
+
+    if (in_sources) {
+        if (sj.contains("aperture"))
+            sun.aperture = parse_aperture(sj["aperture"], strict);
+        else
+            sun.aperture.mode = "auto_fit";
+    }
+    return sun;
+}
+
+/// Parses a `{"type":"laser", ...}` entry of `scene.sources`. `origin` and `direction` are
+/// required; the rest default to sources::Laser's own defaults.
+LaserSourceDoc parse_laser(const json& lj, bool strict) {
+    if (strict)
+        reject_unknown_keys(lj, {"type", "origin", "direction", "power_w", "wavelength_nm",
+                                 "beam_diameter_m", "divergence_mrad"}, "laser");
+    LaserSourceDoc l;
+    l.origin          = read_vec3(lj, "origin");
+    l.direction       = read_vec3(lj, "direction");
+    l.power_w         = lj.value("power_w", 1.0);
+    l.wavelength_nm   = lj.value("wavelength_nm", 632.8);
+    l.beam_diameter_m = lj.value("beam_diameter_m", 0.001);
+    l.divergence_mrad = lj.value("divergence_mrad", 0.0);
+    require(glm::dot(l.direction, l.direction) > 0.0, "laser 'direction' is zero-length");
+    require(std::isfinite(l.power_w) && l.power_w >= 0.0, "laser 'power_w' must be >= 0");
+    require(std::isfinite(l.wavelength_nm) && l.wavelength_nm > 0.0,
+            "laser 'wavelength_nm' must be > 0");
+    require(std::isfinite(l.beam_diameter_m) && l.beam_diameter_m >= 0.0,
+            "laser 'beam_diameter_m' must be >= 0");
+    require(std::isfinite(l.divergence_mrad) && l.divergence_mrad >= 0.0,
+            "laser 'divergence_mrad' must be >= 0");
+    return l;
+}
+
 // ---- parse_document -----------------------------------------------------
 
 /// Parses a root `{"scene": {...}, "trace": {...}}` JSON document into a SceneDocument.
@@ -234,7 +335,8 @@ SceneDocument parse_document(const json& root, bool strict) {
     const json& s = root["scene"];
     if (strict)
         reject_unknown_keys(
-            s, {"name", "sun", "aperture", "materials", "elements", "receiver"}, "scene");
+            s, {"name", "sun", "aperture", "sources", "materials", "elements", "receiver"},
+            "scene");
 
     SceneDocument doc;
     doc.name = s.value("name", std::string());
@@ -257,71 +359,34 @@ SceneDocument parse_document(const json& root, bool strict) {
         }
     }
 
-    // ---- Sun ----------------------------------------------------------------
-    require(s.contains("sun"), "missing 'sun'");
-    {
-        const json& sj = s["sun"];
-        if (strict)
-            reject_unknown_keys(
-                sj, {"direction", "dni_wm2", "sunshape", "azimuth_deg", "elevation_deg"}, "sun");
-        require(sj.contains("sunshape"), "sun missing 'sunshape'");
-        const json& shj = sj["sunshape"];
-        if (strict)
-            reject_unknown_keys(shj, {"type", "half_angle_mrad", "chi"}, "sunshape");
-
-        SunDoc sun;
-        sun.sunshape_type = shj.value("type", std::string("pillbox"));
-        sun.half_angle_mrad = shj.value("half_angle_mrad", 4.65);
-        sun.chi = shj.value("chi", 0.05);
-        sun.dni_wm2 = sj.value("dni_wm2", 1000.0);
-        if (strict)
-            require(sun.sunshape_type == "pillbox" || sun.sunshape_type == "buie",
-                    "unknown sunshape type '" + sun.sunshape_type + "'");
-
-        if (sj.contains("direction")) {
-            // Stored verbatim, un-normalized: build_scene() normalizes on the way into
-            // SunSource. The angle fields are re-derived from the normalized direction so
-            // they are never stale relative to it.
-            math::vec3 d = read_vec3(sj, "direction");
-            sun.direction = d;
-            // Azimuth is degenerate at the pole, so pass any authored azimuth_deg as the
-            // fallback. Without it a zenith sun round-trips to the default 180 and a
-            // user's authored azimuth is silently lost on save/reload.
-            const double fallback_az = sj.value("azimuth_deg", sun.azimuth_deg);
-            sources::SunAngles angles = sources::SunSource::angles_from_direction(
-                math::safe_normalize(d), fallback_az);
-            sun.azimuth_deg = angles.azimuth_deg;
-            sun.elevation_deg = angles.elevation_deg;
-        } else {
-            if (sj.contains("azimuth_deg"))
-                sun.azimuth_deg = sj["azimuth_deg"].get<double>();
-            if (sj.contains("elevation_deg"))
-                sun.elevation_deg = sj["elevation_deg"].get<double>();
+    // ---- Sources ----------------------------------------------------------
+    // Two spellings: the general `sources` array, and the legacy `sun` (+ optional `aperture`)
+    // pair, which desugars into one SunSourceDoc. Both at once is refused in BOTH modes: picking
+    // a winner would silently drop an authored source, and this repo's history says silent-drop
+    // bugs cost more than loud ones.
+    require(!(s.contains("sources") && (s.contains("sun") || s.contains("aperture"))),
+            "'sources' cannot be combined with the legacy 'sun'/'aperture' keys; put the sun "
+            "(and its aperture) inside 'sources'");
+    if (s.contains("sources")) {
+        require(s["sources"].is_array(), "'sources' must be an array");
+        for (const json& src : s["sources"]) {
+            require(src.is_object() && src.contains("type"), "source entry missing 'type'");
+            const std::string type = src["type"].get<std::string>();
+            if (type == "sun")
+                doc.sources.push_back(parse_sun(src, strict, /*in_sources=*/true));
+            else if (type == "laser")
+                doc.sources.push_back(parse_laser(src, strict));
+            else
+                throw std::runtime_error("SceneLoader: unknown source type '" + type + "'");
         }
-        doc.sun = std::move(sun);
-    }
-
-    // ---- Aperture -------------------------------------------------------------
-    // Relaxed vs. SceneLoader.cpp: the aperture object itself is now optional.
-    if (s.contains("aperture")) {
-        const json& aj = s["aperture"];
-        if (strict)
-            reject_unknown_keys(aj, {"type", "center", "normal", "radius", "mode", "margin"},
-                                 "aperture");
-        ApertureDoc ap;
-        ap.center = read_vec3(aj, "center");
-        ap.normal = read_vec3(aj, "normal");
-        ap.radius = aj.value("radius", 1.0);
-        ap.mode = aj.value("mode", std::string("fixed"));
-        ap.margin = aj.value("margin", 0.05);
-        if (strict)
-            require(ap.mode == "fixed" || ap.mode == "auto" || ap.mode == "auto_fit",
-                    "unknown aperture mode '" + ap.mode + "'");
-        doc.aperture = std::move(ap);
     } else {
-        ApertureDoc ap;
-        ap.mode = "auto_fit";
-        doc.aperture = ap;
+        require(s.contains("sun"), "missing 'sun' (or a 'sources' array)");
+        SunSourceDoc sun = parse_sun(s["sun"], strict, /*in_sources=*/false);
+        if (s.contains("aperture"))
+            sun.aperture = parse_aperture(s["aperture"], strict);
+        else
+            sun.aperture.mode = "auto_fit";
+        doc.sources.push_back(std::move(sun));
     }
 
     // ---- Elements ---------------------------------------------------------

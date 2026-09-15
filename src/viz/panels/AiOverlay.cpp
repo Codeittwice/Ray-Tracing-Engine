@@ -179,12 +179,18 @@ std::string strip_fence(std::string s) {
 /// Describes a parsed document in one paragraph, so the user can sanity-check before loading.
 std::string describe(const io::SceneDocument& doc) {
     char buf[512];
+    char sun_line[64];
+    if (const auto* sun = io::first_sun(doc))
+        std::snprintf(sun_line, sizeof(sun_line), "Sun %.0f W/m².", sun->dni_wm2);
+    else
+        std::snprintf(sun_line, sizeof(sun_line), "%zu source%s, no sun.",
+                      doc.sources.size(), doc.sources.size() == 1 ? "" : "s");
     std::snprintf(buf, sizeof(buf),
-                  "%s\n%zu element%s, %zu material%s. Sun %.0f W/m².",
+                  "%s\n%zu element%s, %zu material%s. %s",
                   doc.name.empty() ? "(unnamed)" : doc.name.c_str(),
                   doc.elements.size(), doc.elements.size() == 1 ? "" : "s",
                   doc.materials.size(), doc.materials.size() == 1 ? "" : "s",
-                  doc.sun.dni_wm2);
+                  sun_line);
     return buf;
 }
 

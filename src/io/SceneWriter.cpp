@@ -1,4 +1,5 @@
 #include "scrt/io/SceneWriter.hpp"
+#include "scrt/io/Overloaded.hpp"
 #include "scrt/sources/SunSource.hpp"
 #include <variant>
 
@@ -7,15 +8,6 @@ namespace scrt::io {
 using json = nlohmann::json;
 
 namespace {
-
-/// Helper for std::visit: aggregates one lambda per variant alternative so a new alternative
-/// added later fails to compile here instead of being silently dropped by a catch-all.
-template <class... Ts>
-struct overloaded : Ts... {
-    using Ts::operator()...;
-};
-template <class... Ts>
-overloaded(Ts...) -> overloaded<Ts...>;
 
 /// Serializes a math::vec3 as the 3-element JSON array read_vec3() expects.
 json to_json(const math::vec3& v) {
@@ -153,7 +145,7 @@ json material_to_json(const MaterialDoc& m) {
 /// when the document holds an authored direction it wins and the angles are re-derived from it
 /// (using the stored azimuth as the pole fallback); otherwise the stored angles are emitted
 /// verbatim and the direction is derived from them.
-json sun_to_json(const SunDoc& sun) {
+json sun_to_json(const SunSourceDoc& sun) {
     json j;
 
     math::vec3 direction;
@@ -187,6 +179,10 @@ json sun_to_json(const SunDoc& sun) {
         shape["chi"] = sun.chi;
     }
     j["sunshape"] = shape;
+    // Emitted only when it means something: 550 is the engine's convention and core::Ray's
+    // default, and writing it would change every shipped file on re-save.
+    if (sun.wavelength_nm != 550.0)
+        j["wavelength_nm"] = sun.wavelength_nm;
     return j;
 }
 
@@ -202,6 +198,33 @@ json aperture_to_json(const ApertureDoc& ap) {
     j["mode"] = ap.mode;
     j["margin"] = ap.margin;
     return j;
+}
+
+/// Serializes one entry of `scene.sources`, with its discriminating `type`. One lambda per
+/// alternative and no catch-all (io::overloaded), so a third source type that reaches the
+/// document but not this writer is a compile error here.
+json source_to_json(const SourceDoc& sd) {
+    return std::visit(
+        overloaded{
+            [](const SunSourceDoc& sun) {
+                json j = sun_to_json(sun);
+                j["type"] = "sun";
+                j["aperture"] = aperture_to_json(sun.aperture);
+                return j;
+            },
+            [](const LaserSourceDoc& l) {
+                json j;
+                j["type"] = "laser";
+                j["origin"] = to_json(l.origin);
+                j["direction"] = to_json(l.direction);
+                j["power_w"] = l.power_w;
+                j["wavelength_nm"] = l.wavelength_nm;
+                j["beam_diameter_m"] = l.beam_diameter_m;
+                j["divergence_mrad"] = l.divergence_mrad;
+                return j;
+            },
+        },
+        sd);
 }
 
 /// Serializes a BatteryDoc: `enabled` always, every other field only when its optional holds
@@ -300,8 +323,20 @@ json write_document(const SceneDocument& doc) {
     s["elements"] = std::move(elements);
 
     s["receiver"] = receiver_to_json(doc.receiver);
-    s["sun"] = sun_to_json(doc.sun);
-    s["aperture"] = aperture_to_json(doc.aperture);
+    // Legacy-preferring, and load-bearing: exactly one sun and nothing else is written as the
+    // `sun` + `aperture` pair every shipped file has, so all 94 re-save unchanged and the
+    // assistant's system prompt (which teaches that shape) stays valid. Anything else - a laser,
+    // two suns, no source at all - is the general `sources` array.
+    if (doc.sources.size() == 1 && std::holds_alternative<SunSourceDoc>(doc.sources.front())) {
+        const auto& sun = std::get<SunSourceDoc>(doc.sources.front());
+        s["sun"] = sun_to_json(sun);
+        s["aperture"] = aperture_to_json(sun.aperture);
+    } else {
+        json sources = json::array();
+        for (const auto& sd : doc.sources)
+            sources.push_back(source_to_json(sd));
+        s["sources"] = std::move(sources);
+    }
 
     root["trace"] = trace_to_json(doc.trace);
 

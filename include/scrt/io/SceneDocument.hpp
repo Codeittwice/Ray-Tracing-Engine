@@ -120,35 +120,6 @@ struct MaterialDoc {
                              ///< sellmeier, alpha_spectrum, thickness_m).
 };
 
-/// Sun model: shape, irradiance, and position. SceneLoader.cpp "sun" (lines 222-241).
-///
-/// `azimuth_deg`/`elevation_deg` are the Wave 1 `sources::SunAngles` JSON wiring and have **no
-/// SceneLoader.cpp call site today** — the loader still reads a raw `direction` vec3
-/// (SceneLoader.cpp:238) and normalizes it. Their defaults (180, 90 = zenith) were chosen to
-/// match `sources::SunAngles`'s own defaults, which map to propagation direction {0,0,-1}, the
-/// direction every one of the 94 existing scenes uses.
-struct SunDoc {
-    std::string sunshape_type{"pillbox"};  ///< SceneLoader.cpp:226 ("sunshape.type").
-    double      half_angle_mrad{4.65};     ///< Pillbox half-angle, mrad. SceneLoader.cpp:229.
-    double      chi{0.05};                 ///< Buie circumsolar ratio. SceneLoader.cpp:232.
-    double      dni_wm2{1000.0};           ///< Direct normal irradiance, W/m^2. SceneLoader.cpp:239.
-    double      azimuth_deg{180.0};        ///< New in Wave 1/2; no SceneLoader.cpp reader yet.
-    double      elevation_deg{90.0};       ///< New in Wave 1/2; no SceneLoader.cpp reader yet.
-
-    /// Authored propagation direction, preserved verbatim whenever the JSON supplied one.
-    ///
-    /// `sun.direction` is a **required** key for SceneLoader.cpp (line 238 calls read_vec3, which
-    /// throws when it is absent), so write_document() must always emit one. Re-deriving it from
-    /// the angles instead would silently rewrite an authored vector: the round trip
-    /// direction_from_angles(angles_from_direction(d)) reproduces `d` bitwise only near the pole,
-    /// where SunSource.cpp:17-18 snaps the horizontal component to exactly 0. That is why all 41
-    /// existing [0,0,-1] scenes survive a round trip unchanged, but any off-zenith vector — the
-    /// very case Wave 1 added — comes back with different digits and a perturbed sampled ray
-    /// sequence. When set, this field wins over azimuth_deg/elevation_deg; a UI that moves the sun
-    /// by angle must clear it so the angles become authoritative again.
-    std::optional<math::vec3> direction;
-};
-
 /// Collection aperture placement. SceneLoader.cpp "aperture" (lines 244-252).
 ///
 /// `mode` mirrors `scene::ApertureMode` but is stored as a string (not the enum) for the same
@@ -171,6 +142,60 @@ struct ApertureDoc {
     double      radius{1.0};            ///< Metres. SceneLoader.cpp:250.
     double      margin{0.05};           ///< Fractional slack for auto_fit. Unused by loader today.
 };
+
+/// Sun model: shape, irradiance, and position. SceneLoader.cpp "sun" (lines 222-241).
+///
+/// `azimuth_deg`/`elevation_deg` are the Wave 1 `sources::SunAngles` JSON wiring and have **no
+/// SceneLoader.cpp call site today** — the loader still reads a raw `direction` vec3
+/// (SceneLoader.cpp:238) and normalizes it. Their defaults (180, 90 = zenith) were chosen to
+/// match `sources::SunAngles`'s own defaults, which map to propagation direction {0,0,-1}, the
+/// direction every one of the 94 existing scenes uses.
+struct SunSourceDoc {
+    std::string sunshape_type{"pillbox"};  ///< SceneLoader.cpp:226 ("sunshape.type").
+    double      half_angle_mrad{4.65};     ///< Pillbox half-angle, mrad. SceneLoader.cpp:229.
+    double      chi{0.05};                 ///< Buie circumsolar ratio. SceneLoader.cpp:232.
+    double      dni_wm2{1000.0};           ///< Direct normal irradiance, W/m^2. SceneLoader.cpp:239.
+    double      azimuth_deg{180.0};        ///< New in Wave 1/2; no SceneLoader.cpp reader yet.
+    double      elevation_deg{90.0};       ///< New in Wave 1/2; no SceneLoader.cpp reader yet.
+
+    /// Authored propagation direction, preserved verbatim whenever the JSON supplied one.
+    ///
+    /// `sun.direction` is a **required** key for SceneLoader.cpp (line 238 calls read_vec3, which
+    /// throws when it is absent), so write_document() must always emit one. Re-deriving it from
+    /// the angles instead would silently rewrite an authored vector: the round trip
+    /// direction_from_angles(angles_from_direction(d)) reproduces `d` bitwise only near the pole,
+    /// where SunSource.cpp:17-18 snaps the horizontal component to exactly 0. That is why all 41
+    /// existing [0,0,-1] scenes survive a round trip unchanged, but any off-zenith vector — the
+    /// very case Wave 1 added — comes back with different digits and a perturbed sampled ray
+    /// sequence. When set, this field wins over azimuth_deg/elevation_deg; a UI that moves the sun
+    /// by angle must clear it so the angles become authoritative again.
+    std::optional<math::vec3> direction;
+
+    /// The sun's own collection disk: the aperture is solar sampling apparatus, not a property
+    /// of the scene, and it lives here in the document exactly as it does on sources::SunSource.
+    /// A legacy `scene.aperture` block desugars into this field; an absent one means auto_fit.
+    ApertureDoc aperture;
+
+    /// Wavelength stamped on every sun ray [nm]. 550 is the engine's monochromatic convention
+    /// (core::Ray's own default) and is NOT written out while it holds that value, so the 94
+    /// shipped files re-save without gaining a key.
+    double wavelength_nm{550.0};
+};
+
+/// A laser source: authored watts leaving a small disk along one direction. See sources::Laser.
+struct LaserSourceDoc {
+    math::vec3 origin{0.0, 0.0, 1.0};
+    math::vec3 direction{0.0, 0.0, -1.0};   ///< Propagation direction; normalised on load.
+    double     power_w{1.0};
+    double     wavelength_nm{632.8};
+    double     beam_diameter_m{0.001};
+    double     divergence_mrad{0.0};        ///< FULL-angle divergence, as datasheets quote it.
+};
+
+/// One entry of `scene.sources`. Visited with io::overloaded and NO catch-all in SceneWriter.cpp
+/// (source_to_json) and SceneLoader.cpp (make_source), so a third alternative that reaches the
+/// document but not the writer or the loader is a compile error, not a silently dropped source.
+using SourceDoc = std::variant<SunSourceDoc, LaserSourceDoc>;
 
 /// Battery/inset absorber block nested inside a box receiver. SceneLoader.cpp lines 339-407.
 ///
@@ -234,8 +259,12 @@ struct SceneDocument {
     std::vector<MaterialDoc>  materials;          ///< SceneLoader.cpp:167-219 ("scene.materials"); may be empty.
     std::vector<ElementDoc>   elements;           ///< SceneLoader.cpp:255-273 ("scene.elements"); may be empty.
     ReceiverDoc                receiver;          ///< SceneLoader.cpp:276-443 ("scene.receiver"); required.
-    SunDoc                     sun;                ///< SceneLoader.cpp:222-241 ("scene.sun"); required.
-    ApertureDoc                aperture;           ///< SceneLoader.cpp:244-252 ("scene.aperture"); required.
+    /// Every light source, in document order. Parsed from `scene.sources`, or from the legacy
+    /// `scene.sun` (+ optional `scene.aperture`) pair, which desugars into one SunSourceDoc.
+    /// Both forms present at once is a hard error in strict AND lax mode: picking a winner would
+    /// silently drop an authored source. The writer is legacy-preferring: exactly one sun and
+    /// nothing else is written back as `sun` + `aperture`, the shape every shipped file has.
+    std::vector<SourceDoc>    sources;
     tracer::TraceConfig        trace;              ///< SceneLoader.cpp:446-461 (root "trace"); all keys optional,
                                                     ///< defaults come from tracer::TraceConfig itself. Note:
                                                     ///< TraceConfig::num_threads has no SceneLoader.cpp reader
@@ -243,6 +272,22 @@ struct SceneDocument {
                                                     ///< struct default (0) until a JSON key is added.
     std::uint64_t              next_id{1};         ///< Session-local id allocator for new elements; not serialized.
 };
+
+/// The first solar source in the document, or nullptr. Every caller is a place still coupled to
+/// the sun (the editor's commit_sun, the assistant's summary line); see Scene::primary_sun().
+inline const SunSourceDoc* first_sun(const SceneDocument& doc) {
+    for (const auto& s : doc.sources)
+        if (const auto* sun = std::get_if<SunSourceDoc>(&s))
+            return sun;
+    return nullptr;
+}
+/// Mutable overload of first_sun().
+inline SunSourceDoc* first_sun(SceneDocument& doc) {
+    for (auto& s : doc.sources)
+        if (auto* sun = std::get_if<SunSourceDoc>(&s))
+            return sun;
+    return nullptr;
+}
 
 /// Parses a root JSON document (the `{"scene": {...}, "trace": {...}}` shape SceneLoader.cpp
 /// consumes) into a SceneDocument. When `strict` is true, unrecognized or malformed content

@@ -9,10 +9,12 @@
 #include "scrt/materials/RealMirror.hpp"
 #include "scrt/materials/ThinDielectricPane.hpp"
 #include "scrt/math/Vec.hpp"
+#include "scrt/io/Overloaded.hpp"
 #include "scrt/scene/Aperture.hpp"
 #include "scrt/scene/Receiver.hpp"
 #include "scrt/scene/Scene.hpp"
 #include "scrt/sources/Buie.hpp"
+#include "scrt/sources/Laser.hpp"
 #include "scrt/sources/Pillbox.hpp"
 #include "scrt/surfaces/CylindricalParaboloid.hpp"
 #include "scrt/surfaces/FresnelZoneLens.hpp"
@@ -351,44 +353,63 @@ LoadedScene build_scene(const SceneDocument& doc, const std::filesystem::path& b
         scene->set_receiver(std::move(recv));
     }
 
-    // ---- Sun --------------------------------------------------------------
-    {
-        std::unique_ptr<sources::SunSource> sun;
-        if (doc.sun.sunshape_type == "pillbox") {
-            sun = std::make_unique<sources::Pillbox>(doc.sun.half_angle_mrad * 1e-3);
-        } else if (doc.sun.sunshape_type == "buie") {
-            sun = std::make_unique<sources::Buie>(doc.sun.chi);
-        } else {
-            throw std::runtime_error(
-                "SceneLoader: unknown sunshape type '" + doc.sun.sunshape_type + "'");
-        }
+    // ---- Sources (after surfaces and receiver: a sun's auto_fit unions world_bounds) ------
+    // One lambda per SourceDoc alternative and no catch-all (io::overloaded), so a source type
+    // that reaches the document but not this loader is a compile error here.
+    for (const auto& sd : doc.sources) {
+        std::unique_ptr<sources::LightSource> src = std::visit(
+            overloaded{
+                [&](const SunSourceDoc& d) -> std::unique_ptr<sources::LightSource> {
+                    std::unique_ptr<sources::SunSource> sun;
+                    if (d.sunshape_type == "pillbox") {
+                        sun = std::make_unique<sources::Pillbox>(d.half_angle_mrad * 1e-3);
+                    } else if (d.sunshape_type == "buie") {
+                        sun = std::make_unique<sources::Buie>(d.chi);
+                    } else {
+                        throw std::runtime_error(
+                            "SceneLoader: unknown sunshape type '" + d.sunshape_type + "'");
+                    }
+                    if (d.direction.has_value())
+                        sun->set_sun_direction(math::safe_normalize(*d.direction));
+                    else
+                        sun->set_sun_angles(sources::SunAngles{d.azimuth_deg, d.elevation_deg});
+                    sun->set_dni(d.dni_wm2);
+                    if (d.wavelength_nm != 550.0)
+                        sun->set_wavelength_nm(d.wavelength_nm);
 
-        if (doc.sun.direction.has_value())
-            sun->set_sun_direction(math::safe_normalize(*doc.sun.direction));
-        else
-            sun->set_sun_angles(sources::SunAngles{doc.sun.azimuth_deg, doc.sun.elevation_deg});
-        sun->set_dni(doc.sun.dni_wm2);
-
-        // ---- Aperture: the sun's own, resolved here because auto_fit unions the world
-        // bounds, so it must come after every surface and the receiver are in the scene.
-        // world_bounds() does not include apertures, so there is no circularity.
-        if (doc.aperture.mode == "auto" || doc.aperture.mode == "auto_fit") {
-            scene::Aperture ap = scene::Aperture::auto_fit(
-                scene->world_bounds(), sun->to_sun(), doc.aperture.margin);
-            ap.mode = scene::ApertureMode::AutoFitToSun;
-            sun->set_aperture(ap);
-        } else {
-            // "fixed" and any unrecognized value: forward-compatible passthrough, build a
-            // fixed disk exactly as the legacy loader always did.
-            scene::Aperture ap;
-            ap.center = doc.aperture.center;
-            ap.normal = math::safe_normalize(doc.aperture.normal);
-            ap.radius = doc.aperture.radius;
-            ap.mode   = scene::ApertureMode::Fixed;
-            ap.margin = doc.aperture.margin;
-            sun->set_aperture(ap);
-        }
-        scene->add_source(std::move(sun));
+                    // The sun's own aperture. world_bounds() covers surfaces and receiver
+                    // faces and never apertures, so there is no circularity in fitting it now.
+                    if (d.aperture.mode == "auto" || d.aperture.mode == "auto_fit") {
+                        scene::Aperture ap = scene::Aperture::auto_fit(
+                            scene->world_bounds(), sun->to_sun(), d.aperture.margin);
+                        ap.mode = scene::ApertureMode::AutoFitToSun;
+                        sun->set_aperture(ap);
+                    } else {
+                        // "fixed" and any unrecognized value: forward-compatible passthrough,
+                        // a fixed disk exactly as the legacy loader always built it.
+                        scene::Aperture ap;
+                        ap.center = d.aperture.center;
+                        ap.normal = math::safe_normalize(d.aperture.normal);
+                        ap.radius = d.aperture.radius;
+                        ap.mode   = scene::ApertureMode::Fixed;
+                        ap.margin = d.aperture.margin;
+                        sun->set_aperture(ap);
+                    }
+                    return sun;
+                },
+                [&](const LaserSourceDoc& d) -> std::unique_ptr<sources::LightSource> {
+                    auto laser = std::make_unique<sources::Laser>();
+                    laser->set_origin(d.origin);
+                    laser->set_direction(d.direction);
+                    laser->set_power_w(d.power_w);
+                    laser->set_wavelength_nm(d.wavelength_nm);
+                    laser->set_beam_diameter_m(d.beam_diameter_m);
+                    laser->set_divergence_mrad(d.divergence_mrad);
+                    return laser;
+                },
+            },
+            sd);
+        scene->add_source(std::move(src));
     }
 
     // ---- Trace config and finish -------------------------------------------

@@ -75,13 +75,15 @@ TEST_CASE("SceneDocument: authored azimuth survives a zenith direction") {
     })");
 
     const auto doc = scrt::io::parse_document(j);
-    CHECK(doc.sun.azimuth_deg == doctest::Approx(90.0));
-    CHECK(doc.sun.elevation_deg == doctest::Approx(90.0));
-    REQUIRE(doc.sun.direction.has_value());
+    REQUIRE(scrt::io::first_sun(doc) != nullptr);
+    CHECK(scrt::io::first_sun(doc)->azimuth_deg == doctest::Approx(90.0));
+    CHECK(scrt::io::first_sun(doc)->elevation_deg == doctest::Approx(90.0));
+    REQUIRE(scrt::io::first_sun(doc)->direction.has_value());
 
     // And it must survive a full write -> reparse cycle.
     const auto round = scrt::io::parse_document(scrt::io::write_document(doc));
-    CHECK(round.sun.azimuth_deg == doctest::Approx(90.0));
+    REQUIRE(scrt::io::first_sun(round) != nullptr);
+    CHECK(scrt::io::first_sun(round)->azimuth_deg == doctest::Approx(90.0));
 }
 
 // The transform "scale" key must survive all the way through the real load path.

@@ -1,0 +1,59 @@
+{
+    "scene": {
+        "name": "Laser bench: He-Ne beam through a tilted BK7 pane onto a screen",
+        "materials": [
+            {
+                "id": "bk7",
+                "type": "dielectric",
+                "n": 1.5168,
+                "sellmeier": "bk7"
+            },
+            {
+                "id": "black",
+                "type": "absorber"
+            }
+        ],
+        "elements": [
+            {
+                "name": "glass_pane",
+                "material": "bk7",
+                "surface": {
+                    "type": "plane",
+                    "half_width": 0.05,
+                    "half_height": 0.05
+                },
+                "transform": {
+                    "translation": [0.0, 0.0, 0.25],
+                    "rotation_euler_deg": [0.0, 30.0, 0.0]
+                }
+            }
+        ],
+        "receiver": {
+            "surface": {
+                "type": "plane",
+                "half_width": 0.15,
+                "half_height": 0.15
+            },
+            "grid": {
+                "nx": 128,
+                "ny": 128
+            }
+        },
+        "sources": [
+            {
+                "type": "laser",
+                "origin": [0.0, 0.0, 0.5],
+                "direction": [0.0, 0.0, -1.0],
+                "power_w": 0.005,
+                "wavelength_nm": 632.8,
+                "beam_diameter_m": 0.002,
+                "divergence_mrad": 1.0
+            }
+        ]
+    },
+    "trace": {
+        "n_primary_rays": 200000,
+        "max_bounces": 8,
+        "rng_seed": 7
+    }
+}

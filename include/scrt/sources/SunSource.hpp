@@ -4,6 +4,7 @@
 #include "scrt/math/Vec.hpp"
 #include "scrt/scene/Aperture.hpp"
 #include "scrt/sources/LightSource.hpp"
+#include <cmath>
 #include <stdexcept>
 #include <string_view>
 
@@ -49,6 +50,13 @@ public:
     /// spectrum, and it equals core::Ray's own default so the stamp writes the double that was
     /// already there. Dielectric::n_at reads it for Sellmeier dispersion.
     double wavelength_nm() const { return wavelength_nm_; }
+    /// Override the stamped wavelength, for a monochromatic experiment through dispersive glass.
+    /// Throws unless finite and > 0.
+    void set_wavelength_nm(double nm) {
+        if (!(nm > 0.0) || !std::isfinite(nm))
+            throw std::invalid_argument("SunSource::set_wavelength_nm: must be finite and > 0");
+        wavelength_nm_ = nm;
+    }
 
     /// Horizontal component below which azimuth is treated as degenerate (at the pole).
     ///
