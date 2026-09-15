@@ -39,7 +39,8 @@ Out of scope on this track: thermal model, lat/lon geographic sun, TMY weather, 
 
 ## v2 — optical simulator (current work, branch `feat/optical-simulator`)
 
-Plan: `~/.claude/plans/1-below-the-windows-iterative-harp.md`. Eight waves turning the solar
+Plan: `docs/plans/v2_optical_simulator.md`, with the Wave 2 detail in
+`docs/plans/v2_wave2_sources_design.md`. Eight waves turning the solar
 cooker tracer into a general optical simulator — bench optics, libraries of components and
 materials, polarisation, interference, a diffraction engine, an optimiser, and an assistant with
 tools. The sun becomes one source among several; there are no modes.
