@@ -37,7 +37,50 @@ AI scene-generation helper. Optical results only.
 
 Out of scope on this track: thermal model, lat/lon geographic sun, TMY weather, day-integrated Wh.
 
-## GUI redesign (current work)
+## v2 — optical simulator (current work, branch `feat/optical-simulator`)
+
+Plan: `~/.claude/plans/1-below-the-windows-iterative-harp.md`. Eight waves turning the solar
+cooker tracer into a general optical simulator — bench optics, libraries of components and
+materials, polarisation, interference, a diffraction engine, an optimiser, and an assistant with
+tools. The sun becomes one source among several; there are no modes.
+
+- [x] Wave 1 — Foundations: the scene is actually mutable
+- [ ] Wave 2 — General sources; the sun stops being special
+- [ ] Wave 3 — Components and materials as libraries
+- [ ] Wave 4 — Representative geometry, grid and snapping
+- [ ] Wave 5 — Polarisation and interference
+- [ ] Wave 6 — Diffraction, as a second engine
+- [ ] Wave 7 — The optimiser
+- [ ] Wave 8 — The assistant, with tools
+
+### What Wave 1 fixed, and what it means for everything after
+
+- **An element added at runtime is now drawn.** `ctx.add_element` used to reach the document and
+  the BVH and nothing else, because `register_surfaces()` is called only from `register_scene()`,
+  which runs only on load. Imported models were traced and saved while invisible. `Viewer::
+  adopt_element` / `release_element` are the one path that makes the view match an element.
+- **Element mutations are QUEUED and applied at the end of the frame.** `Scene::surfaces()` hands
+  out a span over the vector these mutations resize, and panels iterate it while drawing — the
+  outliner's Delete button sits inside such a loop. `add_element` therefore returns "accepted",
+  not an id.
+- **Material, sun and trace edits reach the document.** They used to write the live object only,
+  so a slider move plus Save wrote the value the file was LOADED with. `SceneEditor` gained
+  `commit_material_param`, `commit_sun` and `commit_trace_config` — cases 2, 3 and 4 of the
+  header's rule 2. `commit_material_param` REFUSES a key the material's type does not have,
+  because the document is re-read in strict mode and a stray key makes the file unopenable.
+- **`io::build_surface` and `io::is_default_transform` are public**; SceneEditor's hand-maintained
+  copies are gone. A new surface type is now added in one place, which Wave 3 needs six times.
+- **A recorded ray path is a `RayPath` tree**, not a flat polyline, with per-edge power.
+
+### The measurement Wave 1 settled, worth not repeating
+
+Only `fresnel_lens_cooker.json` splits among the golden scenes — 19617 splits per 20k-ray trace —
+and its deepest TOTAL path is **2**, against `max_bounces: 8`. So the old fresh-bounce-budget bug
+was unreachable in every golden scene, and fixing it moved nothing. If a future change needs to
+know whether paths are hitting the bounce limit, that is the number, and instrumenting
+`trace_one` with a thread-local depth counter is a ten-minute job.
+
+## GUI redesign (v1, complete)
 
 Driven by the first real human testing of the app. Plan and an interactive layout mockup exist;
 the mockup is the agreed target design. Phases 1 and 2 are done.
