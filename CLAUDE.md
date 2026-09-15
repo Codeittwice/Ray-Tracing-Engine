@@ -113,6 +113,12 @@ wallpaper for `examples/laser_bench.json` while the app is alive, `Responding`, 
 works for every solar scene. Suspect the capture path, not the app; the sun panel's no-sun
 branch was therefore checked by build and by reading, not by eye.
 
+An independent cold audit (Opus, read-only) of the Stage 1-4 diffs found no bit-identity,
+allocation, thread-safety or schema defect, and three lesser ones that were fixed: the laser
+cone was a small-angle sampler that accepted any angle (now exact over the cap and bounded at
+180 degrees), an all-dead-source scene returned without finalizing the receiver, and a null
+source reached an unchecked dereference. Details at the end of the design document.
+
 ### The measurement Wave 1 settled, worth not repeating
 
 Only `fresnel_lens_cooker.json` splits among the golden scenes — 19617 splits per 20k-ray trace —
@@ -248,7 +254,9 @@ visible in a normal-DPI window.
   split edits into short scripts or write files with the file tool. And a Python script fed on
   stdin is decoded in the Windows code page, so a pattern containing a non-ASCII character
   (the superscript in "W/m2", an em dash) silently matches nothing; run such scripts from a
-  file, where the source is read as UTF-8.
+  file, where the source is read as UTF-8. Backslashes suffer the same way: a doubled
+  backslash in a heredoc reaches Python single, so a pattern for a C string with "\\n" never
+  matches and a replacement containing one writes a real newline into the source.
 - **Polyscope's `ValueColorMap::getValue(1.0)` reads one past the end of its own table.** It
   blends `values[lowerInd]` with `values[lowerInd + 1]` with no upper guard. Never sample a
   Polyscope ramp at exactly 1.0; `ViewSettings.cpp` stops a hair short.

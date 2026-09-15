@@ -85,6 +85,8 @@ int main(int argc, char* argv[]) {
             std::cerr << "Scene has no receiver — nothing to trace.\n";
             return 1;
         }
+        if (ls.scene->sources().empty())
+            std::cerr << "Warning: scene has no light source; the trace will deposit nothing.\n";
         scrt::tracer::Tracer tracer(*ls.scene);
         std::filesystem::create_directories(out_dir);
         // No sun means no DNI, and a concentration ratio against a stand-in 1000 W/m2 is a

@@ -318,8 +318,9 @@ LaserSourceDoc parse_laser(const json& lj, bool strict) {
             "laser 'wavelength_nm' must be > 0");
     require(std::isfinite(l.beam_diameter_m) && l.beam_diameter_m >= 0.0,
             "laser 'beam_diameter_m' must be >= 0");
-    require(std::isfinite(l.divergence_mrad) && l.divergence_mrad >= 0.0,
-            "laser 'divergence_mrad' must be >= 0");
+    require(std::isfinite(l.divergence_mrad) && l.divergence_mrad >= 0.0 &&
+                l.divergence_mrad <= 1000.0 * math::PI,
+            "laser 'divergence_mrad' is a full angle and must be within [0, 1000*pi]");
     return l;
 }
 

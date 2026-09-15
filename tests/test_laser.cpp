@@ -32,6 +32,9 @@ TEST_CASE("Laser: setters reject what names no beam") {
     CHECK_THROWS_AS(l.set_wavelength_nm(0.0), std::invalid_argument);
     CHECK_THROWS_AS(l.set_beam_diameter_m(-0.001), std::invalid_argument);
     CHECK_THROWS_AS(l.set_divergence_mrad(-1.0), std::invalid_argument);
+    // Above a 180-degree full angle part of the cap lies behind the emitter; refused.
+    CHECK_THROWS_AS(l.set_divergence_mrad(7000.0), std::invalid_argument);
+    CHECK_NOTHROW(l.set_divergence_mrad(3000.0));
 
     l.set_power_w(0.0);   // Switched off is a valid state; the plan drops it.
     CHECK(l.total_power_w() == 0.0);
@@ -63,6 +66,21 @@ TEST_CASE("Laser: rays leave the beam disk inside the divergence cone, weight 1,
         CHECK(glm::dot(r.direction, l.direction()) >= std::cos(half) - 1e-12);
     }
     CHECK(l.total_power_w() == 3.0);
+}
+
+TEST_CASE("Laser: the cone is uniform over the spherical cap, not the small-angle disk") {
+    // For cos(theta) uniform on [cos(half), 1] the mean is (1 + cos(half)) / 2. At a 120-degree
+    // full angle the small-angle form theta = half*sqrt(xi) would give a mean cos of ~0.60
+    // rather than 0.75, well outside the Monte Carlo tolerance below.
+    scrt::sources::Laser l;
+    l.set_direction({0.0, 0.0, -1.0});
+    l.set_divergence_mrad(2.0 * 60.0 * scrt::math::DEG2RAD * 1e3);
+    scrt::math::Rng rng(17);
+    double sum = 0.0;
+    const int n = 40000;
+    for (int i = 0; i < n; ++i)
+        sum += glm::dot(l.sample_ray(rng).direction, l.direction());
+    CHECK(sum / n == doctest::Approx(0.75).epsilon(0.01));
 }
 
 namespace {

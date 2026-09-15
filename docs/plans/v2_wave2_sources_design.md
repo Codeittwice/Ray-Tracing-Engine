@@ -309,3 +309,25 @@ Everything above was followed as written, with these deviations and additions, e
 - **Risk 1 (normalisation count) checked in review**: the aperture struct moved whole, and
   `cosine_to`/`tangent_frame` are called the same number of times on the same fields.
   Risk 4 (linear `entry_for`) unmeasured and unchanged: one compare per ray for every shipped scene.
+
+### Independent cold audit (Opus, read-only, after Stage 5)
+
+Asked to read commits b008f5a, e2d3f9d, 0e113a8 and de02c71 without the implementer's reasoning.
+Found no path by which a single-sun scene's per-ray power or RNG sequence could differ, no
+EmissionPlan invariant violation (counts sum to N, no zero-count entry, seams correct, the
+donor loop's break is unreachable by pigeonhole), no thread-safety issue, and no legacy file
+that parses or writes differently. Six lesser findings, three fixed in the follow-up commit:
+
+- The laser cone was the small-angle form (theta = half*sqrt(xi)) while accepting any angle;
+  7000 mrad sent rays behind the emitter, silently. Now exactly uniform over the spherical cap
+  (cos theta uniform on [cos half, 1], same two draws) and bounded at a 180-degree full angle,
+  in the setter and in the parser. Pinned by a mean-cosine test at a 120-degree full angle.
+- A scene whose every source emits 0 W (a sun that has set) returned an empty result without
+  finalizing the receiver. It now finalizes and reports the wall time; rays traced stays 0,
+  where the old tracer reported N rays of nothing.
+- `Scene::add_source(nullptr)` reached an unchecked dereference in `primary_sun()`; now refused.
+
+Accepted as-is: the min-one-ray rule's ray is the LAST global index, so it deposits flux but is
+not usually in the recorded paths (comment corrected, rule kept); lax mode is slightly stricter
+(an unknown source type or a non-positive wavelength throws on load, where an unknown key was
+ignored - nothing shipped is affected); `total_w` overflow needs two sources near 1e308 W.

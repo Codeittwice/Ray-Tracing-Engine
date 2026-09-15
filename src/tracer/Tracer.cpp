@@ -142,8 +142,16 @@ TraceResult Tracer::run(const TraceConfig& cfg, TraceControl* ctl) const {
     // each ray at total_power_w() / count. A scene with nothing emitting traces to nothing,
     // the way a scene with no receiver does.
     const EmissionPlan plan = build_emission_plan(scene_->sources(), cfg.n_primary_rays);
-    if (plan.empty())
-        return {};
+    if (plan.empty()) {
+        // Nothing emits: no source, or every source at 0 W (a sun that has set). Zero rays
+        // are traced, but the receiver is still finalized so a caller reads zeros, not the
+        // state it was in before, and the run is still timed.
+        scene_receiver->finalize(cfg.n_primary_rays);
+        TraceResult none;
+        none.wall_time_s =
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        return none;
+    }
 
     int nthreads = cfg.num_threads > 0
                        ? cfg.num_threads
@@ -265,8 +273,15 @@ TraceResult Tracer::run(const TraceConfig& cfg, FluxAccumulator& acc, TraceContr
     // each ray at total_power_w() / count. A scene with nothing emitting traces to nothing,
     // the way a scene with no receiver does.
     const EmissionPlan plan = build_emission_plan(scene_->sources(), cfg.n_primary_rays);
-    if (plan.empty())
-        return {};
+    if (plan.empty()) {
+        // As in the receiver overload: nothing emits, so finalize the (empty) accumulator
+        // the caller handed in and report zero rays rather than returning it untouched.
+        acc.finalize(cfg.n_primary_rays);
+        TraceResult none;
+        none.wall_time_s =
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        return none;
+    }
 
     int nthreads = cfg.num_threads > 0
                        ? cfg.num_threads

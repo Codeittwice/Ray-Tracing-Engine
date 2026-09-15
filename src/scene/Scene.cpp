@@ -1,6 +1,7 @@
 #include "scrt/scene/Scene.hpp"
 #include <algorithm>
 #include <limits>
+#include <stdexcept>
 
 namespace scrt::scene {
 
@@ -56,6 +57,8 @@ std::optional<std::size_t> Scene::index_of(std::uint64_t id) const {
 
 void Scene::set_receiver(std::unique_ptr<Receiver> r) { receiver_ = std::move(r); }
 std::size_t Scene::add_source(std::unique_ptr<sources::LightSource> s) {
+    if (!s)
+        throw std::invalid_argument("Scene::add_source: null source");
     sources_.push_back(std::move(s));
     return sources_.size() - 1;
 }

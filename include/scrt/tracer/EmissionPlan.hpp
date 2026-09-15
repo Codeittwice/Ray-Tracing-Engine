@@ -45,9 +45,9 @@ struct EmissionPlan {
 /// Deterministic, no RNG: truncate each share, then hand the remainder out one ray at a time
 /// by descending fractional part, ties broken by source index. A source emitting <= 0 W (or
 /// a non-finite power) is dropped and never reaches a division. Every kept source gets at
-/// least one ray, so a milliwatt pilot beam beside a kilowatt dish is still visible in the
-/// path render - a policy choice, not a physical one; drop it if a per-source ray budget lands
-/// in the GUI. With exactly one emitting source it gets all N rays, so per_ray_w is
+/// least one ray, so a milliwatt pilot beam beside a kilowatt dish still deposits a sample
+/// (not necessarily a recorded path: its ray is the last global index) - a policy choice, not
+/// a physical one; drop it if a per-source ray budget lands in the GUI. With exactly one emitting source it gets all N rays, so per_ray_w is
 /// total_power_w() / N: the same double the single-sun tracer computed.
 EmissionPlan build_emission_plan(std::span<const std::unique_ptr<sources::LightSource>> sources,
                                  std::size_t n_rays);

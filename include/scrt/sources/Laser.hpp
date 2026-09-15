@@ -12,8 +12,8 @@ namespace scrt::sources {
 /// The first source that is not a sun, and the reason the source layer exists: it has watts,
 /// not an irradiance, and no aperture. Rays start uniformly over a disk of `beam_diameter_m`
 /// centred on `origin` and perpendicular to `direction`, and leave within a cone of half-angle
-/// `divergence_mrad / 2` (the FULL-angle divergence, as laser datasheets quote it), uniformly
-/// over the cap, so the far field is a top hat rather than a Gaussian. A Gaussian profile is
+/// `divergence_mrad / 2` (the FULL-angle divergence, as laser datasheets quote it), exactly
+/// uniformly over the spherical cap, so the far field is a top hat rather than a Gaussian. A Gaussian profile is
 /// a later refinement, not a correction: the power model here is exact either way.
 class Laser final : public LightSource {
 public:
@@ -44,7 +44,8 @@ public:
     void set_beam_diameter_m(double d);
     double beam_diameter_m() const { return beam_diameter_m_; }
 
-    /// Full-angle divergence [mrad]; throws on negative or non-finite. 0 is collimated.
+    /// Full-angle divergence [mrad]; throws unless finite and in [0, 1000*pi] (180 degrees).
+    /// 0 is collimated.
     void set_divergence_mrad(double mrad);
     double divergence_mrad() const { return divergence_mrad_; }
 

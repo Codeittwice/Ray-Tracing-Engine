@@ -59,8 +59,11 @@ EmissionPlan build_emission_plan(std::span<const std::unique_ptr<sources::LightS
     }
 
     // ---- Every kept source gets at least one ray, taken from the largest allotment -----
-    // Only possible while there are at least as many rays as kept sources; below that the
-    // starved sources stay starved rather than the plan lying about the ray count.
+    // So a milliwatt source beside a kilowatt one still contributes a sample to the flux.
+    // It does NOT make it visible in the path render: entries are laid out in source order,
+    // so that one ray is the LAST global index, and path recording keeps the first rays
+    // each slot reaches. Only possible while there are at least as many rays as kept
+    // sources; below that the starved sources stay starved rather than the plan lying.
     if (n_rays >= kept.size()) {
         for (auto& k : kept) {
             if (k.count > 0) continue;

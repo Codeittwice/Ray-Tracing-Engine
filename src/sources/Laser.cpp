@@ -1,6 +1,7 @@
 #include "scrt/sources/Laser.hpp"
 #include "scrt/math/Constants.hpp"
 #include "scrt/scene/Aperture.hpp"   // orthonormal_frame
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 #include <string>
@@ -40,6 +41,12 @@ void Laser::set_beam_diameter_m(double d) {
 
 void Laser::set_divergence_mrad(double mrad) {
     require_finite_nonneg(mrad, "set_divergence_mrad");
+    // A full angle above 180 degrees would put part of the cap behind the emitter and send
+    // rays backwards, silently. Refuse it rather than sample it.
+    if (mrad > 1000.0 * math::PI)
+        throw std::invalid_argument("Laser::set_divergence_mrad: full-angle divergence must be "
+                                    "<= 180 degrees (" + std::to_string(1000.0 * math::PI) +
+                                    " mrad); got " + std::to_string(mrad));
     divergence_mrad_ = mrad;
 }
 
@@ -52,12 +59,14 @@ core::Ray Laser::sample_ray(math::Rng& rng) const {
     const math::vec3 origin =
         origin_ + (0.5 * beam_diameter_m_) * (disk.x * u + disk.y * v);
 
-    // Uniform over the solid-angle cap of half-angle div/2: theta = half * sqrt(xi).
+    // Exactly uniform over the spherical cap of half-angle div/2: cos(theta) is uniform on
+    // [cos(half), 1]. Pillbox uses theta = half * sqrt(xi), the small-angle form, which is
+    // exact to theta^2/6 at 4.65 mrad but not at a divergence a user may type in degrees.
+    // Same two draws in the same order (cap, then azimuth) as before.
     const double half  = 0.5 * divergence_mrad_ * 1e-3;
-    const double theta = half * std::sqrt(rng.uniform01());
+    const double cos_t = 1.0 - rng.uniform01() * (1.0 - std::cos(half));
+    const double sin_t = std::sqrt(std::max(0.0, 1.0 - cos_t * cos_t));
     const double phi   = math::TWO_PI * rng.uniform01();
-    const double sin_t = std::sin(theta);
-    const double cos_t = std::cos(theta);
 
     core::Ray ray;
     ray.origin        = origin;

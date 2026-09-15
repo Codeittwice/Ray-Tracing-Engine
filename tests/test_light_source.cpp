@@ -14,6 +14,7 @@
 #include "scrt/tracer/Tracer.hpp"
 #include <cstddef>
 #include <memory>
+#include <stdexcept>
 #include <string>
 
 // Wave 2 Stage 1: the sun owns its aperture and states its power in watts. Every check
@@ -135,6 +136,9 @@ TEST_CASE("Scene::display_aperture follows the sun; Tracer tolerates no sun at a
     const auto res = tracer.run(cfg);
     CHECK(res.primary_rays_traced == 0);
     CHECK(res.total_hits == 0);
+    // And the receiver is left finalized, so a reader sees zeros rather than stale state.
+    for (double f : scene.receiver()->accumulator().flux_map_wm2()) CHECK(f == 0.0);
+    CHECK_THROWS_AS(scene.add_source(nullptr), std::invalid_argument);
 
     auto sun = std::make_unique<scrt::sources::Pillbox>(0.0);
     scrt::scene::Aperture ap;
