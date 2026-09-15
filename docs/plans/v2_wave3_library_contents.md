@@ -162,13 +162,13 @@ chosen point. Sizes follow the two conventions actual hardware uses — **imperi
 
 | Component | Parameters | Notes |
 |---|---|---|
-| Sun | direction or azimuth/elevation, DNI, sunshape | Exists. |
-| HeNe laser | 632.8 nm, 0.5–5 mW, beam Ø 0.8 mm, divergence 1.3 mrad | **[spec]** wavelength; **[typical]** the rest. The classic red bench laser. Good default. |
+| Sun | direction or azimuth/elevation, DNI, sunshape | Exists. Owns its aperture since Wave 2. |
+| HeNe laser | 632.8 nm, 0.5–5 mW, beam Ø 0.8 mm, divergence 1.3 mrad | **[spec]** wavelength; **[typical]** the rest. The classic red bench laser. Good default. `sources::Laser` exists since Wave 2 — note its divergence parameter is the **full** angle in mrad, not the half angle. |
 | Green DPSS laser | 532 nm, 1–100 mW, Ø 1.5 mm, 1.5 mrad | **[spec]** wavelength. Brightest to the eye — good for screenshots. |
 | Red diode laser | 650 nm, 1–5 mW | **[typical]** |
 | Violet diode laser | 405 nm, 1–50 mW | **[typical]** Shows dispersion most strongly against 633. |
 | IR diode | 780 nm or 1064 nm | **[typical]** Pair with the gold mirror. |
-| Collimated lamp | broadband, watts | Needs Wave 2's general source. No spectrum, so it is a monochromatic stand-in — label it. |
+| Collimated lamp | broadband, watts | Needs a new `LightSource` subclass — the general source arrived in Wave 2, but only `sun` and `laser` exist. No spectrum either (G6), so it is a monochromatic stand-in; label it as one. |
 
 ### 2.2 Mirrors
 
