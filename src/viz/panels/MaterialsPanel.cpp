@@ -1,4 +1,5 @@
 #include "scrt/viz/Panels.hpp"
+#include "scrt/scene/SceneEditor.hpp"
 
 #include "scrt/materials/Dielectric.hpp"
 #include "scrt/materials/RealMirror.hpp"
@@ -43,10 +44,18 @@ void draw_materials_panel(PanelContext& ctx) {
                       "sunlight survives each bounce and how tightly it stays focused.");
             ImGui::Separator();
 
+            // Every edit goes through the editor, which writes the live material AND its
+            // MaterialDoc. Writing the live object alone - which this panel used to do - meant
+            // dragging a slider and saving wrote the ORIGINAL value back to disk.
+            auto set_param = [&ctx](const std::string& id, const char* key, double v) {
+                if (ctx.editor) ctx.editor->commit_material_param(id, key, v);
+                if (ctx.need_retrace) *ctx.need_retrace = true;
+            };
+
             for (auto& mat_ptr : ctx.scene->mutable_materials()) {
                 ImGui::PushID(mat_ptr.get());
-                ImGui::Text("%s", mat_ptr->name().c_str());
-                bool changed = false;
+                const std::string mat_id = mat_ptr->name();
+                ImGui::Text("%s", mat_id.c_str());
 
                 if (auto* rm = dynamic_cast<materials::RealMirror*>(mat_ptr.get())) {
                     float rho = static_cast<float>(rm->reflectance());
@@ -54,7 +63,7 @@ void draw_materials_panel(PanelContext& ctx) {
                     ImGui::Indent();
 
                     if (ImGui::SliderFloat("Reflectance##rm", &rho, 0.0f, 1.0f))
-                        { rm->set_reflectance(rho); changed = true; }
+                        set_param(mat_id, "reflectance", rho);
                     tip("Fraction of light the mirror bounces back, from 0 (black) to 1 "
                         "(perfect).\n\n"
                         "Kitchen foil is roughly 0.85, polished aluminium 0.90, and a "
@@ -66,7 +75,7 @@ void draw_materials_panel(PanelContext& ctx) {
                     // who reads the tooltip and then talks to a supplier needs the real
                     // term. "Slope error", not "roughness"; mrad, not "a bit wobbly".
                     if (ImGui::SliderFloat("Slope error (mrad)##rm", &se, 0.0f, 10.0f))
-                        { rm->set_slope_error_mrad(se); changed = true; }
+                        set_param(mat_id, "slope_error_mrad", se);
                     tip("How far the surface tilts away from a perfect mirror, in "
                         "milliradians (1 mrad = 0.057 degrees).\n\n"
                         "This is about the surface being gently wavy, not dirty. A "
@@ -85,7 +94,7 @@ void draw_materials_panel(PanelContext& ctx) {
                     ImGui::Indent();
 
                     if (ImGui::SliderFloat("Refractive index n##di", &n, 1.0f, 3.0f))
-                        { di->set_n(n); changed = true; }
+                        set_param(mat_id, "n", n);
                     tip("How strongly this material bends light passing through it.\n\n"
                         "Air is 1.0, water 1.33, window glass about 1.5, acrylic 1.49. "
                         "A higher index bends light more sharply, so a lens of the same "
@@ -93,7 +102,7 @@ void draw_materials_panel(PanelContext& ctx) {
                         "straight off the front face, which is light the pot never sees.");
 
                     if (ImGui::SliderFloat("Absorption (1/m)##di", &alpha, 0.0f, 50.0f))
-                        { di->set_absorption(alpha); changed = true; }
+                        set_param(mat_id, "absorption_per_m", alpha);
                     tip("How much light the material swallows per metre travelled, in "
                         "inverse metres.\n\n"
                         "0 is perfectly clear. The surviving fraction is exp(-absorption "
@@ -104,7 +113,6 @@ void draw_materials_panel(PanelContext& ctx) {
                     ImGui::Unindent();
                 }
 
-                if (changed && ctx.need_retrace) *ctx.need_retrace = true;
                 ImGui::PopID();
                 ImGui::Separator();
             }

@@ -1,4 +1,5 @@
 #include "scrt/viz/Panels.hpp"
+#include "scrt/scene/SceneEditor.hpp"
 
 #include <cstdio>
 
@@ -7,6 +8,20 @@
 namespace scrt::viz {
 
 namespace {
+
+/// Mirrors the ray count and bounce limit into the document, so a save records what the user
+/// chose to run rather than what the file was loaded with.
+///
+/// Deliberately only these two. The Viewer also sets `record_paths` and `max_paths_to_record`
+/// on its own copy to drive the 3D ray display; those are view settings, not a property of the
+/// scene, and writing them would dirty a document nobody has edited the moment the app opens.
+void commit_trace(PanelContext& ctx) {
+    if (!ctx.editor || !ctx.cfg) return;
+    tracer::TraceConfig recorded = ctx.editor->doc().trace;
+    recorded.n_primary_rays      = ctx.cfg->n_primary_rays;
+    recorded.max_bounces         = ctx.cfg->max_bounces;
+    ctx.editor->commit_trace_config(recorded);
+}
 
 /// Attaches a hover tooltip to the widget just drawn.
 void tip(const char* text) {
@@ -45,6 +60,7 @@ void draw_trace_panel(PanelContext& ctx) {
             "Use Preview while you are moving things around, then a full run for a "
             "number you intend to quote.");
         ctx.cfg->n_primary_rays = static_cast<std::size_t>(nr);
+        commit_trace(ctx);
 
         int mb = ctx.cfg->max_bounces;
         ImGui::SliderInt("Max bounces", &mb, 1, 32);
@@ -55,6 +71,7 @@ void draw_trace_panel(PanelContext& ctx) {
             "that would really have arrived is discarded, quietly under-reporting the "
             "power; set it far higher than the design needs and you only pay in time.");
         ctx.cfg->max_bounces = mb;
+        commit_trace(ctx);
 
         bool rec = ctx.cfg->record_paths;
         if (ImGui::Checkbox("Record paths", &rec))

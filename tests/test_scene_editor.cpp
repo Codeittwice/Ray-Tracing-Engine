@@ -6,6 +6,8 @@
 #include "scrt/core/Ray.hpp"
 #include "scrt/core/Transform.hpp"
 #include "scrt/io/SceneDocument.hpp"
+#include "scrt/materials/RealMirror.hpp"
+#include "scrt/sources/SunSource.hpp"
 #include "scrt/io/SceneLoader.hpp"
 #include "scrt/io/ScenePaths.hpp"
 #include "scrt/math/Vec.hpp"
@@ -442,4 +444,135 @@ TEST_CASE("SceneEditor: a committed placement survives save and reload") {
     CHECK(moved > 0.1);
 
     std::filesystem::remove_all(dir);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Edits that are NOT transforms must also reach the document.
+//
+// The materials, sun and trace panels all used to write the live object only, so a user could
+// drag a slider, press Save, and get the value the file was LOADED with. That is the same defect
+// the placement test above pins for transforms, in three more places, and it is invisible until
+// someone reopens their own file.
+// ---------------------------------------------------------------------------------------------
+
+TEST_CASE("SceneEditor: a material edit survives save and reload") {
+    const auto src = std::filesystem::path(SCRT_SOURCE_DIR) / "examples" / "parabolic_dish.json";
+    REQUIRE(std::filesystem::exists(src));
+
+    auto loaded = scrt::io::load_scene(src);
+    REQUIRE(loaded.scene != nullptr);
+    scrt::scene::SceneEditor ed(std::move(loaded), src.parent_path());
+
+    // Find a real_mirror to edit, by the id the document knows it by.
+    std::string mirror_id;
+    for (const auto& md : ed.doc().materials)
+        if (md.type == "real_mirror") { mirror_id = md.id; break; }
+    REQUIRE_FALSE(mirror_id.empty());
+
+    // Values chosen to differ from any plausible default, so a test that passed by accident
+    // because nothing changed would fail here.
+    REQUIRE(ed.commit_material_param(mirror_id, "reflectance", 0.6137));
+    REQUIRE(ed.commit_material_param(mirror_id, "slope_error_mrad", 7.25));
+
+    // The live material changed too, not just the document — that is the whole point of
+    // routing through one function.
+    bool saw_live = false;
+    for (const auto& m : ed.scene().mutable_materials()) {
+        if (!m || m->name() != mirror_id) continue;
+        const auto* rm = dynamic_cast<const scrt::materials::RealMirror*>(m.get());
+        REQUIRE(rm != nullptr);
+        CHECK(rm->reflectance() == doctest::Approx(0.6137));
+        CHECK(rm->slope_error() == doctest::Approx(7.25));  // RealMirror stores mrad
+        saw_live = true;
+    }
+    CHECK(saw_live);
+
+    const auto dir = std::filesystem::temp_directory_path() / "scrt_material_rt";
+    std::filesystem::create_directories(dir);
+    const auto dst = dir / "edited.json";
+    scrt::io::save_scene_as(ed.doc(), dst, src.parent_path());
+
+    auto back = scrt::io::load_scene(dst);
+    REQUIRE(back.scene != nullptr);
+
+    bool checked = false;
+    for (const auto& m : back.scene->mutable_materials()) {
+        if (!m || m->name() != mirror_id) continue;
+        const auto* rm = dynamic_cast<const scrt::materials::RealMirror*>(m.get());
+        REQUIRE(rm != nullptr);
+        CHECK(rm->reflectance() == doctest::Approx(0.6137));
+        CHECK(rm->slope_error() == doctest::Approx(7.25));
+        checked = true;
+    }
+    CHECK(checked);
+}
+
+TEST_CASE("SceneEditor: commit_material_param refuses a key the material type does not have") {
+    const auto src = std::filesystem::path(SCRT_SOURCE_DIR) / "examples" / "parabolic_dish.json";
+    auto loaded = scrt::io::load_scene(src);
+    REQUIRE(loaded.scene != nullptr);
+    scrt::scene::SceneEditor ed(std::move(loaded), src.parent_path());
+
+    std::string mirror_id;
+    for (const auto& md : ed.doc().materials)
+        if (md.type == "real_mirror") { mirror_id = md.id; break; }
+    REQUIRE_FALSE(mirror_id.empty());
+
+    // A refractive index is not a property of a mirror. Rejecting it matters because the
+    // document is parsed in strict mode on reload: silently writing the key would produce a
+    // file that this application can no longer open.
+    CHECK_FALSE(ed.commit_material_param(mirror_id, "n", 1.5));
+    CHECK_FALSE(ed.commit_material_param("no_such_material", "reflectance", 0.5));
+
+    for (const auto& md : ed.doc().materials)
+        if (md.id == mirror_id)
+            CHECK_FALSE(md.params.contains("n"));
+}
+
+TEST_CASE("SceneEditor: a sun edit survives save and reload") {
+    const auto src = std::filesystem::path(SCRT_SOURCE_DIR) / "examples" / "parabolic_dish.json";
+    auto loaded = scrt::io::load_scene(src);
+    REQUIRE(loaded.scene != nullptr);
+    REQUIRE(loaded.scene->sun() != nullptr);
+    scrt::scene::SceneEditor ed(std::move(loaded), src.parent_path());
+
+    // Well off zenith, so a fix that only carried DNI would still fail here.
+    const auto dir = scrt::sources::SunSource::direction_from_angles({145.0, 37.5});
+    ed.commit_sun(dir, 842.0);
+
+    const auto out = std::filesystem::temp_directory_path() / "scrt_sun_rt";
+    std::filesystem::create_directories(out);
+    const auto dst = out / "sun.json";
+    scrt::io::save_scene_as(ed.doc(), dst, src.parent_path());
+
+    auto back = scrt::io::load_scene(dst);
+    REQUIRE(back.scene != nullptr);
+    REQUIRE(back.scene->sun() != nullptr);
+
+    CHECK(back.scene->sun()->dni() == doctest::Approx(842.0));
+    const auto got = back.scene->sun()->sun_direction();
+    CHECK(got.x == doctest::Approx(dir.x).epsilon(1e-12));
+    CHECK(got.y == doctest::Approx(dir.y).epsilon(1e-12));
+    CHECK(got.z == doctest::Approx(dir.z).epsilon(1e-12));
+}
+
+TEST_CASE("SceneEditor: trace settings survive save and reload") {
+    const auto src = std::filesystem::path(SCRT_SOURCE_DIR) / "examples" / "parabolic_dish.json";
+    auto loaded = scrt::io::load_scene(src);
+    REQUIRE(loaded.scene != nullptr);
+    scrt::scene::SceneEditor ed(std::move(loaded), src.parent_path());
+
+    auto cfg = ed.doc().trace;
+    cfg.n_primary_rays = 31337;
+    cfg.max_bounces    = 11;
+    ed.commit_trace_config(cfg);
+
+    const auto out = std::filesystem::temp_directory_path() / "scrt_trace_rt";
+    std::filesystem::create_directories(out);
+    const auto dst = out / "trace.json";
+    scrt::io::save_scene_as(ed.doc(), dst, src.parent_path());
+
+    auto back = scrt::io::load_scene(dst);
+    CHECK(back.cfg.n_primary_rays == 31337u);
+    CHECK(back.cfg.max_bounces == 11);
 }

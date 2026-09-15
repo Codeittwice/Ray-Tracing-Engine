@@ -1,4 +1,5 @@
 #include "scrt/viz/Panels.hpp"
+#include "scrt/scene/SceneEditor.hpp"
 
 #include "scrt/sources/SunSource.hpp"
 #include "scrt/viz/FluxPlotter.hpp"
@@ -63,8 +64,11 @@ void draw_sun_panel(PanelContext& ctx) {
             FluxPlotter::set_scene_dni(sun->dni());
 
             float dni = static_cast<float>(sun->dni());
+            // Through the editor, so the document records it too: writing the live sun alone
+            // meant moving this slider and saving wrote the ORIGINAL DNI back out.
             if (ImGui::SliderFloat("DNI (W/m²)", &dni, 500.0f, 1500.0f)) {
-                sun->set_dni(dni);
+                if (ctx.editor) ctx.editor->commit_sun(sun->sun_direction(), dni);
+                else            sun->set_dni(dni);
                 if (ctx.need_retrace) *ctx.need_retrace = true;
             }
             tip("Direct Normal Irradiance: how much sunlight arrives per square metre "
@@ -105,8 +109,10 @@ void draw_sun_panel(PanelContext& ctx) {
                 "horizontal collector sees half what it would at 90.");
 
             if (angle_changed) {
-                sun->set_sun_angles({static_cast<double>(azimuth),
-                                     static_cast<double>(elevation)});
+                const math::vec3 dir = sources::SunSource::direction_from_angles(
+                    {static_cast<double>(azimuth), static_cast<double>(elevation)});
+                if (ctx.editor) ctx.editor->commit_sun(dir, sun->dni());
+                else            sun->set_sun_direction(dir);
                 if (ctx.need_retrace) *ctx.need_retrace = true;
             }
 

@@ -1,7 +1,10 @@
 #include "scrt/scene/SceneEditor.hpp"
 #include "scrt/core/AABB.hpp"
 #include "scrt/core/Transform.hpp"
+#include "scrt/materials/Dielectric.hpp"
 #include "scrt/materials/Material.hpp"
+#include "scrt/materials/RealMirror.hpp"
+#include "scrt/sources/SunSource.hpp"
 #include "scrt/math/Constants.hpp"
 #include <algorithm>
 #include <cmath>
@@ -235,6 +238,70 @@ void SceneEditor::commit_transform(std::uint64_t id, const math::mat4& world) {
         }
         dirty_ = true;
     }
+}
+
+// ---- commit_material_param ----------------------------------------------
+
+bool SceneEditor::commit_material_param(const std::string& material_id, const std::string& key,
+                                        double value) {
+    // Live side first: dispatch on the concrete type, because only it knows which setter a key
+    // names. An unknown key is reported rather than written, so a typo cannot land in the
+    // document as a parameter the loader will later reject in strict mode.
+    materials::Material* live = nullptr;
+    for (const auto& m : scene_->mutable_materials())
+        if (m && m->name() == material_id) { live = m.get(); break; }
+    if (!live) return false;
+
+    bool applied = false;
+    if (auto* rm = dynamic_cast<materials::RealMirror*>(live)) {
+        if (key == "reflectance")            { rm->set_reflectance(value);      applied = true; }
+        else if (key == "slope_error_mrad")  { rm->set_slope_error_mrad(value); applied = true; }
+    } else if (auto* di = dynamic_cast<materials::Dielectric*>(live)) {
+        if (key == "n")                      { di->set_n(value);          applied = true; }
+        else if (key == "absorption_per_m")  { di->set_absorption(value);  applied = true; }
+    }
+    if (!applied) return false;
+
+    // Document side. MaterialDoc::params is deliberately type-erased json, so writing the key
+    // verbatim is both the storage and the round-trip: SceneWriter merges params in as-is.
+    for (auto& md : doc_.materials) {
+        if (md.id != material_id) continue;
+        md.params[key] = value;
+        dirty_ = true;
+        return true;
+    }
+
+    // The live scene has a material the document does not. io::build_scene injects anonymous
+    // absorbers for the receiver that have no MaterialDoc at all, and they are reachable from
+    // the materials panel; changing one is a live-only edit with nothing to record.
+    return false;
+}
+
+// ---- commit_sun ---------------------------------------------------------
+
+void SceneEditor::commit_sun(math::vec3 direction, double dni_wm2) {
+    auto* sun = scene_->sun();
+    if (!sun) return;
+
+    sun->set_sun_direction(direction);
+    sun->set_dni(dni_wm2);
+
+    // Both halves of the document's sun, kept consistent with each other. SunDoc::direction
+    // wins over the angles on load, but SceneWriter emits whichever of the two it has, so a
+    // fresh direction beside stale angles would write a file that contradicts itself.
+    doc_.sun.direction     = direction;
+    const auto angles      = sources::SunSource::angles_from_direction(direction);
+    doc_.sun.azimuth_deg   = angles.azimuth_deg;
+    doc_.sun.elevation_deg = angles.elevation_deg;
+    doc_.sun.dni_wm2       = dni_wm2;
+    dirty_                 = true;
+}
+
+// ---- commit_trace_config ------------------------------------------------
+
+void SceneEditor::commit_trace_config(const tracer::TraceConfig& cfg) {
+    doc_.trace = cfg;
+    dirty_     = true;
 }
 
 } // namespace scrt::scene

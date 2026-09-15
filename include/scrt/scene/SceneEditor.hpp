@@ -86,6 +86,30 @@ public:
     /// Writes a world matrix to BOTH the live surface and the io::TransformDoc; see rule 2.
     void commit_transform(std::uint64_t id, const math::mat4& world);
 
+    /// Writes one material parameter to BOTH the live materials::Material and its
+    /// io::MaterialDoc. Returns false when `material_id` names no material or `key` is not a
+    /// parameter of that material's type.
+    ///
+    /// The second case of rule 2, for the same reason as the first: a slider dragged at 60 Hz
+    /// cannot re-derive a material and re-point every surface that borrows it, so the value is
+    /// allowed to live in two places — confined to one function, so there is one place the
+    /// invariant can break and one function to audit.
+    ///
+    /// Before this existed the materials panel wrote the live object only, so changing a
+    /// reflectance and saving wrote the ORIGINAL value back out.
+    bool commit_material_param(const std::string& material_id, const std::string& key,
+                               double value);
+
+    /// Writes the sun's direction and DNI to BOTH the live sources::SunSource and the
+    /// io::SunDoc, keeping the doc's azimuth/elevation consistent with its direction.
+    /// A no-op when the scene has no sun. Rule 2 again, same reason: continuous sliders.
+    void commit_sun(math::vec3 direction, double dni_wm2);
+
+    /// Mirrors trace settings into the document, so a save records what the user actually ran
+    /// rather than what the file was loaded with. The document is authoritative here with no
+    /// live counterpart to keep in step — the Viewer holds its own tracer::TraceConfig copy.
+    void commit_trace_config(const tracer::TraceConfig& cfg);
+
     /// The live scene: traverse, render and trace it — do not add or remove surfaces on it.
     Scene& scene() { return *scene_; }
     /// The live scene: traverse, render and trace it — do not add or remove surfaces on it.
