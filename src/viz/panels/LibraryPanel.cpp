@@ -4,8 +4,10 @@
 #include "scrt/scene/SceneEditor.hpp"
 #include "scrt/viz/Icons.hpp"
 #include "scrt/viz/Library.hpp"
+#include "scrt/viz/Preview.hpp"
 
 #include <algorithm>
+#include <filesystem>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -102,8 +104,14 @@ void draw_materials_section(PanelContext& ctx) {
         }
         ImGui::PushID(e->name.c_str());
         const bool present = scene_has_material(ctx, e->name);
+        // The diagram is drawn by the material's own interact(), so it cannot claim behaviour
+        // the material does not have. It sits outside BeginDisabled so an already-added
+        // material is still legible.
+        const float dh = ImGui::GetFrameHeight() * 1.6f;
+        draw_material_diagram(e->name.c_str(), e->doc, dh * 1.35f, dh);
+        ImGui::SameLine();
         ImGui::BeginDisabled(present || !ctx.add_material);
-        if (ImGui::Button(e->name.c_str(), ImVec2(-1, 0))) {
+        if (ImGui::Button(e->name.c_str(), ImVec2(-1, dh))) {
             if (ensure_material(ctx, *e)) say("Added material: " + e->name);
             else                          say("Could not add " + e->name, true);
         }
@@ -176,8 +184,13 @@ void draw_components_section(PanelContext& ctx) {
             indented = true;
         }
         ImGui::PushID(c.name.c_str());
+        // A real render of the real geometry, from the same tessellate() the 3D view uses.
+        const float th = ImGui::GetFrameHeight() * 1.6f;
+        draw_surface_thumbnail(c.name.c_str(), c.surface,
+                               ctx.scene_dir ? *ctx.scene_dir : std::filesystem::path("."), th);
+        ImGui::SameLine();
         ImGui::BeginDisabled(!ctx.add_element || !ctx.add_material);
-        if (ImGui::Button(c.name.c_str(), ImVec2(-1, 0))) {
+        if (ImGui::Button(c.name.c_str(), ImVec2(-1, th))) {
             const MaterialEntry* m = find_material(c.material);
             if (!m) {
                 say("Component names a material that is not in the library: " + c.material, true);

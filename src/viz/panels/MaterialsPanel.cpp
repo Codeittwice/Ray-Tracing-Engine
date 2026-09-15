@@ -3,6 +3,7 @@
 
 #include "scrt/materials/BeamSplitter.hpp"
 #include "scrt/materials/Diffuser.hpp"
+#include "scrt/viz/Preview.hpp"
 #include "scrt/materials/Dielectric.hpp"
 #include "scrt/materials/RealMirror.hpp"
 
@@ -57,6 +58,11 @@ void draw_materials_panel(PanelContext& ctx) {
             for (auto& mat_ptr : ctx.scene->mutable_materials()) {
                 ImGui::PushID(mat_ptr.get());
                 const std::string mat_id = mat_ptr->name();
+                // The LIVE material, so dragging a slider below redraws this on the same frame:
+                // you watch the physics change as you change it.
+                draw_material_diagram(*mat_ptr, ImGui::GetFrameHeight() * 2.2f,
+                                      ImGui::GetFrameHeight() * 1.7f);
+                ImGui::SameLine();
                 ImGui::Text("%s", mat_id.c_str());
 
                 if (auto* rm = dynamic_cast<materials::RealMirror*>(mat_ptr.get())) {
