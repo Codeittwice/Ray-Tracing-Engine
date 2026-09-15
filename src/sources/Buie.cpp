@@ -1,6 +1,5 @@
 #include "scrt/sources/Buie.hpp"
 #include "scrt/math/Constants.hpp"
-#include "scrt/scene/Aperture.hpp"
 #include <cassert>
 #include <cmath>
 #include <vector>
@@ -34,12 +33,12 @@ Buie::Buie(double chi) : chi_(chi) {
     theta_sampler_.build(std::move(pdf), 0.0, THETA_MAX);
 }
 
-core::Ray Buie::sample_ray(const scene::Aperture& ap, math::Rng& rng) const {
+core::Ray Buie::sample_ray(math::Rng& rng) const {
     // Uniform sample on aperture disk
     math::vec2 disk = rng.unit_disk_concentric();
     math::vec3 u, v;
-    ap.tangent_frame(u, v);
-    math::vec3 origin = ap.center + ap.radius * (disk.x * u + disk.y * v);
+    aperture_.tangent_frame(u, v);
+    math::vec3 origin = aperture_.center + aperture_.radius * (disk.x * u + disk.y * v);
 
     // Sample angular radius from Buie CDF; azimuth uniform in [0, 2π)
     double theta = theta_sampler_.sample(rng.uniform01());
@@ -58,7 +57,8 @@ core::Ray Buie::sample_ray(const scene::Aperture& ap, math::Rng& rng) const {
     core::Ray ray;
     ray.origin    = origin;
     ray.direction = direction;
-    ray.power     = 1.0;  // Tracer scales by DNI * aperture_area / N_rays
+    ray.power         = 1.0;  // Relative weight; the tracer applies total_power_w() / N.
+    ray.wavelength_nm = wavelength_nm_;
     return ray;
 }
 

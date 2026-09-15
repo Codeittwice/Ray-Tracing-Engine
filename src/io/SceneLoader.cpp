@@ -368,25 +368,27 @@ LoadedScene build_scene(const SceneDocument& doc, const std::filesystem::path& b
         else
             sun->set_sun_angles(sources::SunAngles{doc.sun.azimuth_deg, doc.sun.elevation_deg});
         sun->set_dni(doc.sun.dni_wm2);
-        scene->set_sun(std::move(sun));
-    }
 
-    // ---- Aperture (must come after surfaces and receiver: auto_fit unions both) -----
-    if (doc.aperture.mode == "auto" || doc.aperture.mode == "auto_fit") {
-        scene::Aperture ap = scene::Aperture::auto_fit(
-            scene->world_bounds(), scene->sun()->to_sun(), doc.aperture.margin);
-        ap.mode = scene::ApertureMode::AutoFitToSun;
-        scene->set_aperture(ap);
-    } else {
-        // "fixed" and any unrecognized value: forward-compatible passthrough, build a fixed
-        // disk exactly as the legacy loader always did.
-        scene::Aperture ap;
-        ap.center = doc.aperture.center;
-        ap.normal = math::safe_normalize(doc.aperture.normal);
-        ap.radius = doc.aperture.radius;
-        ap.mode   = scene::ApertureMode::Fixed;
-        ap.margin = doc.aperture.margin;
-        scene->set_aperture(ap);
+        // ---- Aperture: the sun's own, resolved here because auto_fit unions the world
+        // bounds, so it must come after every surface and the receiver are in the scene.
+        // world_bounds() does not include apertures, so there is no circularity.
+        if (doc.aperture.mode == "auto" || doc.aperture.mode == "auto_fit") {
+            scene::Aperture ap = scene::Aperture::auto_fit(
+                scene->world_bounds(), sun->to_sun(), doc.aperture.margin);
+            ap.mode = scene::ApertureMode::AutoFitToSun;
+            sun->set_aperture(ap);
+        } else {
+            // "fixed" and any unrecognized value: forward-compatible passthrough, build a
+            // fixed disk exactly as the legacy loader always did.
+            scene::Aperture ap;
+            ap.center = doc.aperture.center;
+            ap.normal = math::safe_normalize(doc.aperture.normal);
+            ap.radius = doc.aperture.radius;
+            ap.mode   = scene::ApertureMode::Fixed;
+            ap.margin = doc.aperture.margin;
+            sun->set_aperture(ap);
+        }
+        scene->set_sun(std::move(sun));
     }
 
     // ---- Trace config and finish -------------------------------------------

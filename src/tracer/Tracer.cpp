@@ -136,13 +136,15 @@ TraceResult Tracer::run(const TraceConfig& cfg, TraceControl* ctl) const {
 
     auto t0 = std::chrono::steady_clock::now();
 
+    // Three call sites (the app, scrt_compare, test_compare) guard for a null sun; this one
+    // dereferenced it unguarded. Treat "no source" the way "no receiver" is treated above.
+    if (!scene_->sun())
+        return {};
     const auto& sun = *scene_->sun();
-    const auto& ap  = scene_->aperture();
-    // DNI is per unit area NORMAL to the beam, so the aperture only intercepts its
-    // foreshortened projection. sun_direction() is where light travels; the sun is the
-    // other way. Zenith scenes (normal = +Z, direction = -Z) give cos_ap == 1 exactly.
-    const double cos_ap = ap.cosine_to(-sun.sun_direction());
-    double ray_power = sun.dni() * ap.area() * cos_ap / static_cast<double>(cfg.n_primary_rays);
+    // The source states its own strength in watts (for a sun: DNI * aperture area *
+    // foreshortening) and the tracer divides that among the primary rays. Each sampled ray
+    // carries a relative weight of exactly 1.0, so *= writes the same double as = did.
+    double ray_power = sun.total_power_w() / static_cast<double>(cfg.n_primary_rays);
 
     int nthreads = cfg.num_threads > 0
                        ? cfg.num_threads
@@ -211,8 +213,8 @@ TraceResult Tracer::run(const TraceConfig& cfg, TraceControl* ctl) const {
                 }
             }
 
-            core::Ray r = sun.sample_ray(ap, slot_rng);
-            r.power     = ray_power;
+            core::Ray r = sun.sample_ray(slot_rng);
+            r.power    *= ray_power;
             r.id        = static_cast<std::uint32_t>(ray_start + i);
 
             if (path_ptr) path_buf.nodes.push_back(r.origin);   // node 0: where the ray began
@@ -258,13 +260,15 @@ TraceResult Tracer::run(const TraceConfig& cfg, TraceControl* ctl) const {
 TraceResult Tracer::run(const TraceConfig& cfg, FluxAccumulator& acc, TraceControl* ctl) const {
     auto t0 = std::chrono::steady_clock::now();
 
+    // Three call sites (the app, scrt_compare, test_compare) guard for a null sun; this one
+    // dereferenced it unguarded. Treat "no source" the way "no receiver" is treated above.
+    if (!scene_->sun())
+        return {};
     const auto& sun = *scene_->sun();
-    const auto& ap  = scene_->aperture();
-    // DNI is per unit area NORMAL to the beam, so the aperture only intercepts its
-    // foreshortened projection. sun_direction() is where light travels; the sun is the
-    // other way. Zenith scenes (normal = +Z, direction = -Z) give cos_ap == 1 exactly.
-    const double cos_ap = ap.cosine_to(-sun.sun_direction());
-    double ray_power = sun.dni() * ap.area() * cos_ap / static_cast<double>(cfg.n_primary_rays);
+    // The source states its own strength in watts (for a sun: DNI * aperture area *
+    // foreshortening) and the tracer divides that among the primary rays. Each sampled ray
+    // carries a relative weight of exactly 1.0, so *= writes the same double as = did.
+    double ray_power = sun.total_power_w() / static_cast<double>(cfg.n_primary_rays);
 
     int nthreads = cfg.num_threads > 0
                        ? cfg.num_threads
@@ -337,8 +341,8 @@ TraceResult Tracer::run(const TraceConfig& cfg, FluxAccumulator& acc, TraceContr
                 }
             }
 
-            core::Ray r = sun.sample_ray(ap, slot_rng);
-            r.power     = ray_power;
+            core::Ray r = sun.sample_ray(slot_rng);
+            r.power    *= ray_power;
             r.id        = static_cast<std::uint32_t>(ray_start + i);
 
             if (path_ptr) path_buf.nodes.push_back(r.origin);   // node 0: where the ray began

@@ -11,7 +11,7 @@ public:
     /// chi: circumsolar ratio χ ∈ [0.02, 0.10].  Typical clear day: 0.05.
     explicit Buie(double chi = 0.05);
 
-    core::Ray sample_ray(const scene::Aperture& ap, math::Rng& rng) const override;
+    core::Ray sample_ray(math::Rng& rng) const override;
 
     /// Returns the circumsolar ratio used to construct this distribution.
     double chi() const { return chi_; }

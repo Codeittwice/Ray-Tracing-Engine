@@ -168,7 +168,12 @@ void RayRenderer::register_surfaces(int tess_segs) {
 }
 
 void RayRenderer::register_aperture() {
-    const auto& ap = scene_->aperture();
+    // Presentation only: the disk belongs to the sun, and a scene without one has nothing to
+    // draw. polyscope::removeAllStructures() runs before every register_scene(), so returning
+    // early cannot leave a stale disk on screen.
+    const auto* ap_ptr = scene_->display_aperture();
+    if (!ap_ptr) return;
+    const auto& ap = *ap_ptr;
     math::vec3 u, v;
     ap.tangent_frame(u, v);
 

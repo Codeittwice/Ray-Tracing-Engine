@@ -138,14 +138,14 @@ TEST_CASE("T10: paraboloid f=1 + pillbox sun -> focal spot D90 within 5%") {
     auto sun = std::make_unique<scrt::sources::Pillbox>(half_a);
     sun->set_sun_direction({0.0, 0.0, -1.0});
     sun->set_dni(1000.0);
-    scene.set_sun(std::move(sun));
 
-    // Aperture: disk above dish, normal pointing up toward sun
+    // Aperture: disk above dish, normal pointing up toward sun. The sun owns it.
     scrt::scene::Aperture ap;
     ap.center = {0.0, 0.0, 2.0};
     ap.normal = {0.0, 0.0,  1.0};
     ap.radius = ap_r;
-    scene.set_aperture(ap);
+    sun->set_aperture(ap);
+    scene.set_sun(std::move(sun));
 
     // Trace
     scrt::tracer::TraceConfig cfg;
@@ -388,11 +388,9 @@ double flat_plate_absorbed_w(double azimuth_deg, double elevation_deg,
     auto sun = std::make_unique<scrt::sources::Pillbox>(0.0);
     sun->set_sun_angles({azimuth_deg, elevation_deg});
     sun->set_dni(dni_wm2);
-    const vec3 to_sun = sun->to_sun();
+    sun->set_aperture(
+        scrt::scene::Aperture::auto_fit(scene.world_bounds(), sun->to_sun(), 0.05));
     scene.set_sun(std::move(sun));
-
-    scene.set_aperture(
-        scrt::scene::Aperture::auto_fit(scene.world_bounds(), to_sun, 0.05));
     scene.build_acceleration_structure();
 
     scrt::tracer::TraceConfig cfg;
@@ -436,7 +434,6 @@ double flat_plate_fixed_aperture_absorbed_w(double azimuth_deg, double elevation
     sun->set_sun_angles({azimuth_deg, elevation_deg});
     sun->set_dni(dni_wm2);
     const vec3 to_sun = sun->to_sun();
-    scene.set_sun(std::move(sun));
 
     // Projecting the plate along -to_sun onto the horizontal aperture plane is a pure
     // translation by (z0 / sin(el)) * to_sun, so centre the disk on that shifted square.
@@ -445,7 +442,8 @@ double flat_plate_fixed_aperture_absorbed_w(double azimuth_deg, double elevation
     ap.normal = {0.0, 0.0, 1.0};
     ap.center = (z0 / to_sun.z) * to_sun;
     ap.radius = ap_r;
-    scene.set_aperture(ap);
+    sun->set_aperture(ap);
+    scene.set_sun(std::move(sun));
     scene.build_acceleration_structure();
 
     scrt::tracer::TraceConfig cfg;

@@ -2,9 +2,10 @@
 #include "scrt/core/Ray.hpp"
 #include "scrt/math/Rng.hpp"
 #include "scrt/math/Vec.hpp"
+#include "scrt/scene/Aperture.hpp"
+#include "scrt/sources/LightSource.hpp"
 #include <stdexcept>
-
-namespace scrt::scene { struct Aperture; }
+#include <string_view>
 
 namespace scrt::sources {
 
@@ -19,17 +20,35 @@ struct SunAngles {
     double elevation_deg {90.0};   ///< Degrees above the horizon; 90 is the zenith.
 };
 
-/// Abstract sun model; samples primary rays through the collection aperture.
-class SunSource {
+/// Abstract sun model; samples primary rays through its own collection aperture.
+///
+/// The aperture lives HERE, not on the scene: it is solar sampling apparatus (the disk the
+/// sun's rays are launched from), not a property of the world. A laser has no aperture and
+/// must not be made to carry one.
+class SunSource : public LightSource {
 public:
-    virtual ~SunSource() = default;
-    SunSource(const SunSource&) = delete;
-    SunSource& operator=(const SunSource&) = delete;
-    SunSource(SunSource&&) = delete;
-    SunSource& operator=(SunSource&&) = delete;
+    /// DNI * aperture area * foreshortening, in the same left-to-right association the tracer
+    /// used before the aperture moved here, so the per-ray power is the same double.
+    double total_power_w() const override {
+        return dni_ * aperture_.area() * aperture_.cosine_to(to_sun());
+    }
 
-    /// Draw one primary ray from the aperture toward the sun.
-    virtual core::Ray sample_ray(const scene::Aperture& ap, math::Rng& rng) const = 0;
+    std::string_view type_name() const override { return "sun"; }
+    const SunSource* as_sun() const override { return this; }
+          SunSource* as_sun()       override { return this; }
+
+    /// The disk primary rays are launched from; must cover the scene's shadow toward the sun.
+    const scene::Aperture& aperture() const { return aperture_; }
+    /// Replace the collection aperture. Resolve auto_fit before calling; this stores verbatim.
+    void set_aperture(const scene::Aperture& ap) { aperture_ = ap; }
+
+    /// Wavelength stamped on every sampled ray [nm].
+    ///
+    /// The engine is strictly monochromatic, one wavelength per ray, with no spectral weighting
+    /// anywhere. 550 nm is a CONVENTION (the photopic peak), not a derivation from the solar
+    /// spectrum, and it equals core::Ray's own default so the stamp writes the double that was
+    /// already there. Dielectric::n_at reads it for Sellmeier dispersion.
+    double wavelength_nm() const { return wavelength_nm_; }
 
     /// Horizontal component below which azimuth is treated as degenerate (at the pole).
     ///
@@ -103,8 +122,10 @@ public:
 
 protected:
     SunSource() = default;
-    math::vec3 sun_direction_ {0.0, 0.0, -1.0};
-    double     dni_           {1000.0};
+    math::vec3      sun_direction_ {0.0, 0.0, -1.0};
+    double          dni_           {1000.0};
+    scene::Aperture aperture_      {};
+    double          wavelength_nm_ {550.0};
 };
 
 } // namespace scrt::sources

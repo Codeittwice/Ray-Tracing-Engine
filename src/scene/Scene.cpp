@@ -56,7 +56,6 @@ std::optional<std::size_t> Scene::index_of(std::uint64_t id) const {
 
 void Scene::set_receiver(std::unique_ptr<Receiver> r) { receiver_ = std::move(r); }
 void Scene::set_sun(std::unique_ptr<sources::SunSource> s) { sun_ = std::move(s); }
-void Scene::set_aperture(Aperture a) { aperture_ = a; }
 
 void Scene::build_acceleration_structure() {
     bvh_.build(surfaces_);

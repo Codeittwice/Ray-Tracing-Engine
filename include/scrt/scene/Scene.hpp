@@ -43,7 +43,6 @@ public:
 
     void set_receiver(std::unique_ptr<Receiver> r);
     void set_sun(std::unique_ptr<sources::SunSource> s);
-    void set_aperture(Aperture a);
 
     /// Build BVH over all currently added surfaces. Must be called before run().
     void build_acceleration_structure();
@@ -57,7 +56,14 @@ public:
     Receiver*            receiver()       { return receiver_.get(); }
     const sources::SunSource* sun()  const { return sun_.get(); }
           sources::SunSource* sun()        { return sun_.get(); }
-    const Aperture&      aperture()  const { return aperture_; }
+
+    /// The aperture disk to DRAW, or nullptr when no source has one.
+    ///
+    /// PRESENTATION ONLY. The tracer must not call this: a source owns its aperture and
+    /// expresses it through total_power_w() and sample_ray(); the scene no longer has one.
+    const Aperture* display_aperture() const {
+        return sun_ ? &sun_->aperture() : nullptr;
+    }
 
     /// World-space AABB over every surface AND every receiver face; empty scene -> zero box.
     core::AABB world_bounds() const;
@@ -71,7 +77,6 @@ private:
     std::vector<std::unique_ptr<surfaces::Surface>>   surfaces_;
     std::unique_ptr<Receiver>                         receiver_;
     std::unique_ptr<sources::SunSource>               sun_;
-    Aperture                                          aperture_;
     accel::BVH                                        bvh_;
     bool                                              use_bvh_ = false;
     bool                                              accel_dirty_ = false;
