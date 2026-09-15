@@ -1,14 +1,21 @@
 #include "scrt/viz/Panels.hpp"
 
 #include "scrt/scene/Scene.hpp"
+#include "scrt/core/Ray.hpp"
+#include "scrt/core/Hit.hpp"
 #include "scrt/scene/SceneEditor.hpp"
 #include "scrt/viz/Icons.hpp"
 #include "scrt/viz/Library.hpp"
 #include "scrt/viz/Preview.hpp"
 
+#include "polyscope/view.h"
+
 #include <algorithm>
 #include <filesystem>
 #include <cstdio>
+#include <cmath>
+#include <cstring>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -18,9 +25,12 @@ namespace scrt::viz {
 
 namespace {
 
-/// Where a dropped component lands. The user sets it before clicking, so two components do not
-/// pile up at the origin; the gizmo moves them afterwards.
+/// Where a component dropped by BUTTON lands. The user sets it before clicking, so two do not
+/// pile up at the origin; a component dropped by DRAGGING lands under the cursor instead.
 float g_place[3] = {0.0f, 0.0f, 0.0f};
+
+/// ImGui payload id for a library component being dragged into the viewport.
+constexpr const char* kComponentPayload = "SCRT_COMPONENT";
 
 /// A message under the buttons: what the last click actually did.
 std::string g_status;
@@ -214,6 +224,18 @@ void draw_components_section(PanelContext& ctx) {
             }
         }
         ImGui::EndDisabled();
+        // Dragging is the other half of placing: typed coordinates put something exactly, a
+        // drag puts it roughly and then you adjust. The payload is the entry's index.
+        if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+            const int idx = static_cast<int>(&c - builtin_components().data());
+            ImGui::SetDragDropPayload(kComponentPayload, &idx, sizeof(idx));
+            draw_surface_thumbnail(c.name.c_str(), c.surface,
+                                   ctx.scene_dir ? *ctx.scene_dir : std::filesystem::path("."),
+                                   ImGui::GetFrameHeight() * 1.6f);
+            ImGui::SameLine();
+            ImGui::TextUnformatted(c.name.c_str());
+            ImGui::EndDragDropSource();
+        }
         note_tip(c.note + "\n\nMaterial: " + c.material);
         ImGui::PopID();
     }
@@ -245,6 +267,97 @@ void draw_sources_section(PanelContext& ctx) {
 }
 
 } // namespace
+
+void draw_viewport_drop_target(PanelContext& ctx, const ImVec2& vmin, const ImVec2& vmax) {
+    // No drag, no window. This is the whole reason the camera still works normally.
+    if (!ImGui::GetDragDropPayload()) return;
+    if (vmax.x <= vmin.x || vmax.y <= vmin.y) return;
+
+    ImGui::SetNextWindowPos(vmin, ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(vmax.x - vmin.x, vmax.y - vmin.y), ImGuiCond_Always);
+    ImGui::Begin("##viewport_drop", nullptr,
+                 ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                     ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+                     ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBackground |
+                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
+                     ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav);
+    ImGui::InvisibleButton("##drop_area", ImVec2(vmax.x - vmin.x, vmax.y - vmin.y));
+
+    if (ImGui::BeginDragDropTarget()) {
+        if (const ImGuiPayload* pl = ImGui::AcceptDragDropPayload(kComponentPayload)) {
+            int idx = -1;
+            if (pl->DataSize == static_cast<int>(sizeof(int)))
+                std::memcpy(&idx, pl->Data, sizeof(int));
+            const auto& comps = builtin_components();
+            if (ctx.trace_running) {
+                say("The scene is locked while a trace runs.", true);
+            } else if (idx < 0 || idx >= static_cast<int>(comps.size())) {
+                say("Dropped something the library does not recognise.", true);
+            } else {
+                const ComponentEntry& c = comps[static_cast<std::size_t>(idx)];
+                const ImVec2 m = ImGui::GetMousePos();
+
+                // Polyscope passes ImGui::GetMousePos() straight to its own picking, so ImGui's
+                // coordinates ARE the screen coordinates these want, and the window-to-buffer
+                // scaling is handled inside Polyscope. Checked in its source, not assumed.
+                //
+                // The obvious call here, view::screenCoordsToWorldPosition, reads the depth
+                // buffer - and MEASURED from inside this callback it returns infinity even with
+                // the cursor squarely on an object, so a drop onto the cooker landed 1.8 m away
+                // on the ground plane. So cast the ray against the SCENE instead: exact, no
+                // buffer read, and it is the same geometry the tracer traces, which is the
+                // honest thing for a drop to land on.
+                math::vec3  where{g_place[0], g_place[1], g_place[2]};
+                const char* how = "at the typed point";
+                const glm::vec3 eye = polyscope::view::getCameraWorldPosition();
+                const glm::vec3 dir = polyscope::view::screenCoordsToWorldRay(glm::vec2{m.x, m.y});
+
+                core::Ray pick_ray;
+                pick_ray.origin    = math::vec3{eye.x, eye.y, eye.z};
+                pick_ray.direction = math::safe_normalize(math::vec3{dir.x, dir.y, dir.z});
+                core::Hit pick_hit;
+                if (ctx.scene && ctx.scene->intersect(pick_ray, 1e-6,
+                                                      std::numeric_limits<double>::max(),
+                                                      pick_hit)) {
+                    where = pick_hit.position;
+                    how   = "on the surface under the cursor";
+                } else if (pick_ray.direction.z < -1e-6) {
+                    // Nothing in the scene under the cursor: meet the ground plane z = 0.
+                    const double t = -pick_ray.origin.z / pick_ray.direction.z;
+                    where = pick_ray.origin + t * pick_ray.direction;
+                    where.z = 0.0;
+                    how   = "on the ground plane";
+                }
+
+                const MaterialEntry* mat = find_material(c.material);
+                if (!mat) {
+                    say("Component names a material that is not in the library: " + c.material,
+                        true);
+                } else if (!ensure_material(ctx, *mat)) {
+                    say("Could not add the material this component needs (" + c.material + ")",
+                        true);
+                } else {
+                    io::ElementDoc el;
+                    el.name        = c.name;
+                    el.material_id = c.material;
+                    el.surface     = c.surface;
+                    el.transform.translation = where;
+                    if (ctx.add_element && ctx.add_element(std::move(el))) {
+                        char buf[200];
+                        std::snprintf(buf, sizeof(buf), "Dropped %s %s: (%.3f, %.3f, %.3f) m",
+                                      c.name.c_str(), how, where.x, where.y, where.z);
+                        say(buf);
+                        if (ctx.need_retrace) *ctx.need_retrace = true;
+                    } else {
+                        say("Could not add " + c.name, true);
+                    }
+                }
+            }
+        }
+        ImGui::EndDragDropTarget();
+    }
+    ImGui::End();
+}
 
 void draw_library_panel(PanelContext& ctx) {
     if (!ctx.editor) {

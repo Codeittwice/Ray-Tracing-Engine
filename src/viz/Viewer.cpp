@@ -620,6 +620,10 @@ void Viewer::draw_gui() {
     }
     ImGui::End();
 
+    // A component dragged out of the library needs somewhere to land, and the 3D view is not
+    // an ImGui window. This creates its overlay only while a drag is in flight.
+    draw_viewport_drop_target(ctx, lay.viewport_min, lay.viewport_max);
+
     // ---- right column, bottom: what is selected, and how to place it --
     ImGui::SetNextWindowPos(lay.right_bottom_pos, ImGuiCond_Always);
     ImGui::SetNextWindowSize(lay.right_bottom_size, ImGuiCond_Always);

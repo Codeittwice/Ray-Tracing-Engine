@@ -146,6 +146,44 @@ and passed.
 - [x] Stage 5 - `diffuser` material (Lambertian, albedo); realistic blacks are low-albedo diffusers (G1)
 - [x] Stage 6 - material library (presets + user entries beside the AI config), component catalogue, `examples/optical_bench.json`
 
+### Wave 4 progress (in flight)
+
+Design: `docs/plans/v2_waves_4_to_8_design.md` sections 4.1-4.8. Gating follows the reduced
+policy above: goldens and full ctest every stage, corpus once at the end (nothing in this wave
+touches the tracer, an intersect or an interact).
+
+- [x] Stage 1 - appearance dispatched on MATERIAL TYPE, not on a name match
+- [x] Stage 2 - library previews: component thumbnails and material diagrams
+- [x] Stage 3 - drag a component from the library into the 3D view
+- [ ] Stage 4 - snapping (ImGuizmo's `snap` argument, plus the numeric fields)
+- [ ] Stage 5 - procedural geometry (mirror substrates, splitter cubes, posts)
+- [ ] Stage 6 - the grid, and the Polyscope extents trap it triggers
+
+**Two things measured rather than assumed, both of which would have shipped wrong:**
+
+1. The default scene's cooker went gold -> grey and a band in it magenta -> white after Stage 1.
+   I suspected the receiver's flux mesh had been restyled. One `fprintf` in the styling path
+   showed it touches exactly three surfaces, all reflectors - no receiver involved. The old
+   colours were Polyscope's per-structure palette, which is the point of the change: three
+   mirrors were three arbitrary colours and are now one mirror colour. The white is candy's
+   specular highlight. Nothing was broken.
+2. **`view::screenCoordsToWorldPosition` returns infinity when called from inside the ImGui user
+   callback**, even with the cursor squarely on an object - it reads the depth buffer, and from
+   there the read comes back empty. A component dropped on the cooker landed 1.8 m away on the
+   ground-plane fallback, at a position that looks perfectly plausible in isolation. The drop now
+   casts the camera ray against `Scene::intersect` instead: exact, no buffer read, and it is the
+   geometry the tracer actually traces. VERIFIED by dropping on the box cooker and checking the
+   read-out against the scene file: (0.375, 0.000, 0.310) lies on the east reflector's plane to
+   within 0.1 mm and well inside its extent. Do not "simplify" this back to the depth query.
+
+The selection read-out now reports the object's CENTRE as well as its extent. Its own empty-state
+hint promised "what it is and where it sits" and the position was the half that was missing; it
+is also the only way to read back where a dragged component landed.
+
+Not verified: drag and drop at a second display scale. Polyscope passes `ImGui::GetMousePos()`
+straight to its own picking, so the window-to-buffer scaling is inside Polyscope rather than in
+this code, but that reasoning has not been checked against a scaled monitor.
+
 ### The measurement Wave 1 settled, worth not repeating
 
 Only `fresnel_lens_cooker.json` splits among the golden scenes — 19617 splits per 20k-ray trace —

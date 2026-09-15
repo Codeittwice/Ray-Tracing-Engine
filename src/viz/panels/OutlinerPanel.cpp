@@ -260,8 +260,14 @@ void outliner_row(PanelContext& ctx, const char* icon, const char* label,
 std::string surface_detail(const surfaces::Surface& surf) {
     const auto b = surf.world_bounds();
     const auto d = b.max() - b.min();
-    char       buf[160];
-    std::snprintf(buf, sizeof(buf), "Extent %.2f x %.2f x %.2f m", d.x, d.y, d.z);
+    const auto c = b.centroid();
+    char       buf[200];
+    // The empty-state hint promises "what it is and where it SITS", and the position was the
+    // half that was missing. It is also the only way to read back where a dragged component
+    // actually landed.
+    std::snprintf(buf, sizeof(buf),
+                  "Centre (%.3f, %.3f, %.3f) m\nExtent %.3f x %.3f x %.3f m",
+                  c.x, c.y, c.z, d.x, d.y, d.z);
     return buf;
 }
 

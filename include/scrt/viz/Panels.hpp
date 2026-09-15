@@ -216,6 +216,15 @@ void draw_materials_panel(PanelContext& ctx);
 
 /// Draws the component, material and source library: ready-made things to drop into the scene.
 void draw_library_panel(PanelContext& ctx);
+
+/// Accepts a library component dragged into the 3D view, dropping it where the cursor is.
+///
+/// Draws NOTHING and creates no window unless a drag is actually in flight. The 3D view is
+/// Polyscope's render surface, not an ImGui window, so a drop target over it has to be an
+/// overlay - and an overlay that existed permanently would sit between the user and Polyscope's
+/// camera handling, swallowing rotate, pan, zoom and the edge-panning the user asked be kept.
+/// Call once per frame, after the panels, with the layout's viewport rect.
+void draw_viewport_drop_target(PanelContext& ctx, const ImVec2& vmin, const ImVec2& vmax);
 /// Draws the sun controls panel (DNI, azimuth, elevation).
 void draw_sun_panel(PanelContext& ctx);
 /// Draws the trace controls and results panel.
