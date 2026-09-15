@@ -280,7 +280,7 @@ bool SceneEditor::commit_material_param(const std::string& material_id, const st
 // ---- commit_sun ---------------------------------------------------------
 
 void SceneEditor::commit_sun(math::vec3 direction, double dni_wm2) {
-    auto* sun = scene_->sun();
+    auto* sun = scene_->primary_sun();
     if (!sun) return;
 
     sun->set_sun_direction(direction);

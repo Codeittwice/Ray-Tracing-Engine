@@ -533,7 +533,7 @@ TEST_CASE("SceneEditor: a sun edit survives save and reload") {
     const auto src = std::filesystem::path(SCRT_SOURCE_DIR) / "examples" / "parabolic_dish.json";
     auto loaded = scrt::io::load_scene(src);
     REQUIRE(loaded.scene != nullptr);
-    REQUIRE(loaded.scene->sun() != nullptr);
+    REQUIRE(loaded.scene->primary_sun() != nullptr);
     scrt::scene::SceneEditor ed(std::move(loaded), src.parent_path());
 
     // Well off zenith, so a fix that only carried DNI would still fail here.
@@ -547,10 +547,10 @@ TEST_CASE("SceneEditor: a sun edit survives save and reload") {
 
     auto back = scrt::io::load_scene(dst);
     REQUIRE(back.scene != nullptr);
-    REQUIRE(back.scene->sun() != nullptr);
+    REQUIRE(back.scene->primary_sun() != nullptr);
 
-    CHECK(back.scene->sun()->dni() == doctest::Approx(842.0));
-    const auto got = back.scene->sun()->sun_direction();
+    CHECK(back.scene->primary_sun()->dni() == doctest::Approx(842.0));
+    const auto got = back.scene->primary_sun()->sun_direction();
     CHECK(got.x == doctest::Approx(dir.x).epsilon(1e-12));
     CHECK(got.y == doctest::Approx(dir.y).epsilon(1e-12));
     CHECK(got.z == doctest::Approx(dir.z).epsilon(1e-12));

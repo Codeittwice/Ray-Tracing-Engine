@@ -145,7 +145,7 @@ TEST_CASE("T10: paraboloid f=1 + pillbox sun -> focal spot D90 within 5%") {
     ap.normal = {0.0, 0.0,  1.0};
     ap.radius = ap_r;
     sun->set_aperture(ap);
-    scene.set_sun(std::move(sun));
+    scene.add_source(std::move(sun));
 
     // Trace
     scrt::tracer::TraceConfig cfg;
@@ -390,7 +390,7 @@ double flat_plate_absorbed_w(double azimuth_deg, double elevation_deg,
     sun->set_dni(dni_wm2);
     sun->set_aperture(
         scrt::scene::Aperture::auto_fit(scene.world_bounds(), sun->to_sun(), 0.05));
-    scene.set_sun(std::move(sun));
+    scene.add_source(std::move(sun));
     scene.build_acceleration_structure();
 
     scrt::tracer::TraceConfig cfg;
@@ -443,7 +443,7 @@ double flat_plate_fixed_aperture_absorbed_w(double azimuth_deg, double elevation
     ap.center = (z0 / to_sun.z) * to_sun;
     ap.radius = ap_r;
     sun->set_aperture(ap);
-    scene.set_sun(std::move(sun));
+    scene.add_source(std::move(sun));
     scene.build_acceleration_structure();
 
     scrt::tracer::TraceConfig cfg;

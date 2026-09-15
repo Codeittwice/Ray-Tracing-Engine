@@ -51,8 +51,8 @@ const char* compass_point(float bearing_deg) {
 /// Draws the sun controls panel (DNI, azimuth, elevation).
 void draw_sun_panel(PanelContext& ctx) {
     if (ImGui::CollapsingHeader("Sun", ImGuiTreeNodeFlags_DefaultOpen)) {
-        if (ctx.scene && ctx.scene->sun()) {
-            auto* sun = ctx.scene->sun();
+        if (ctx.scene && ctx.scene->primary_sun()) {
+            auto* sun = ctx.scene->primary_sun();
 
             help_line("Where the sun sits in the sky and how strong it is. This is a "
                       "single instant, not a whole day.");

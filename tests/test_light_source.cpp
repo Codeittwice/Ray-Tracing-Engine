@@ -142,7 +142,8 @@ TEST_CASE("Scene::display_aperture follows the sun; Tracer tolerates no sun at a
     ap.radius = 0.9;
     sun->set_aperture(ap);
     const auto* sun_raw = sun.get();
-    scene.set_sun(std::move(sun));
+    scene.add_source(std::move(sun));
+    CHECK(scene.primary_sun() == sun_raw);
 
     REQUIRE(scene.display_aperture() != nullptr);
     CHECK(scene.display_aperture() == &sun_raw->aperture());

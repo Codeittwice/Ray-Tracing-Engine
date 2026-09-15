@@ -86,7 +86,7 @@ int main(int argc, char* argv[]) {
         }
         scrt::tracer::Tracer tracer(*ls.scene);
         std::filesystem::create_directories(out_dir);
-        double dni = ls.scene->sun() ? ls.scene->sun()->dni() : 1000.0;
+        double dni = ls.scene->primary_sun() ? ls.scene->primary_sun()->dni() : 1000.0;
 
         if (recv->is_multi_face()) {
             auto result = tracer.run(ls.cfg);

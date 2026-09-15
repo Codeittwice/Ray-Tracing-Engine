@@ -1,4 +1,5 @@
 #include "scrt/tracer/Tracer.hpp"
+#include "scrt/tracer/EmissionPlan.hpp"
 #include "scrt/math/Constants.hpp"
 #include "scrt/materials/Material.hpp"
 #include "scrt/scene/Receiver.hpp"
@@ -136,15 +137,13 @@ TraceResult Tracer::run(const TraceConfig& cfg, TraceControl* ctl) const {
 
     auto t0 = std::chrono::steady_clock::now();
 
-    // Three call sites (the app, scrt_compare, test_compare) guard for a null sun; this one
-    // dereferenced it unguarded. Treat "no source" the way "no receiver" is treated above.
-    if (!scene_->sun())
+    // Each source states its own strength in watts (for a sun: DNI * aperture area *
+    // foreshortening); the plan divides the primary rays among them by power and prices
+    // each ray at total_power_w() / count. A scene with nothing emitting traces to nothing,
+    // the way a scene with no receiver does.
+    const EmissionPlan plan = build_emission_plan(scene_->sources(), cfg.n_primary_rays);
+    if (plan.empty())
         return {};
-    const auto& sun = *scene_->sun();
-    // The source states its own strength in watts (for a sun: DNI * aperture area *
-    // foreshortening) and the tracer divides that among the primary rays. Each sampled ray
-    // carries a relative weight of exactly 1.0, so *= writes the same double as = did.
-    double ray_power = sun.total_power_w() / static_cast<double>(cfg.n_primary_rays);
 
     int nthreads = cfg.num_threads > 0
                        ? cfg.num_threads
@@ -213,8 +212,9 @@ TraceResult Tracer::run(const TraceConfig& cfg, TraceControl* ctl) const {
                 }
             }
 
-            core::Ray r = sun.sample_ray(slot_rng);
-            r.power    *= ray_power;
+            const EmissionPlan::Entry& e = plan.entry_for(ray_start + i);
+            core::Ray r = e.source->sample_ray(slot_rng);
+            r.power    *= e.per_ray_w;
             r.id        = static_cast<std::uint32_t>(ray_start + i);
 
             if (path_ptr) path_buf.nodes.push_back(r.origin);   // node 0: where the ray began
@@ -260,15 +260,13 @@ TraceResult Tracer::run(const TraceConfig& cfg, TraceControl* ctl) const {
 TraceResult Tracer::run(const TraceConfig& cfg, FluxAccumulator& acc, TraceControl* ctl) const {
     auto t0 = std::chrono::steady_clock::now();
 
-    // Three call sites (the app, scrt_compare, test_compare) guard for a null sun; this one
-    // dereferenced it unguarded. Treat "no source" the way "no receiver" is treated above.
-    if (!scene_->sun())
+    // Each source states its own strength in watts (for a sun: DNI * aperture area *
+    // foreshortening); the plan divides the primary rays among them by power and prices
+    // each ray at total_power_w() / count. A scene with nothing emitting traces to nothing,
+    // the way a scene with no receiver does.
+    const EmissionPlan plan = build_emission_plan(scene_->sources(), cfg.n_primary_rays);
+    if (plan.empty())
         return {};
-    const auto& sun = *scene_->sun();
-    // The source states its own strength in watts (for a sun: DNI * aperture area *
-    // foreshortening) and the tracer divides that among the primary rays. Each sampled ray
-    // carries a relative weight of exactly 1.0, so *= writes the same double as = did.
-    double ray_power = sun.total_power_w() / static_cast<double>(cfg.n_primary_rays);
 
     int nthreads = cfg.num_threads > 0
                        ? cfg.num_threads
@@ -341,8 +339,9 @@ TraceResult Tracer::run(const TraceConfig& cfg, FluxAccumulator& acc, TraceContr
                 }
             }
 
-            core::Ray r = sun.sample_ray(slot_rng);
-            r.power    *= ray_power;
+            const EmissionPlan::Entry& e = plan.entry_for(ray_start + i);
+            core::Ray r = e.source->sample_ray(slot_rng);
+            r.power    *= e.per_ray_w;
             r.id        = static_cast<std::uint32_t>(ray_start + i);
 
             if (path_ptr) path_buf.nodes.push_back(r.origin);   // node 0: where the ray began

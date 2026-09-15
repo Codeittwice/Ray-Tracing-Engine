@@ -58,8 +58,8 @@ int main(int argc, char* argv[]) {
             if (n_rays_override > 0)
                 ls.cfg.n_primary_rays = n_rays_override;
 
-            if (dni_override > 0.0 && ls.scene->sun())
-                ls.scene->sun()->set_dni(dni_override);
+            if (dni_override > 0.0 && ls.scene->primary_sun())
+                ls.scene->primary_sun()->set_dni(dni_override);
 
             auto* recv = ls.scene->receiver();
             if (!recv)
@@ -71,7 +71,7 @@ int main(int argc, char* argv[]) {
             scrt::tracer::Tracer tracer(*ls.scene);
             auto result = tracer.run(ls.cfg, acc);
 
-            double dni = ls.scene->sun() ? ls.scene->sun()->dni() : 1000.0;
+            double dni = ls.scene->primary_sun() ? ls.scene->primary_sun()->dni() : 1000.0;
 
             csv << path.string()              << ','
                 << acc.total_power_w()        << ','

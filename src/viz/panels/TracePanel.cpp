@@ -129,7 +129,8 @@ void draw_trace_panel(PanelContext& ctx) {
             // peak flux divided by it, so a stale literal here would misreport the ratio
             // by DNI/1000 the moment the Sun panel's slider moved.
             const double dni =
-                (ctx.scene && ctx.scene->sun()) ? ctx.scene->sun()->dni() : 1000.0;
+                (ctx.scene && ctx.scene->primary_sun()) ? ctx.scene->primary_sun()->dni()
+                                                         : 1000.0;
 
             // Plain-language names, with the physical quantity kept in parentheses and
             // the original precision unchanged. Nothing here is rounded more than before.

@@ -5,6 +5,7 @@
 #include "scrt/materials/Material.hpp"
 #include "scrt/scene/Aperture.hpp"
 #include "scrt/scene/Receiver.hpp"
+#include "scrt/sources/LightSource.hpp"
 #include "scrt/sources/SunSource.hpp"
 #include "scrt/surfaces/Surface.hpp"
 #include <cstdint>
@@ -42,7 +43,13 @@ public:
     bool acceleration_dirty() const { return accel_dirty_; }
 
     void set_receiver(std::unique_ptr<Receiver> r);
-    void set_sun(std::unique_ptr<sources::SunSource> s);
+
+    /// Takes ownership of a light source; returns its index in sources().
+    ///
+    /// Sources are a list, not a single pointer: the tracer divides its primary rays among
+    /// them by power (tracer::EmissionPlan), so a laser and a sun in one scene are two
+    /// entries here rather than two modes.
+    std::size_t add_source(std::unique_ptr<sources::LightSource> s);
 
     /// Build BVH over all currently added surfaces. Must be called before run().
     void build_acceleration_structure();
@@ -54,15 +61,25 @@ public:
     std::span<std::unique_ptr<surfaces::Surface>>         mutable_surfaces();
     const Receiver*      receiver() const { return receiver_.get(); }
     Receiver*            receiver()       { return receiver_.get(); }
-    const sources::SunSource* sun()  const { return sun_.get(); }
-          sources::SunSource* sun()        { return sun_.get(); }
+    std::span<const std::unique_ptr<sources::LightSource>> sources() const { return sources_; }
+    /// Non-const span over sources — for live parameter editing in the viewer.
+    std::span<std::unique_ptr<sources::LightSource>>       mutable_sources() { return sources_; }
+
+    /// The first solar source, or nullptr when there is none.
+    ///
+    /// Every caller is a place still coupled to the sun: the sun panel, the DNI-based
+    /// concentration ratio, the editor's sun commit. A scene may hold several suns; this
+    /// names the one those legacy paths act on, and nothing else about it is special.
+    const sources::SunSource* primary_sun() const;
+          sources::SunSource* primary_sun();
 
     /// The aperture disk to DRAW, or nullptr when no source has one.
     ///
     /// PRESENTATION ONLY. The tracer must not call this: a source owns its aperture and
     /// expresses it through total_power_w() and sample_ray(); the scene no longer has one.
     const Aperture* display_aperture() const {
-        return sun_ ? &sun_->aperture() : nullptr;
+        const auto* sun = primary_sun();
+        return sun ? &sun->aperture() : nullptr;
     }
 
     /// World-space AABB over every surface AND every receiver face; empty scene -> zero box.
@@ -76,7 +93,7 @@ private:
     std::vector<std::unique_ptr<materials::Material>> materials_;
     std::vector<std::unique_ptr<surfaces::Surface>>   surfaces_;
     std::unique_ptr<Receiver>                         receiver_;
-    std::unique_ptr<sources::SunSource>               sun_;
+    std::vector<std::unique_ptr<sources::LightSource>> sources_;
     accel::BVH                                        bvh_;
     bool                                              use_bvh_ = false;
     bool                                              accel_dirty_ = false;

@@ -55,7 +55,24 @@ std::optional<std::size_t> Scene::index_of(std::uint64_t id) const {
 }
 
 void Scene::set_receiver(std::unique_ptr<Receiver> r) { receiver_ = std::move(r); }
-void Scene::set_sun(std::unique_ptr<sources::SunSource> s) { sun_ = std::move(s); }
+std::size_t Scene::add_source(std::unique_ptr<sources::LightSource> s) {
+    sources_.push_back(std::move(s));
+    return sources_.size() - 1;
+}
+
+const sources::SunSource* Scene::primary_sun() const {
+    for (const auto& s : sources_)
+        if (const auto* sun = s->as_sun())
+            return sun;
+    return nullptr;
+}
+
+sources::SunSource* Scene::primary_sun() {
+    for (auto& s : sources_)
+        if (auto* sun = s->as_sun())
+            return sun;
+    return nullptr;
+}
 
 void Scene::build_acceleration_structure() {
     bvh_.build(surfaces_);

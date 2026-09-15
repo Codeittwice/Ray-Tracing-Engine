@@ -388,7 +388,7 @@ LoadedScene build_scene(const SceneDocument& doc, const std::filesystem::path& b
             ap.margin = doc.aperture.margin;
             sun->set_aperture(ap);
         }
-        scene->set_sun(std::move(sun));
+        scene->add_source(std::move(sun));
     }
 
     // ---- Trace config and finish -------------------------------------------

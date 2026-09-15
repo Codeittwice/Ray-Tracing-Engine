@@ -38,7 +38,7 @@ CompareRow run_scene(const std::filesystem::path& path, std::size_t n_rays,
     scrt::tracer::Tracer tracer(*ls.scene);
     auto result = tracer.run(ls.cfg, acc);
 
-    double dni = ls.scene->sun() ? ls.scene->sun()->dni() : 1000.0;
+    double dni = ls.scene->primary_sun() ? ls.scene->primary_sun()->dni() : 1000.0;
 
     CompareRow row;
     row.scene               = path.string();
@@ -148,6 +148,6 @@ TEST_CASE("T_MC2: concentration_ratio is peak_flux / dni (positive for working s
     scrt::tracer::Tracer tracer(*ls.scene);
     tracer.run(ls.cfg, acc);
 
-    double dni = ls.scene->sun()->dni();
+    double dni = ls.scene->primary_sun()->dni();
     CHECK(acc.concentration_ratio(dni) > 1.0);  // parabolic dish must concentrate
 }

@@ -121,6 +121,7 @@ target_sources(scrt_core PRIVATE
     src/scene/SceneEditor.cpp
     src/tracer/FluxAccumulator.cpp
     src/tracer/Tracer.cpp
+    src/tracer/EmissionPlan.cpp
 )
 
 # ---------- Phase 7 sources ----------
@@ -152,6 +153,7 @@ target_sources(scrt_tests PRIVATE
     tests/test_fresnel.cpp
     tests/test_intersections.cpp
     tests/test_light_source.cpp
+    tests/test_emission_plan.cpp
     tests/test_sun.cpp
     tests/test_paraxial.cpp
     tests/test_scene_io.cpp
