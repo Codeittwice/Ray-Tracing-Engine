@@ -179,6 +179,38 @@ const std::vector<MaterialEntry>& builtin_materials() {
                           "zero-thickness surface models, so this is the one splitter the "
                           "engine represents honestly.",
                           mat("beam_splitter", {{"reflectance", 0.45}, {"absorptance", 0.01}})));
+
+        // ---- Polarisation optics (Wave 5). They act only on POLARISED light: a laser with a
+        // "polarisation" set. Sunlight and an unpolarised laser pass a waveplate unchanged.
+        m.push_back(entry("Ideal linear polariser (reference)", "Polarisation",
+                          "Passes exactly half of unpolarised light and nothing crossed to its "
+                          "axis. The textbook polariser, for checking Malus's law.",
+                          mat("polariser", {{"transmission_axis_deg", 0.0},
+                                            {"extinction_ratio", 1.0e9}, {"transmission", 1.0}})));
+        m.push_back(entry("Sheet polariser (film)", "Polarisation",
+                          "Typical, visible. Passes about 38% of unpolarised light (77% along the "
+                          "axis) with an extinction ratio near 1000.",
+                          mat("polariser", {{"transmission_axis_deg", 0.0},
+                                            {"extinction_ratio", 1000.0}, {"transmission", 0.77}})));
+        m.push_back(entry("Glan-Taylor polariser (calcite)", "Polarisation",
+                          "Typical. Extinction about 100000 and 90% along the axis.",
+                          mat("polariser", {{"transmission_axis_deg", 0.0},
+                                            {"extinction_ratio", 1.0e5}, {"transmission", 0.9}})));
+        m.push_back(entry("Quarter-wave plate (design wavelength)", "Polarisation",
+                          "Zero-order at its design wavelength. Linear light at 45 degrees to the "
+                          "fast axis leaves circular. The engine uses the same retardance at every "
+                          "wavelength, which is only right near the design one.",
+                          mat("waveplate", {{"retardance_waves", 0.25}, {"fast_axis_deg", 0.0},
+                                            {"transmission", 0.99}})));
+        m.push_back(entry("Half-wave plate (design wavelength)", "Polarisation",
+                          "Rotates linear light by twice the angle between it and the fast axis. "
+                          "Same wavelength caveat as the quarter-wave plate.",
+                          mat("waveplate", {{"retardance_waves", 0.5}, {"fast_axis_deg", 0.0},
+                                            {"transmission", 0.99}})));
+        m.push_back(entry("Polarising beam splitter coating", "Polarisation",
+                          "Transmits p, reflects s, extinction about 1000. Zero thickness: a cube "
+                          "is drawn, but only this diagonal coating is traced.",
+                          mat("polarising_beam_splitter", {{"extinction_ratio", 1000.0}})));
         return m;
     }();
     return v;
@@ -273,19 +305,36 @@ const std::vector<ComponentEntry>& builtin_components() {
             "are not simulated, so there is no refraction or ghost from them.",
             "Beamsplitter 50:50", io::PlaneDoc{0.0254 * 0.7071067811865476, 0.0127});
 
+        // ---- Polarisation (Wave 5). All 1 inch. Their axes are in the part's own plane from its
+        // local X; a part faced along a beam on X with rotation [0, 90, 0] has 0 degrees vertical.
+        add("Linear polariser, 1 inch", "Polarisation",
+            "Sheet polariser. Turn the part (or set the axis on the Design tab) to change its axis.",
+            "Sheet polariser (film)", io::DiskDoc{0.0127, 0.0});
+        add("Quarter-wave plate, 1 inch", "Polarisation",
+            "Put it 45 degrees to a linear laser to make circular light.",
+            "Quarter-wave plate (design wavelength)", io::DiskDoc{0.0127, 0.0});
+        add("Half-wave plate, 1 inch", "Polarisation",
+            "Rotates linear polarisation by twice its fast-axis angle.",
+            "Half-wave plate (design wavelength)", io::DiskDoc{0.0127, 0.0});
+        add("Polarising beam splitter cube, 1 inch", "Polarisation",
+            "Drawn as a 25.4 mm cube; traced as its diagonal coating only. p goes straight on, s turns.",
+            "Polarising beam splitter coating", io::PlaneDoc{0.0254 * 0.7071067811865476, 0.0127});
+
         // Bodies: drawn-only mounts. Bench-sized parts stand on a half-inch post (drawn only when
         // lifted off the floor) and mirrors get their substrate. Cooker-scale parts get nothing:
         // a solar dish on a 12.7 mm post would be a lie of a different kind.
         for (auto& e : c) {
             const bool bench = e.group == "Lenses" || e.group == "Splitters" ||
-                               e.group == "Apertures" || e.group == "Detectors" ||
+                               e.group == "Apertures" || e.group == "Detectors" || e.group == "Polarisation" ||
                                e.name.rfind("Flat mirror", 0) == 0 ||
                                e.name.rfind("Concave mirror", 0) == 0;
             if (!bench || e.name.rfind("Fresnel", 0) == 0) continue;
             io::BodyDoc b;
             b.post = true;
             if (e.name.rfind("Flat mirror", 0) == 0) b.substrate_m = 0.006;
-            if (e.name.rfind("Beamsplitter cube", 0) == 0) b.cube = true;
+            if (e.name.rfind("Beamsplitter cube", 0) == 0 ||
+                e.name.rfind("Polarising beam splitter cube", 0) == 0)
+                b.cube = true;
             e.body = b;
         }
         return c;

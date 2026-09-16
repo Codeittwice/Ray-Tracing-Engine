@@ -2,6 +2,7 @@
 #include "scrt/core/AABB.hpp"
 #include "scrt/core/Transform.hpp"
 #include "scrt/materials/BeamSplitter.hpp"
+#include "scrt/materials/PolarisingOptics.hpp"
 #include "scrt/materials/Diffuser.hpp"
 #include "scrt/materials/Dielectric.hpp"
 #include "scrt/materials/Material.hpp"
@@ -273,6 +274,28 @@ bool SceneEditor::commit_material_param(const std::string& material_id, const st
         try {
             if (key == "reflectance")      { bs->set_reflectance(value); applied = true; }
             else if (key == "absorptance") { bs->set_absorptance(value); applied = true; }
+        } catch (const std::invalid_argument&) {
+            return false;
+        }
+    } else if (auto* po = dynamic_cast<materials::Polariser*>(live)) {
+        try {
+            if (key == "transmission_axis_deg") { po->set_axis_deg(value);         applied = true; }
+            else if (key == "extinction_ratio") { po->set_extinction_ratio(value); applied = true; }
+            else if (key == "transmission")     { po->set_transmission(value);     applied = true; }
+        } catch (const std::invalid_argument&) {
+            return false;
+        }
+    } else if (auto* wp = dynamic_cast<materials::Waveplate*>(live)) {
+        try {
+            if (key == "retardance_waves")   { wp->set_retardance_waves(value); applied = true; }
+            else if (key == "fast_axis_deg") { wp->set_fast_axis_deg(value);    applied = true; }
+            else if (key == "transmission")  { wp->set_transmission(value);     applied = true; }
+        } catch (const std::invalid_argument&) {
+            return false;
+        }
+    } else if (auto* pbs = dynamic_cast<materials::PolarisingBeamSplitter*>(live)) {
+        try {
+            if (key == "extinction_ratio") { pbs->set_extinction_ratio(value); applied = true; }
         } catch (const std::invalid_argument&) {
             return false;
         }

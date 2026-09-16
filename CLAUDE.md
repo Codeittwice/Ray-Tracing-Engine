@@ -320,7 +320,30 @@ VERIFIED end to end on two QA scenes (a glass window at Brewster's angle, screen
 beam): p-polarised reads exactly 0 W; s-polarised reads 25.53% of the beam against 25.55% predicted
 (front face cos^2(2 theta_B) = 14.8%, back face 10.7%). The s scene proves the screen is placed right,
 which is what makes the p scene's zero mean something.
-- [ ] Stage 4 - polariser, waveplate, polarising beam splitter (Malus, quarter-wave checks)
+- [x] Stage 4 - polariser, waveplate, polarising beam splitter (Malus, quarter-wave checks)
+
+**Stage 4.** `materials/PolarisingOptics.{hpp,cpp}`: `polariser` (transmission_axis_deg,
+extinction_ratio, transmission = principal k1), `waveplate` (retardance_waves, fast_axis_deg,
+transmission; same retardance at every wavelength - a zero-order plate at its design wavelength),
+`polarising_beam_splitter` (extinction_ratio; p through, s reflected, 1/ER leak each way). Axes are
+in the PART's own plane from its local +X (`h.surface->transform()`), so turning the part turns the
+axis; a disk faced along a +X beam with `[0, 90, 0]` has 0 degrees vertical, the same as a laser's
+`linear_deg`. Unpolarised light: a polariser passes k1(1+1/ER)/2 and leaves fully polarised on its
+axis (partial polarisation cannot be one Jones vector; the folded leak is below 1e-3 at any real
+ER); a waveplate passes it unchanged; a PBS splits exactly 50:50 into pure s and pure p. Registered
+in the strict schema, loader, editor (`commit_material_param`), Design-tab sliders, appearance,
+assistant prompt + schema test, and the library (six materials, four 1-inch components incl. a PBS
+cube). **The library note below that a polarising beam splitter is "absent by design" is now out of
+date: it ships.**
+
+VERIFIED through the full engine (release `scrt_compare`, not just unit tests): a vertical laser
+through an ideal polariser at 60 deg reads 1.250000 mW of 5 (cos^2 60 = 25%), crossed at 90 reads 0;
+vertical -> quarter-wave at 45 -> analyser reads 2.500000 mW at 30 deg AND at 120 deg (circular),
+and 0 with the plate's fast axis at 0 and the analyser crossed (plate does nothing). QA 08 and 09.
+Unit tests (`tests/test_polarising_optics.cpp`): Malus over 0-90, 1/ER when crossed, unpolarised
+through a sheet polariser, QWP linear -> circular -> crossed, HWP rotates by twice its axis, PBS arms
+and leak. NOT fixed, noticed on the QA 09 screenshot: the outliner files every element under
+"Reflectors" (a waveplate, a polariser, and - as before - every lens). A naming bug in the tree.
 - [ ] Stage 5 - optical path length with the index inside a dielectric
 - [ ] Stage 6 - coherent receiver, coherence length, grid sampling, Michelson example
 

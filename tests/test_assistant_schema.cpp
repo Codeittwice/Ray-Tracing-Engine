@@ -185,6 +185,19 @@ TEST_CASE("assistant prompt: beam_splitter takes exactly reflectance and absorpt
     CHECK_THROWS(scrt::io::parse_document(doc, true));
 }
 
+TEST_CASE("assistant prompt: the three polarisation materials take exactly the keys it lists") {
+    json doc = json::parse(kPromptExample);
+    auto& mats = doc["scene"]["materials"];
+    mats.push_back({{"id", "pol"}, {"type", "polariser"}, {"transmission_axis_deg", 45.0},
+                    {"extinction_ratio", 1000.0}, {"transmission", 0.77}});
+    mats.push_back({{"id", "qwp"}, {"type", "waveplate"}, {"retardance_waves", 0.25},
+                    {"fast_axis_deg", 0.0}, {"transmission", 0.99}});
+    mats.push_back({{"id", "pbs"}, {"type", "polarising_beam_splitter"}, {"extinction_ratio", 1000.0}});
+    CHECK_NOTHROW(scrt::io::parse_document(doc, true));
+    mats.back()["reflectance"] = 0.5;
+    CHECK_THROWS(scrt::io::parse_document(doc, true));
+}
+
 TEST_CASE("assistant prompt: a transform may carry translation, rotation and scale together") {
     json doc = json::parse(kPromptExample);
     doc["scene"]["elements"][0]["transform"] = {{"translation", {0.1, 0.2, 0.3}},

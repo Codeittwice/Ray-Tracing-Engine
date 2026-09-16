@@ -76,6 +76,9 @@ void validate_material_strict(const std::string& type, const json& params) {
         {"absorber", {}},
         {"beam_splitter", {"reflectance", "absorptance"}},
         {"diffuser", {"albedo"}},
+        {"polariser", {"transmission_axis_deg", "extinction_ratio", "transmission"}},
+        {"waveplate", {"retardance_waves", "fast_axis_deg", "transmission"}},
+        {"polarising_beam_splitter", {"extinction_ratio"}},
     };
     auto it = allowed.find(type);
     require(it != allowed.end(), "unknown material type '" + type + "'");

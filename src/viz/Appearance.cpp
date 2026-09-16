@@ -2,6 +2,7 @@
 
 #include "scrt/materials/Absorber.hpp"
 #include "scrt/materials/BeamSplitter.hpp"
+#include "scrt/materials/PolarisingOptics.hpp"
 #include "scrt/materials/Dielectric.hpp"
 #include "scrt/materials/Diffuser.hpp"
 #include "scrt/materials/PerfectMirror.hpp"
@@ -63,6 +64,30 @@ Appearance appearance_for(const materials::Material* m) {
         a.transparency       = 0.45f;
         a.identical_backface = true;
         a.kind               = "splitter";
+        return a;
+    }
+    if (dynamic_cast<const materials::Polariser*>(m)) {
+        a.matcap             = "wax";
+        a.color              = {0.22, 0.22, 0.26};   // the grey-violet of polarising film
+        a.transparency       = 0.55f;
+        a.identical_backface = true;
+        a.kind               = "polariser";
+        return a;
+    }
+    if (dynamic_cast<const materials::Waveplate*>(m)) {
+        a.matcap             = "wax";
+        a.color              = {0.86, 0.90, 0.80};   // a faintly tinted crystal plate
+        a.transparency       = 0.30f;
+        a.identical_backface = true;
+        a.kind               = "waveplate";
+        return a;
+    }
+    if (dynamic_cast<const materials::PolarisingBeamSplitter*>(m)) {
+        a.matcap             = "wax";
+        a.color              = {0.62, 0.80, 0.95};
+        a.transparency       = 0.45f;
+        a.identical_backface = true;
+        a.kind               = "polarising splitter";
         return a;
     }
     if (const auto* df = dynamic_cast<const materials::Diffuser*>(m)) {

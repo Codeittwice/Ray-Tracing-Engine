@@ -2,6 +2,7 @@
 #include "scrt/scene/SceneEditor.hpp"
 
 #include "scrt/materials/BeamSplitter.hpp"
+#include "scrt/materials/PolarisingOptics.hpp"
 #include "scrt/materials/Diffuser.hpp"
 #include "scrt/viz/Preview.hpp"
 #include "scrt/materials/Dielectric.hpp"
@@ -153,6 +154,49 @@ void draw_materials_panel(PanelContext& ctx) {
                         "refuses a value that would make reflected + absorbed exceed 1.");
 
                     ImGui::Text("Transmitted: %.0f%%", 100.0 * bs->transmittance());
+                    ImGui::Unindent();
+                } else if (auto* po = dynamic_cast<materials::Polariser*>(mat_ptr.get())) {
+                    float axis = static_cast<float>(po->axis_deg());
+                    float er   = static_cast<float>(po->extinction_ratio());
+                    float k1   = static_cast<float>(po->transmission());
+                    ImGui::Indent();
+                    if (ImGui::SliderFloat("Transmission axis (deg)##po", &axis, -90.0f, 90.0f, "%.1f"))
+                        set_param(mat_id, "transmission_axis_deg", axis);
+                    tip("Angle of the pass axis in the part's own plane, from its local X. Turning "
+                        "the part turns the axis with it. Two polarisers 90 degrees apart pass "
+                        "almost nothing: Malus's law, cos^2 of the angle between them.");
+                    if (ImGui::SliderFloat("Extinction ratio##po", &er, 1.0f, 1.0e6f, "%.0f",
+                                           ImGuiSliderFlags_Logarithmic))
+                        set_param(mat_id, "extinction_ratio", er);
+                    tip("How much more the pass axis transmits than the crossed axis. Sheet film "
+                        "is about 1000; a calcite polariser 100000.");
+                    if (ImGui::SliderFloat("Pass-axis transmission##po", &k1, 0.0f, 1.0f, "%.2f"))
+                        set_param(mat_id, "transmission", k1);
+                    tip("Transmittance for light already along the axis. 1 is ideal (passes 50% of "
+                        "unpolarised light); sheet polariser is about 0.77, which passes 38%.");
+                    ImGui::Unindent();
+                } else if (auto* wp = dynamic_cast<materials::Waveplate*>(mat_ptr.get())) {
+                    float ret  = static_cast<float>(wp->retardance_waves());
+                    float axis = static_cast<float>(wp->fast_axis_deg());
+                    ImGui::Indent();
+                    if (ImGui::SliderFloat("Retardance (waves)##wp", &ret, 0.0f, 1.0f, "%.3f"))
+                        set_param(mat_id, "retardance_waves", ret);
+                    tip("0.25 is a quarter-wave plate (linear at 45 degrees to the fast axis becomes "
+                        "circular), 0.5 a half-wave plate (rotates linear light by twice the angle). "
+                        "The same at every wavelength here: a zero-order plate at its design "
+                        "wavelength.");
+                    if (ImGui::SliderFloat("Fast axis (deg)##wp", &axis, -90.0f, 90.0f, "%.1f"))
+                        set_param(mat_id, "fast_axis_deg", axis);
+                    tip("Angle of the fast axis in the part's own plane, from its local X.");
+                    ImGui::Unindent();
+                } else if (auto* pbs = dynamic_cast<materials::PolarisingBeamSplitter*>(mat_ptr.get())) {
+                    float er = static_cast<float>(pbs->extinction_ratio());
+                    ImGui::Indent();
+                    if (ImGui::SliderFloat("Extinction ratio##pbs", &er, 1.0f, 1.0e5f, "%.0f",
+                                           ImGuiSliderFlags_Logarithmic))
+                        set_param(mat_id, "extinction_ratio", er);
+                    tip("Transmits p and reflects s. 1/ER of each leaks into the wrong arm; a good "
+                        "cube is about 1000. Unpolarised light splits exactly 50:50.");
                     ImGui::Unindent();
                 }
 

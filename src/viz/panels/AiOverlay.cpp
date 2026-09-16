@@ -108,6 +108,11 @@ MATERIAL TYPES - use ONLY these, with exactly these keys and no others
 - diffuser                albedo    (matte: scatters over the whole hemisphere. White card 0.8; matte
                           black paint 0.04, which is how a REALISTIC black surface is written - "absorber"
                           is the ideal one that swallows everything)
+- polariser               transmission_axis_deg, extinction_ratio, transmission    (linear polariser; axis in
+                          the part's own plane from its local X; ideal is extinction_ratio 100000, transmission 1)
+- waveplate               retardance_waves, fast_axis_deg, transmission    (0.25 quarter-wave, 0.5 half-wave)
+- polarising_beam_splitter extinction_ratio    (transmits p, reflects s; about 1000 for a good cube)
+Polarisation optics only act on POLARISED light, which comes from a laser; sunlight is unpolarised.
 
 TRANSFORMS
 "transform" takes any of: "translation" [x,y,z], "rotation_euler_deg" [rx,ry,rz] (applied X then

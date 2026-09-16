@@ -5,6 +5,7 @@
 #include "scrt/io/SceneDocument.hpp"
 #include "scrt/materials/Absorber.hpp"
 #include "scrt/materials/BeamSplitter.hpp"
+#include "scrt/materials/PolarisingOptics.hpp"
 #include "scrt/materials/Diffuser.hpp"
 #include "scrt/materials/Dielectric.hpp"
 #include "scrt/materials/PerfectMirror.hpp"
@@ -182,6 +183,18 @@ const json params = md.params.is_object() ? md.params : json::object();
         // A designed ratio, not a Fresnel-derived one; the constructor refuses R + A > 1.
         mat = std::make_unique<materials::BeamSplitter>(params.value("reflectance", 0.5),
                                                         params.value("absorptance", 0.0));
+    } else if (md.type == "polariser") {
+        // Wave 5. Axis in the part's own frame; the constructor refuses ER < 1 and k1 outside [0, 1].
+        mat = std::make_unique<materials::Polariser>(params.value("transmission_axis_deg", 0.0),
+                                                     params.value("extinction_ratio", 1.0e5),
+                                                     params.value("transmission", 1.0));
+    } else if (md.type == "waveplate") {
+        mat = std::make_unique<materials::Waveplate>(params.value("retardance_waves", 0.25),
+                                                     params.value("fast_axis_deg", 0.0),
+                                                     params.value("transmission", 1.0));
+    } else if (md.type == "polarising_beam_splitter") {
+        mat = std::make_unique<materials::PolarisingBeamSplitter>(
+            params.value("extinction_ratio", 1000.0));
     } else {
         throw std::runtime_error("SceneLoader: unknown material type '" + md.type + "'");
     }
