@@ -40,6 +40,8 @@ Interaction Diffuser::interact(const core::Ray& r, const core::Hit& h, math::Rng
     ia.reflected.direction = math::safe_normalize(disk.x * u + disk.y * v + z * h.normal);
     ia.reflected.power     = r.power * albedo_;
     ia.reflected.bounces   = r.bounces + 1;
+    // A Lambertian scatterer depolarises. For an unpolarised ray this assigns what is already there.
+    ia.reflected.polarised = false;
     return ia;
 }
 

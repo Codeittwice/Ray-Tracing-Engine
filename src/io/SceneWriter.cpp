@@ -258,6 +258,11 @@ json source_to_json(const SourceDoc& sd) {
                 j["wavelength_nm"] = l.wavelength_nm;
                 j["beam_diameter_m"] = l.beam_diameter_m;
                 j["divergence_mrad"] = l.divergence_mrad;
+                // Omitted when unpolarised, so every existing laser scene re-saves unchanged.
+                if (l.polarisation == "linear")
+                    j["polarisation"] = json{{"linear_deg", l.polarisation_linear_deg}};
+                else if (l.polarisation != "unpolarised")
+                    j["polarisation"] = l.polarisation;
                 return j;
             },
         },

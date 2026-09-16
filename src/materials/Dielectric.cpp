@@ -1,4 +1,5 @@
 #include "scrt/materials/Dielectric.hpp"
+#include "scrt/optics/Polarisation.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -40,8 +41,68 @@ double Dielectric::n_at(double wavelength_nm) const {
     return std::sqrt(n2 > 1.0 ? n2 : 1.0);
 }
 
+namespace {
+
+/// The polarised twin of Dielectric::interact: same refraction, same Beer-Lambert, but reflectance
+/// from the ray's own s/p state instead of the average, and complex phases under TIR.
+///
+/// A separate function, and entered only for a polarised ray, so the unpolarised body below is not
+/// touched by so much as a reordered expression: every existing dielectric result stays bit-identical.
+Interaction interact_polarised(const core::Ray& r, const core::Hit& h, double n_glass,
+                               double alpha) {
+    const double n1    = h.front_face ? 1.0 : n_glass;
+    const double n2    = h.front_face ? n_glass : 1.0;
+    const double cos_i = -glm::dot(r.direction, h.normal);
+
+    bool             tir   = false;
+    const math::vec3 t_dir = optics::refract(r.direction, h.normal, n1 / n2, tir);
+
+    if (tir) {
+        optics::cplx rs, rp;
+        optics::tir_amplitudes(cos_i, n1, n2, rs, rp);
+        Interaction ia;
+        ia.kind                = InteractionKind::Reflected;
+        ia.reflected           = r;
+        ia.reflected.origin    = h.position;
+        ia.reflected.direction = optics::reflect(r.direction, h.normal);
+        ia.reflected.bounces   = r.bounces + 1;
+        optics::transfer_state(r, h.normal, ia.reflected, rs, rp);   // |rs| = |rp| = 1: power kept
+        return ia;
+    }
+
+    const double cos_t = -glm::dot(t_dir, h.normal);
+    const auto   a     = optics::fresnel_amplitudes(cos_i, cos_t, n1, n2);
+
+    double p = r.power;
+    if (!h.front_face && alpha > 0.0) p *= std::exp(-alpha * h.t);
+
+    Interaction ia;
+    ia.kind = InteractionKind::Split;
+
+    ia.reflected           = r;
+    ia.reflected.origin    = h.position;
+    ia.reflected.direction = optics::reflect(r.direction, h.normal);
+    ia.reflected.bounces   = r.bounces + 1;
+    const double R = optics::transfer_state(r, h.normal, ia.reflected, a.rs, a.rp);
+    ia.reflected.power = p * R;
+
+    ia.transmitted           = r;
+    ia.transmitted.origin    = h.position;
+    ia.transmitted.direction = t_dir;
+    ia.transmitted.bounces   = r.bounces + 1;
+    // The state takes (ts, tp); the POWER is 1 - R, which is what (n2 ct / n1 ci)|t|^2 sums to and
+    // avoids carrying that obliquity factor through a second path that could drift from it.
+    optics::transfer_state(r, h.normal, ia.transmitted, a.ts, a.tp);
+    ia.transmitted.power = p * (1.0 - R);
+    return ia;
+}
+
+} // namespace
+
 Interaction Dielectric::interact(const core::Ray& r, const core::Hit& h,
-                                 math::Rng& /*rng*/) const {
+                                 math::Rng& rng) const {
+    if (r.polarised) return interact_polarised(r, h, n_at(r.wavelength_nm), alpha_at(r.wavelength_nm));
+    (void)rng;
     double n_glass = n_at(r.wavelength_nm);
     // front_face=true → entering medium (air→glass), front_face=false → exiting (glass→air)
     double n1 = h.front_face ? 1.0    : n_glass;

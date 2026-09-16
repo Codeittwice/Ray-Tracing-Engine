@@ -1,4 +1,5 @@
 #pragma once
+#include "scrt/optics/Polarisation.hpp"
 #include "scrt/core/Ray.hpp"
 #include "scrt/math/Rng.hpp"
 #include "scrt/math/Vec.hpp"
@@ -49,6 +50,13 @@ public:
     void set_divergence_mrad(double mrad);
     double divergence_mrad() const { return divergence_mrad_; }
 
+    /// Polarisation stamped on every ray. Unpolarised (the default) leaves rays on the averaged,
+    /// pre-Wave-5 optics; linear takes an angle in degrees from the vertical reference (see
+    /// optics::set_polarisation). No RNG draws either way, so seeding is unchanged.
+    void set_polarisation(optics::PolarisationKind kind, double linear_deg = 0.0);
+    optics::PolarisationKind polarisation() const { return polarisation_; }
+    double polarisation_linear_deg() const { return polarisation_deg_; }
+
 private:
     math::vec3 origin_          {0.0, 0.0, 1.0};
     math::vec3 direction_       {0.0, 0.0, -1.0};
@@ -56,6 +64,8 @@ private:
     double     wavelength_nm_   {632.8};   ///< He-Ne red, the bench default.
     double     beam_diameter_m_ {0.001};
     double     divergence_mrad_ {0.0};
+    optics::PolarisationKind polarisation_ {optics::PolarisationKind::Unpolarised};
+    double     polarisation_deg_ {0.0};
 };
 
 } // namespace scrt::sources

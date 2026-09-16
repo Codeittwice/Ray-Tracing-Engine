@@ -50,6 +50,13 @@ void Laser::set_divergence_mrad(double mrad) {
     divergence_mrad_ = mrad;
 }
 
+void Laser::set_polarisation(optics::PolarisationKind kind, double linear_deg) {
+    if (!std::isfinite(linear_deg))
+        throw std::invalid_argument("Laser::set_polarisation: linear angle must be finite");
+    polarisation_     = kind;
+    polarisation_deg_ = linear_deg;
+}
+
 core::Ray Laser::sample_ray(math::Rng& rng) const {
     // Always the same three draws (disk pair, theta, phi) whatever the parameters, so a
     // collimated pencil beam consumes the slot's RNG sequence exactly like a divergent one.
@@ -74,6 +81,8 @@ core::Ray Laser::sample_ray(math::Rng& rng) const {
         cos_t * direction_ + sin_t * (std::cos(phi) * u + std::sin(phi) * v));
     ray.power         = 1.0;   // Relative weight; the tracer applies total_power_w() / N.
     ray.wavelength_nm = wavelength_nm_;
+    if (polarisation_ != optics::PolarisationKind::Unpolarised)
+        optics::set_polarisation(ray, polarisation_, polarisation_deg_ * math::PI / 180.0);
     return ray;
 }
 

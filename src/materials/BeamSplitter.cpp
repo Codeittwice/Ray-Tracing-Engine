@@ -1,4 +1,5 @@
 #include "scrt/materials/BeamSplitter.hpp"
+#include "scrt/optics/Polarisation.hpp"
 #include "scrt/optics/Reflect.hpp"
 #include <cmath>
 #include <stdexcept>
@@ -48,6 +49,14 @@ Interaction BeamSplitter::interact(const core::Ray& r, const core::Hit& h,
     ia.transmitted.direction = r.direction;   // zero thickness: no bend, no offset
     ia.transmitted.power     = r.power * (1.0 - r_ - a_);
     ia.transmitted.bounces   = r.bounces + 1;
+
+    if (r.polarised) {
+        // A DESIGNED, polarisation-independent ratio: power is untouched and the state goes through
+        // with metal-like reflection phases (rs = -1, rp = +1 in this project's convention). A real
+        // coating's s/p phases depend on its layer design, which this material does not describe.
+        optics::transfer_state(r, h.normal, ia.reflected, -1.0, 1.0);
+        optics::transfer_state(r, h.normal, ia.transmitted, 1.0, 1.0);
+    }
     return ia;
 }
 

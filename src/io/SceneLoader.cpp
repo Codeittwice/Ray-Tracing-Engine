@@ -241,6 +241,12 @@ return std::visit(
                 laser->set_wavelength_nm(d.wavelength_nm);
                 laser->set_beam_diameter_m(d.beam_diameter_m);
                 laser->set_divergence_mrad(d.divergence_mrad);
+                using PK = optics::PolarisationKind;
+                const PK kind = d.polarisation == "linear"         ? PK::Linear
+                              : d.polarisation == "circular_left"  ? PK::CircularLeft
+                              : d.polarisation == "circular_right" ? PK::CircularRight
+                                                                   : PK::Unpolarised;
+                laser->set_polarisation(kind, d.polarisation_linear_deg);
                 return laser;
             },
         },

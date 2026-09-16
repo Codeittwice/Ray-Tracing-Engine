@@ -229,6 +229,10 @@ struct LaserSourceDoc {
     double     wavelength_nm{632.8};
     double     beam_diameter_m{0.001};
     double     divergence_mrad{0.0};        ///< FULL-angle divergence, as datasheets quote it.
+    /// "unpolarised" (default; the key is omitted on write), "linear", "circular_left" or
+    /// "circular_right". In JSON: a string, or {"linear_deg": angle} for linear.
+    std::string polarisation{"unpolarised"};
+    double      polarisation_linear_deg{0.0};  ///< Degrees from vertical; used when linear.
 };
 
 /// One entry of `scene.sources`. Visited with io::overloaded and NO catch-all in SceneWriter.cpp

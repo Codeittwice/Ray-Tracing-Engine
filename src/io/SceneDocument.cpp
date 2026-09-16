@@ -358,7 +358,7 @@ SunSourceDoc parse_sun(const json& sj, bool strict, bool in_sources) {
 LaserSourceDoc parse_laser(const json& lj, bool strict) {
     if (strict)
         reject_unknown_keys(lj, {"type", "origin", "direction", "power_w", "wavelength_nm",
-                                 "beam_diameter_m", "divergence_mrad"}, "laser");
+                                 "beam_diameter_m", "divergence_mrad", "polarisation"}, "laser");
     LaserSourceDoc l;
     l.origin          = read_vec3(lj, "origin");
     l.direction       = read_vec3(lj, "direction");
@@ -375,6 +375,26 @@ LaserSourceDoc parse_laser(const json& lj, bool strict) {
     require(std::isfinite(l.divergence_mrad) && l.divergence_mrad >= 0.0 &&
                 l.divergence_mrad <= 1000.0 * math::PI,
             "laser 'divergence_mrad' is a full angle and must be within [0, 1000*pi]");
+    if (lj.contains("polarisation")) {
+        // Validated in both modes: a misspelt state would otherwise trace as unpolarised light and
+        // quietly give the wrong answer for every polariser downstream.
+        const auto& pj = lj["polarisation"];
+        if (pj.is_string()) {
+            const std::string s = pj.get<std::string>();
+            require(s == "unpolarised" || s == "circular_left" || s == "circular_right",
+                    "laser 'polarisation' must be \"unpolarised\", \"circular_left\", "
+                    "\"circular_right\" or {\"linear_deg\": angle}; got \"" + s + "\"");
+            l.polarisation = s;
+        } else {
+            require(pj.is_object() && pj.contains("linear_deg"),
+                    "laser 'polarisation' object must be {\"linear_deg\": angle}");
+            if (strict) reject_unknown_keys(pj, {"linear_deg"}, "laser.polarisation");
+            l.polarisation            = "linear";
+            l.polarisation_linear_deg = pj["linear_deg"].get<double>();
+            require(std::isfinite(l.polarisation_linear_deg),
+                    "laser 'polarisation.linear_deg' must be finite");
+        }
+    }
     return l;
 }
 

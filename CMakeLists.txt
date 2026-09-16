@@ -79,6 +79,7 @@ target_sources(scrt_core PRIVATE
     src/core/Transform.cpp
     src/optics/Refract.cpp
     src/optics/Fresnel.cpp
+    src/optics/Polarisation.cpp
 )
 
 # ---------- Phase 3 sources ----------
@@ -172,6 +173,7 @@ target_sources(scrt_tests PRIVATE
     tests/test_library.cpp
     tests/test_snap.cpp
     tests/test_body.cpp
+    tests/test_polarisation.cpp
     # The library and the config path it uses are GUI-free (json and filesystem only),
     # so the test binary compiles them directly rather than linking scrt_viz, which
     # would drag in Polyscope, GLFW and a window.

@@ -1,4 +1,5 @@
 #include "scrt/materials/RealMirror.hpp"
+#include "scrt/optics/Polarisation.hpp"
 #include "scrt/math/Constants.hpp"
 #include <cmath>
 
@@ -32,6 +33,9 @@ Interaction RealMirror::interact(const core::Ray& r, const core::Hit& h,
     ia.reflected.direction = optics::reflect(r.direction, n);
     ia.reflected.power    = r.power * rho_;
     ia.reflected.bounces  = r.bounces + 1;
+    // Reflectance is one number for both polarisations; the phases are a conductor's, about the
+    // PERTURBED normal the ray actually reflected from. The RNG draws above are unchanged.
+    if (r.polarised) optics::transfer_state(r, n, ia.reflected, -1.0, 1.0);
     return ia;
 }
 

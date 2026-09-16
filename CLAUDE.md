@@ -299,7 +299,27 @@ bytes (the design note's "48 bytes, roughly doubles" was wrong on the starting s
 captures of 20.59 / 21.10 / 20.86 / 21.52 s; after, two of 19.96 / 20.18 s. No slowdown within a
 +-2% noise band - the tracer holds rays as stack locals one bounce at a time, never in bulk, so
 the "memory-bound" worry did not apply. No split ray type is needed. Corpus: 0 differences.
-- [ ] Stage 3 - polarised rays through existing mirrors and dielectrics; source polarisation key
+- [x] Stage 3 - polarised rays through existing mirrors and dielectrics; source polarisation key
+
+**Stage 3.** `optics/Polarisation.hpp`: a polarised ray's Jones vector is re-expressed in each
+interface's s/p frame (`align_to_interface`, s = direction x normal), multiplied by amplitude
+coefficients (`apply_jones`, which returns the branch's power fraction and renormalises - power
+stays in `Ray::power`), and read back as a world field (`world_field`) by the tests, so a basis or
+sign slip shows as the wrong PHYSICAL field. Every material branches on `r.polarised` and the
+unpolarised code is untouched (Dielectric's polarised path is a separate function); corpus after
+Stage 3: 100/100 identical. Per material: dielectric = exact s/p Fresnel with complex TIR phases;
+perfect and real mirrors = conductor phases (rs -1, rp +1) about the (perturbed) normal; beam
+splitter = designed power ratio for both, conductor phases (a coating's real phases are not
+described by the material); thin pane = the incoherent slab done per polarisation, internal phases
+not tracked; diffuser depolarises. A laser takes `"polarisation"`: `"unpolarised"` (default, omitted
+on write), `{"linear_deg": a}` (0 = vertical on a horizontal beam), `"circular_left"`/`"circular_right"`
+(left = counter-clockwise looking into the beam, (1, +i)/sqrt 2). The assistant prompt has no laser
+section at all, so nothing there changed.
+
+VERIFIED end to end on two QA scenes (a glass window at Brewster's angle, screen on the reflected
+beam): p-polarised reads exactly 0 W; s-polarised reads 25.53% of the beam against 25.55% predicted
+(front face cos^2(2 theta_B) = 14.8%, back face 10.7%). The s scene proves the screen is placed right,
+which is what makes the p scene's zero mean something.
 - [ ] Stage 4 - polariser, waveplate, polarising beam splitter (Malus, quarter-wave checks)
 - [ ] Stage 5 - optical path length with the index inside a dielectric
 - [ ] Stage 6 - coherent receiver, coherence length, grid sampling, Michelson example

@@ -1,0 +1,29 @@
+{
+    "scene": {
+        "name": "QA 06: laser polarised IN the plane of incidence (p, linear_deg 90) hits a glass window at Brewster's angle (56.3 deg) - the screen catches the reflection, and it reads 0 W (measured). Compare QA 07, where the same screen catches 1.28 mW",
+        "materials": [
+            {"id": "Crown glass n = 1.5", "type": "dielectric", "n": 1.5}
+        ],
+        "elements": [
+            {
+                "name": "window_at_brewster",
+                "material": "Crown glass n = 1.5",
+                "surface": {"type": "thick_lens", "radius1": 0.0, "radius2": 0.0,
+                            "center_thickness_m": 0.006, "diameter_m": 0.05},
+                "transform": {"translation": [0.2, 0.0, 0.1], "rotation_euler_deg": [90.0, 146.30993247402, 0.0]},
+                "body": {"post": true}
+            }
+        ],
+        "receiver": {
+            "surface": {"type": "plane", "half_width": 0.02, "half_height": 0.02},
+            "grid": {"nx": 48, "ny": 48},
+            "transform": {"translation": [0.25769, -0.13846, 0.1], "rotation_euler_deg": [90.0, 22.61986494804, 0.0]}
+        },
+        "sources": [
+            {"type": "laser", "origin": [-0.1, 0.0, 0.1], "direction": [1.0, 0.0, 0.0],
+             "power_w": 0.005, "wavelength_nm": 632.8, "beam_diameter_m": 0.002, "divergence_mrad": 0.0,
+             "polarisation": {"linear_deg": 90.0}}
+        ]
+    },
+    "trace": {"n_primary_rays": 100000, "max_bounces": 8, "rng_seed": 106}
+}
