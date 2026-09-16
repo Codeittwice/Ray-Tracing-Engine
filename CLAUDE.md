@@ -291,7 +291,14 @@ Decided with the user before code:
 
 - [x] Stage 0 - baseline corpus captured twice for timing spread
 - [x] Stage 1 - Fresnel returns rs/rp; the unpolarised average bit-identical (`==` sweep)
-- [ ] Stage 2 - Ray payload: polarised flag, Jones vector + s-axis, optical path; nothing reads it
+- [x] Stage 2 - Ray payload: polarised flag, Jones vector + s-axis, optical path; nothing reads it
+
+**Stage 2 measured the ray-size cost, and there is none.** `sizeof(core::Ray)` went 72 -> 152
+bytes (the design note's "48 bytes, roughly doubles" was wrong on the starting size; the test in
+`tests/test_vec.cpp` records 152). Release corpus, 99 scenes, summed `wall_time_s`: before, four
+captures of 20.59 / 21.10 / 20.86 / 21.52 s; after, two of 19.96 / 20.18 s. No slowdown within a
++-2% noise band - the tracer holds rays as stack locals one bounce at a time, never in bulk, so
+the "memory-bound" worry did not apply. No split ray type is needed. Corpus: 0 differences.
 - [ ] Stage 3 - polarised rays through existing mirrors and dielectrics; source polarisation key
 - [ ] Stage 4 - polariser, waveplate, polarising beam splitter (Malus, quarter-wave checks)
 - [ ] Stage 5 - optical path length with the index inside a dielectric

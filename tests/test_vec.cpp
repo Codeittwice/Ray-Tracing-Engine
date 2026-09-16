@@ -48,3 +48,17 @@ TEST_CASE("safe_normalize produces unit vector") {
     vec3 v{3.0, 4.0, 0.0};
     CHECK(glm::length(safe_normalize(v)) == doctest::Approx(1.0).epsilon(1e-14));
 }
+
+#include "scrt/core/Ray.hpp"
+#include <cstdio>
+
+// Wave 5 Stage 2. Not a size LIMIT - a record. The corpus timing before and after this size change
+// is in CLAUDE.md, and a future change that grows the ray again should re-measure against it.
+TEST_CASE("Ray: size of the payload after Wave 5 Stage 2 (recorded, see CLAUDE.md)") {
+    std::printf("[ray] sizeof(core::Ray) = %zu bytes\n", sizeof(scrt::core::Ray));
+    CHECK(sizeof(scrt::core::Ray) == 152);   // 72 before Wave 5
+    const scrt::core::Ray r;
+    CHECK_FALSE(r.polarised);
+    CHECK(r.medium_n == 1.0);
+    CHECK(r.opl_m == 0.0);
+}
