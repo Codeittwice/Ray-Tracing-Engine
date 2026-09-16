@@ -37,7 +37,8 @@
                 "transform": {
                     "translation": [0.2, 0.0, 0.1],
                     "rotation_euler_deg": [0.0, 45.0, 0.0]
-                }
+                },
+                "body": {"post": true}
             },
             {
                 "name": "pcx_lens_f50",
@@ -52,7 +53,8 @@
                 "transform": {
                     "translation": [0.35, 0.0, 0.1],
                     "rotation_euler_deg": [0.0, 90.0, 0.0]
-                }
+                },
+                "body": {"post": true}
             },
             {
                 "name": "white_card_reflected_branch",
@@ -76,7 +78,8 @@
                 "transform": {
                     "translation": [0.3, 0.0, 0.1],
                     "rotation_euler_deg": [0.0, 90.0, 0.0]
-                }
+                },
+                "body": {"post": true}
             }
         ],
         "receiver": {

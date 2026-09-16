@@ -156,7 +156,7 @@ touches the tracer, an intersect or an interact).
 - [x] Stage 2 - library previews: component thumbnails and material diagrams
 - [x] Stage 3 - drag a component from the library into the 3D view
 - [x] Stage 4 - snapping (ImGuizmo's `snap` argument, plus the numeric fields and a library drop)
-- [ ] Stage 5 - procedural geometry (mirror substrates, splitter cubes, posts)
+- [x] Stage 5 - procedural geometry (mirror substrates, splitter cubes, posts)
 - [ ] Stage 6 - the grid, and the Polyscope extents trap it triggers
 
 **Two things measured rather than assumed, both of which would have shipped wrong:**
@@ -195,6 +195,35 @@ says "snapped"). VERIFIED by eye: back_reflector, snap on at 0.01 m, an arbitrar
 Y handle moved the centre 0.350 -> 0.450 and the field reads 0.1000. The snap-OFF control run was
 not captured (the harness photographed another window twice), so "off is continuous" rests on the
 code path being the pre-Stage-4 one: step 0 calls plain `DragFloat` and passes ImGuizmo `nullptr`.
+
+**Bodies (Stage 5) are STORED in the scene, decided with the user.** The plan did not say what
+makes an element get a substrate, cube or post, and inferring it is not honest: a 50:50 cube and a
+50:50 plate are the same flat `beam_splitter` surface to the engine. So an element carries an
+optional `"body": {"substrate_m", "cube", "post"}` (`io::BodyDoc`), parsed in both modes (a
+negative slab or cube+substrate is refused), written only as set, in the assistant prompt and its
+schema test. **Nothing that traces reads it.** `examples/optical_bench.json` gained posts, so the
+end-of-wave corpus diff checks that claim on a real scene.
+- Geometry is `src/viz/Body.cpp` (pure maths, unit-tested, also compiled into `scrt_tests`).
+  Substrate: behind the surface on local -Z, matching its outline (round for a `disk`). Cube: the
+  flat surface is the diagonal of the square cross-section in local x-z. Post: 12.7 mm, vertical,
+  under the part's centre, omitted when the part is at the floor.
+- Bodies are NOT baked-and-`setTransform`ed like surfaces: they are re-tessellated in world space
+  on every placement edit (`RayRenderer::sync_body`), because a post must stay upright and reach
+  z = 0 however the part is turned, which no rigid transform of the uploaded mesh can do. A body
+  is a few dozen vertices; same-count updates use `updateVertexPositions`.
+- `StructureRegistry` keeps bodies by id, and `erase()` deliberately does NOT drop them:
+  `intern()` calls `erase()` on every re-registration, and the transform panel's renderer has no
+  document to put them back from.
+- Library: bench parts (mirrors to 2 inch, lenses, splitters, apertures, detectors) get a post,
+  flat mirrors a 6 mm substrate, and a new "Beamsplitter cube, 1 inch" a cube. Cooker-scale parts
+  get nothing. The honesty note ("drawn only; a cube is traced as its diagonal coating") is a help
+  line at the top of the Components list and in the cube entry's own note.
+- VERIFIED by eye on a scratch scene (square mirror + substrate, cube, round mirror + substrate,
+  all on posts): slab dark and behind, cube translucent with the post visible through it and the
+  1.41:1 silhouette of a cube seen corner-on, round substrate visible as rim thickness.
+  NOT looked at: `optical_bench.json` itself (a laser scene, which the screenshot harness cannot
+  photograph) and a drag of a part with a post (the re-tessellation path is exercised only by
+  reasoning and by the unit tests of the geometry).
 
 Tooling: from the PowerShell tool, `cmake --build build/debug` fails with "cannot open float.h"
 (no MSVC environment); `cmake --build --preset debug` works.

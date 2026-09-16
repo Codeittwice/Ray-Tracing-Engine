@@ -32,6 +32,7 @@ struct ComponentEntry {
     std::string    note;
     std::string    material;  ///< Material library entry name this component binds.
     io::SurfaceDoc surface;
+    std::optional<io::BodyDoc> body;  ///< Drawn-only mount (substrate, cube, post); never traced.
 };
 
 /// One ready-made light source.

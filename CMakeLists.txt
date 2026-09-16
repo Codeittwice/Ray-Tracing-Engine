@@ -171,10 +171,12 @@ target_sources(scrt_tests PRIVATE
     tests/test_diffuser.cpp
     tests/test_library.cpp
     tests/test_snap.cpp
+    tests/test_body.cpp
     # The library and the config path it uses are GUI-free (json and filesystem only),
     # so the test binary compiles them directly rather than linking scrt_viz, which
     # would drag in Polyscope, GLFW and a window.
     src/viz/Library.cpp
+    src/viz/Body.cpp
     src/viz/AppConfig.cpp
     tests/test_sun.cpp
     tests/test_paraxial.cpp
@@ -222,6 +224,7 @@ add_library(scrt_viz STATIC
     src/viz/panels/LibraryPanel.cpp
     src/viz/Library.cpp
     src/viz/Appearance.cpp
+    src/viz/Body.cpp
     src/viz/Preview.cpp
     src/viz/panels/SunPanel.cpp
     src/viz/panels/TracePanel.cpp

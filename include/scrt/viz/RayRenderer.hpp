@@ -1,9 +1,11 @@
 #pragma once
 #include "scrt/core/Transform.hpp"
+#include "scrt/io/SceneDocument.hpp"
 #include "scrt/math/Vec.hpp"
 #include "scrt/scene/Scene.hpp"
 #include "scrt/tracer/Tracer.hpp"
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <unordered_map>
 
@@ -44,17 +46,34 @@ public:
     /// True when this surface id currently owns a registered structure name.
     bool contains(std::uint64_t id) const;
 
+    /// Records (or, with nullopt, forgets) the drawn-only body of a surface's element.
+    void set_body(std::uint64_t id, const std::optional<io::BodyDoc>& body);
+
+    /// The body recorded for a surface id, or nullptr when it has none.
+    const io::BodyDoc* body_for(std::uint64_t id) const;
+
 private:
     std::unordered_map<std::string, std::uint64_t> name_to_id_;
     std::unordered_map<std::uint64_t, std::string> id_to_name_;
     std::unordered_map<std::uint64_t, math::mat4>  baked_inv_;
+    std::unordered_map<std::uint64_t, io::BodyDoc> bodies_;
 };
+
+/// Polyscope structure name of a surface's drawn-only mount (substrate or cube).
+std::string body_mount_structure_name(const std::string& surface_structure);
+
+/// Polyscope structure name of a surface's drawn-only post.
+std::string body_post_structure_name(const std::string& surface_structure);
 
 /// Registers scene geometry and ray paths with Polyscope.
 class RayRenderer {
 public:
     /// Bind the renderer to a scene (non-const: placement edits write the surface transform).
-    explicit RayRenderer(scene::Scene* scene) : scene_(scene) {}
+    ///
+    /// `doc`, when given, is where element bodies are read from on (re-)registration. A renderer
+    /// without one (the transform panel's) keeps whatever bodies were recorded last.
+    explicit RayRenderer(scene::Scene* scene, const io::SceneDocument* doc = nullptr)
+        : scene_(scene), doc_(doc) {}
 
     /// Tessellate and register all optical surfaces as Polyscope meshes.
     void register_surfaces(int tess_segs = 32);
@@ -83,7 +102,17 @@ public:
     void remove_surface_structure(std::uint64_t id);
 
 private:
-    scene::Scene* scene_;
+    /// Reads the element's body from doc_ (when there is one) into the registry.
+    void record_body(std::uint64_t id);
+
+    /// Makes the drawn body of one surface match its current transform and recorded body.
+    void sync_body(std::uint64_t id);
+
+    /// Removes the mount and post structures belonging to one surface structure name.
+    static void remove_body_structures(const std::string& surface_structure);
+
+    scene::Scene*            scene_;
+    const io::SceneDocument* doc_ = nullptr;
 };
 
 /// Re-applies the ray-path radius and opacity from ViewSettings to the live structure.

@@ -113,6 +113,12 @@ TRANSFORMS
 "transform" takes any of: "translation" [x,y,z], "rotation_euler_deg" [rx,ry,rz] (applied X then
 Y then Z), "scale" [sx,sy,sz]. A plane's local normal is +Z before rotation.
 
+BODIES (optional, drawn only - never traced)
+An element may carry "body": {"substrate_m": 0.006} (a slab behind a mirror), {"cube": true}
+(a beamsplitter cube around a flat 45-degree coating), and/or "post": true (a post down to z = 0).
+"cube" and "substrate_m" cannot be combined. Use them for lab-bench parts only; leave them off
+cooker-scale reflectors. They change the picture, not a single ray.
+
 RULES THAT MAKE A SCENE ACTUALLY WORK
 1. Every "material" on an element must match an "id" in "materials".
 2. The receiver is the pot. Put it where the light is focused - at a dish's focal point, along a

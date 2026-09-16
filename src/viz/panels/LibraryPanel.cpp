@@ -176,6 +176,8 @@ void draw_components_section(PanelContext& ctx) {
         return;
     help_line("Drops a ready-made object into the scene at the point below, with the material "
               "it needs. Move it afterwards with the placement controls on the right.");
+    help_line("Substrates, posts and the glass of a cube are DRAWN ONLY. Rays meet the optical "
+              "surface alone - a cube is traced as its diagonal coating.");
 
     help_line("Place at (x, y, z) in metres:");
     ImGui::SetNextItemWidth(-1);
@@ -212,6 +214,7 @@ void draw_components_section(PanelContext& ctx) {
                 el.name        = c.name;
                 el.material_id = c.material;
                 el.surface     = c.surface;
+                el.body        = c.body;
                 el.transform.translation = {g_place[0], g_place[1], g_place[2]};
                 if (ctx.add_element(std::move(el))) {
                     char buf[160];
@@ -352,6 +355,8 @@ void draw_viewport_drop_target(PanelContext& ctx, const ImVec2& vmin, const ImVe
                     el.name        = c.name;
                     el.material_id = c.material;
                     el.surface     = c.surface;
+                    el.body        = c.body;
+                el.body        = c.body;
                     el.transform.translation = where;
                     if (ctx.add_element && ctx.add_element(std::move(el))) {
                         char buf[200];

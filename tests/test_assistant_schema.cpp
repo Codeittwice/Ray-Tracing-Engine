@@ -193,6 +193,18 @@ TEST_CASE("assistant prompt: a transform may carry translation, rotation and sca
     CHECK_NOTHROW(scrt::io::parse_document(doc, /*strict=*/true));
 }
 
+TEST_CASE("assistant prompt: body takes exactly substrate_m, cube and post") {
+    json doc = json::parse(kPromptExample);
+    doc["scene"]["elements"][0]["body"] = {{"substrate_m", 0.006}, {"post", true}};
+    CHECK_NOTHROW(scrt::io::parse_document(doc, true));
+    doc["scene"]["elements"][0]["body"] = {{"cube", true}, {"post", true}};
+    CHECK_NOTHROW(scrt::io::parse_document(doc, true));
+    doc["scene"]["elements"][0]["body"] = {{"cube", true}, {"substrate_m", 0.006}};
+    CHECK_THROWS(scrt::io::parse_document(doc, true));
+    doc["scene"]["elements"][0]["body"] = {{"thickness_m", 0.006}};
+    CHECK_THROWS(scrt::io::parse_document(doc, true));
+}
+
 TEST_CASE("assistant prompt: strict mode is what catches an invented key") {
     // The reason the assistant parses strictly at all. Without this, a hallucinated field lands
     // in the viewport as a scene that looks plausible and quietly ignores what was asked for.

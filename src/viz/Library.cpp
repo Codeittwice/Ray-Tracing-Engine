@@ -265,6 +265,29 @@ const std::vector<ComponentEntry>& builtin_components() {
             "An absorbing disk standing in for a meter head. As above, it does not record: make "
             "it the receiver if you want a number.",
             "Ideal black (reference)", io::DiskDoc{0.005, 0.0});
+
+        // ---- The beamsplitter cube: the one entry whose picture needs the body to be right.
+        // Traced as its 45-degree coating only; the cube's glass faces are drawn, not traced.
+        add("Beamsplitter cube, 1 inch", "Splitters",
+            "Drawn as a 25.4 mm cube. TRACED AS ITS DIAGONAL COATING ONLY: the four glass faces "
+            "are not simulated, so there is no refraction or ghost from them.",
+            "Beamsplitter 50:50", io::PlaneDoc{0.0254 * 0.7071067811865476, 0.0127});
+
+        // Bodies: drawn-only mounts. Bench-sized parts stand on a half-inch post (drawn only when
+        // lifted off the floor) and mirrors get their substrate. Cooker-scale parts get nothing:
+        // a solar dish on a 12.7 mm post would be a lie of a different kind.
+        for (auto& e : c) {
+            const bool bench = e.group == "Lenses" || e.group == "Splitters" ||
+                               e.group == "Apertures" || e.group == "Detectors" ||
+                               e.name.rfind("Flat mirror", 0) == 0 ||
+                               e.name.rfind("Concave mirror", 0) == 0;
+            if (!bench || e.name.rfind("Fresnel", 0) == 0) continue;
+            io::BodyDoc b;
+            b.post = true;
+            if (e.name.rfind("Flat mirror", 0) == 0) b.substrate_m = 0.006;
+            if (e.name.rfind("Beamsplitter cube", 0) == 0) b.cube = true;
+            e.body = b;
+        }
         return c;
     }();
     return v;

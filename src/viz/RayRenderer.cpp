@@ -1,5 +1,6 @@
 #include "scrt/viz/RayRenderer.hpp"
 #include "scrt/viz/Appearance.hpp"
+#include "scrt/viz/Body.hpp"
 #include "scrt/viz/ViewSettings.hpp"
 #include "scrt/materials/Material.hpp"
 #include "scrt/math/Constants.hpp"
@@ -102,6 +103,7 @@ void StructureRegistry::clear() {
     name_to_id_.clear();
     id_to_name_.clear();
     baked_inv_.clear();
+    bodies_.clear();
 }
 
 std::string StructureRegistry::intern(std::uint64_t id, const std::string& base_name) {
@@ -147,7 +149,23 @@ bool StructureRegistry::contains(std::uint64_t id) const {
     return id_to_name_.find(id) != id_to_name_.end();
 }
 
+// Bodies are deliberately NOT dropped by erase(): intern() calls erase() on every
+// re-registration, and a renderer with no document (the transform panel's) could not put the
+// body back. They go with remove_surface_structure() and clear().
+void StructureRegistry::set_body(std::uint64_t id, const std::optional<io::BodyDoc>& body) {
+    if (body) bodies_[id] = *body;
+    else      bodies_.erase(id);
+}
+
+const io::BodyDoc* StructureRegistry::body_for(std::uint64_t id) const {
+    auto it = bodies_.find(id);
+    return it == bodies_.end() ? nullptr : &it->second;
+}
+
 // ---- structure naming helpers ------------------------------------------------
+
+std::string body_mount_structure_name(const std::string& s) { return s + " [mount]"; }
+std::string body_post_structure_name(const std::string& s) { return s + " [post]"; }
 
 const char* aperture_structure_name() { return "aperture"; }
 
@@ -173,7 +191,75 @@ void RayRenderer::register_surfaces(int tess_segs) {
         auto* mesh = polyscope::registerSurfaceMesh(name, pv, pf);
         mesh->resetTransform();
         apply_default_style(mesh, *surf);
+        record_body(surf->id());
+        sync_body(surf->id());
     }
+}
+
+// ---- drawn-only bodies --------------------------------------------------------
+
+void RayRenderer::record_body(std::uint64_t id) {
+    if (!doc_) return;
+    for (const auto& el : doc_->elements) {
+        if (el.id != id) continue;
+        StructureRegistry::instance().set_body(id, el.body);
+        return;
+    }
+    StructureRegistry::instance().set_body(id, std::nullopt);
+}
+
+void RayRenderer::sync_body(std::uint64_t id) {
+    if (!scene_) return;
+    auto&              reg  = StructureRegistry::instance();
+    const std::string& nm   = reg.name_for(id);
+    const auto*        surf = scene_->surface_by_id(id);
+    if (nm.empty() || !surf) return;
+    const io::BodyDoc* body = reg.body_for(id);
+
+    // Bodies are tessellated in WORLD space under the current transform every time, rather than
+    // baked once and moved with setTransform like the surface. A post must stay vertical and
+    // reach the floor however the part is turned or lifted, which no rigid transform of the
+    // registered mesh can do. A body is a few dozen vertices, so this costs nothing per frame.
+    for (const BodyPart part : {BodyPart::Mount, BodyPart::Post}) {
+        const std::string sname = (part == BodyPart::Mount) ? body_mount_structure_name(nm)
+                                                            : body_post_structure_name(nm);
+        std::vector<math::vec3>    verts;
+        std::vector<std::uint32_t> idx;
+        const bool want = body && tessellate_body(*surf, *body, part, verts, idx);
+        const bool have = polyscope::hasSurfaceMesh(sname);
+        if (!want) {
+            if (have) polyscope::removeSurfaceMesh(sname, false);
+            continue;
+        }
+        std::vector<std::array<double, 3>>        pv;
+        std::vector<std::array<std::uint32_t, 3>> pf;
+        to_poly(verts, pv);
+        if (have && polyscope::getSurfaceMesh(sname)->nVertices() == pv.size()) {
+            polyscope::getSurfaceMesh(sname)->updateVertexPositions(pv);
+            continue;
+        }
+        if (have) polyscope::removeSurfaceMesh(sname, false);
+        to_faces(idx, pf);
+        auto* mesh = polyscope::registerSurfaceMesh(sname, pv, pf);
+        mesh->setBackFacePolicy(polyscope::BackFacePolicy::Identical);
+        mesh->setMaterial("clay");
+        if (part == BodyPart::Post) {
+            mesh->setSurfaceColor({0.62f, 0.63f, 0.66f});          // turned steel
+        } else if (body->cube) {
+            mesh->setSurfaceColor({0.70f, 0.85f, 0.95f});          // the cube's glass
+            mesh->setTransparency(0.22f);
+            if (polyscope::options::transparencyMode == polyscope::TransparencyMode::None)
+                polyscope::options::transparencyMode = polyscope::TransparencyMode::Pretty;
+        } else {
+            mesh->setSurfaceColor({0.20f, 0.20f, 0.23f});          // black-anodised substrate
+        }
+    }
+}
+
+void RayRenderer::remove_body_structures(const std::string& surface_structure) {
+    for (const std::string& s : {body_mount_structure_name(surface_structure),
+                                 body_post_structure_name(surface_structure)})
+        if (polyscope::hasSurfaceMesh(s)) polyscope::removeSurfaceMesh(s, false);
 }
 
 void RayRenderer::register_aperture() {
@@ -274,6 +360,7 @@ void RayRenderer::set_surface_transform(std::uint64_t id, const core::Transform&
 
     const math::mat4 display = world.matrix() * reg.baked_inverse(id);
     polyscope::getSurfaceMesh(nm)->setTransform(glm::mat4(display));
+    sync_body(id);
 }
 
 void RayRenderer::update_surface_shape(std::uint64_t id, int tess_segs) {
@@ -304,6 +391,7 @@ void RayRenderer::update_surface_shape(std::uint64_t id, int tess_segs) {
     mesh->resetTransform();
     reg.set_baked(id, surf->transform().matrix());
     scene_->mark_acceleration_dirty();
+    sync_body(id);
 }
 
 void RayRenderer::reregister_surface(std::uint64_t id, int tess_segs) {
@@ -313,8 +401,10 @@ void RayRenderer::reregister_surface(std::uint64_t id, int tess_segs) {
 
     auto& reg = StructureRegistry::instance();
     const std::string old_name = reg.name_for(id);
-    if (!old_name.empty())
+    if (!old_name.empty()) {
         polyscope::removeSurfaceMesh(old_name, false);
+        remove_body_structures(old_name); // the new name may differ, and would orphan these
+    }
 
     std::vector<std::array<double, 3>>       pv;
     std::vector<std::array<std::uint32_t, 3>> pf;
@@ -329,14 +419,19 @@ void RayRenderer::reregister_surface(std::uint64_t id, int tess_segs) {
     mesh->resetTransform();
     apply_default_style(mesh, *surf);
     scene_->mark_acceleration_dirty();
+    record_body(id);
+    sync_body(id);
 }
 
 void RayRenderer::remove_surface_structure(std::uint64_t id) {
     auto& reg = StructureRegistry::instance();
     const std::string nm = reg.name_for(id);
-    if (!nm.empty())
+    if (!nm.empty()) {
         polyscope::removeSurfaceMesh(nm, false);
+        remove_body_structures(nm);
+    }
     reg.erase(id);
+    reg.set_body(id, std::nullopt);
 }
 
 } // namespace scrt::viz

@@ -120,6 +120,17 @@ using SurfaceDoc = std::variant<PlaneDoc, SphereDoc, ParaboloidDoc, CylParaboloi
 
 /// One placed, named, materialed piece of scene geometry. SceneLoader.cpp "elements" (lines
 /// 255-273).
+/// Drawn-only geometry around an element: what the part is MOUNTED in, never what it traces.
+///
+/// The tracer and the loader never read this. It exists because a flat beam_splitter surface is
+/// either a plate or the diagonal of a cube and the physics cannot tell which, so the picture has
+/// to be told. Every field is optional and they combine, except `cube` with `substrate_m`.
+struct BodyDoc {
+    double substrate_m{0.0}; ///< Slab this thick behind the surface (local -Z); 0 = none.
+    bool   cube{false};      ///< Draw a cube whose diagonal is the (flat) surface.
+    bool   post{false};      ///< Draw a 12.7 mm post from the part down to z = 0.
+};
+
 struct ElementDoc {
     std::uint64_t id{0};          ///< Session-local only; NEVER serialized. parse_document assigns
                                    ///< 1..N in document order so generated/hand-written files stay
@@ -130,6 +141,7 @@ struct ElementDoc {
     TransformDoc  transform;      ///< SceneLoader.cpp:261-262 (absent key -> identity transform).
     bool          visible{true};  ///< New in Wave 2 (editor outliner visibility). No SceneLoader.cpp
                                    ///< key exists today; every legacy element loads visible.
+    std::optional<BodyDoc> body;  ///< Wave 4: drawn-only mount geometry; absent in every legacy file.
 };
 
 /// One named material with its full type-specific parameter set preserved verbatim.

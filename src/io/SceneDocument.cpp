@@ -449,7 +449,8 @@ SceneDocument parse_document(const json& root, bool strict) {
         std::uint64_t next_id = 1;
         for (const auto& el : s["elements"]) {
             if (strict)
-                reject_unknown_keys(el, {"name", "material", "surface", "transform", "visible"},
+                reject_unknown_keys(el, {"name", "material", "surface", "transform", "visible",
+                                         "body"},
                                      "element");
             require(el.contains("surface"), "element missing 'surface'");
             require(el.contains("material"), "element missing 'material'");
@@ -463,6 +464,23 @@ SceneDocument parse_document(const json& root, bool strict) {
             if (el.contains("transform"))
                 ed.transform = parse_transform_doc(el["transform"], strict);
             ed.visible = el.value("visible", true);
+            if (el.contains("body")) {
+                // Validated in BOTH modes: these are cheap, and a negative slab or a cube that
+                // is also a slab is a file that means nothing, not a key from the future.
+                const auto& bj = el["body"];
+                require(bj.is_object(), "element.body must be an object");
+                if (strict)
+                    reject_unknown_keys(bj, {"substrate_m", "cube", "post"}, "element.body");
+                BodyDoc b;
+                b.substrate_m = bj.value("substrate_m", 0.0);
+                b.cube        = bj.value("cube", false);
+                b.post        = bj.value("post", false);
+                require(std::isfinite(b.substrate_m) && b.substrate_m >= 0.0,
+                        "element.body.substrate_m must be >= 0");
+                require(!(b.cube && b.substrate_m > 0.0),
+                        "element.body: 'cube' and 'substrate_m' cannot both be set");
+                ed.body = b;
+            }
             doc.elements.push_back(std::move(ed));
         }
         doc.next_id = next_id;

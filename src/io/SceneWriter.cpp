@@ -151,6 +151,14 @@ json element_to_json(const ElementDoc& el) {
     j["transform"] = transform_to_json(el.transform);
     if (!el.visible)
         j["visible"] = false;
+    if (el.body) {
+        // Only the fields that are set, so a hand-written body round-trips as written.
+        json b = json::object();
+        if (el.body->substrate_m > 0.0) b["substrate_m"] = el.body->substrate_m;
+        if (el.body->cube)              b["cube"] = true;
+        if (el.body->post)              b["post"] = true;
+        j["body"] = std::move(b);
+    }
     return j;
 }
 

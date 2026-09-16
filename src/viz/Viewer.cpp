@@ -218,7 +218,7 @@ void Viewer::adopt_element(std::uint64_t id) {
 
     // reregister_surface both registers a surface that has none and replaces one whose geometry
     // changed, so it is the single entry point for "make the view match this element".
-    RayRenderer(scene_).reregister_surface(id, 32);
+    RayRenderer(scene_, editor_ ? &editor_->doc() : nullptr).reregister_surface(id, 32);
 
     if (const auto* s = scene_->surface_by_id(id)) {
         // A fresh base pose: the element is exactly where its document says it is, and no gizmo
@@ -302,7 +302,7 @@ void Viewer::start_trace(std::size_t n_rays) {
     if (trace_thread_.joinable()) trace_thread_.join();
 
     // The BVH rebuild is a scene mutation, so it happens here on the GUI thread, before the
-    // worker exists — never concurrently with it.
+    // worker exists â€” never concurrently with it.
     if (need_rebuild_) {
         scene_->build_acceleration_structure();
         need_rebuild_ = false;
@@ -363,7 +363,7 @@ void Viewer::poll_trace() {
         update_receiver_flux();
 
         if (!result_.sampled_paths.empty()) {
-            RayRenderer renderer(scene_);
+            RayRenderer renderer(scene_, editor_ ? &editor_->doc() : nullptr);
             renderer.register_paths(result_);
         }
     }
@@ -391,7 +391,7 @@ void Viewer::register_scene() {
     // They are frozen only for the duration of a transform drag, by the transform panel - a
     // session-long freeze would leave an imported model outside the scene's idea of its own
     // size. See set_extents_frozen() in TransformPanel.cpp.
-    RayRenderer renderer(scene_);
+    RayRenderer renderer(scene_, editor_ ? &editor_->doc() : nullptr);
     renderer.register_surfaces(32);
     renderer.register_aperture();
     update_receiver_flux(); // registers zeroed heatmap mesh
@@ -489,7 +489,7 @@ PanelContext Viewer::make_panel_context() {
         ctx.commit_transform = [this](std::uint64_t id, const math::mat4& world) {
             editor_->commit_transform(id, world);
         };
-        // All three are QUEUED, not applied — see pending_element_ops_. They return only whether
+        // All three are QUEUED, not applied â€” see pending_element_ops_. They return only whether
         // the request was accepted, because the element does not exist yet when they return.
         ctx.add_element = [this](io::ElementDoc d) {
             pending_element_ops_.push_back({ElementOp::Kind::Add, 0, std::move(d), {}, {}});
