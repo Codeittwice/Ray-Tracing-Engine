@@ -7,6 +7,7 @@
 #include "scrt/viz/Icons.hpp"
 #include "scrt/viz/Library.hpp"
 #include "scrt/viz/Preview.hpp"
+#include "scrt/viz/Snap.hpp"
 
 #include "polyscope/view.h"
 
@@ -328,6 +329,16 @@ void draw_viewport_drop_target(PanelContext& ctx, const ImVec2& vmin, const ImVe
                     where.z = 0.0;
                     how   = "on the ground plane";
                 }
+                // Snap the landing point to the move step when snapping is on. On a surface
+                // hit this can leave the origin up to half a step off that surface; the status
+                // line says it was snapped, so the number is not mistaken for the hit point.
+                const SnapSettings& snap = snap_settings();
+                const bool snapped = snap.enabled && snap.translate_m > 0.0f;
+                if (snapped) {
+                    where.x = snap_to(where.x, snap.translate_m);
+                    where.y = snap_to(where.y, snap.translate_m);
+                    where.z = snap_to(where.z, snap.translate_m);
+                }
 
                 const MaterialEntry* mat = find_material(c.material);
                 if (!mat) {
@@ -344,8 +355,9 @@ void draw_viewport_drop_target(PanelContext& ctx, const ImVec2& vmin, const ImVe
                     el.transform.translation = where;
                     if (ctx.add_element && ctx.add_element(std::move(el))) {
                         char buf[200];
-                        std::snprintf(buf, sizeof(buf), "Dropped %s %s: (%.3f, %.3f, %.3f) m",
-                                      c.name.c_str(), how, where.x, where.y, where.z);
+                        std::snprintf(buf, sizeof(buf), "Dropped %s %s: (%.3f, %.3f, %.3f) m%s",
+                                      c.name.c_str(), how, where.x, where.y, where.z,
+                                      snapped ? ", snapped to the move step" : "");
                         say(buf);
                         if (ctx.need_retrace) *ctx.need_retrace = true;
                     } else {

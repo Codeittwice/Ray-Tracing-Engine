@@ -170,6 +170,7 @@ target_sources(scrt_tests PRIVATE
     tests/test_thick_lens.cpp
     tests/test_diffuser.cpp
     tests/test_library.cpp
+    tests/test_snap.cpp
     # The library and the config path it uses are GUI-free (json and filesystem only),
     # so the test binary compiles them directly rather than linking scrt_viz, which
     # would drag in Polyscope, GLFW and a window.

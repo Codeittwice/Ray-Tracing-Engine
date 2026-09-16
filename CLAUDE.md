@@ -155,7 +155,7 @@ touches the tracer, an intersect or an interact).
 - [x] Stage 1 - appearance dispatched on MATERIAL TYPE, not on a name match
 - [x] Stage 2 - library previews: component thumbnails and material diagrams
 - [x] Stage 3 - drag a component from the library into the 3D view
-- [ ] Stage 4 - snapping (ImGuizmo's `snap` argument, plus the numeric fields)
+- [x] Stage 4 - snapping (ImGuizmo's `snap` argument, plus the numeric fields and a library drop)
 - [ ] Stage 5 - procedural geometry (mirror substrates, splitter cubes, posts)
 - [ ] Stage 6 - the grid, and the Polyscope extents trap it triggers
 
@@ -179,6 +179,25 @@ touches the tracer, an intersect or an interact).
 The selection read-out now reports the object's CENTRE as well as its extent. Its own empty-state
 hint promised "what it is and where it sits" and the position was the half that was missing; it
 is also the only way to read back where a dragged component landed.
+
+**Snapping (Stage 4).** One `SnapSettings` (`include/scrt/viz/Snap.hpp`) read by the gizmo, the
+Move/Turn/Size fields and a library drop, so the three placement paths cannot round differently.
+Two things that are not obvious from the design note:
+- Rounding the value a `DragFloat` edits in place makes the field STICK: ImGui moves it by a
+  sub-step delta and the rounding takes it straight back. `snapped_drag` lets the drag edit an
+  unrounded shadow while the field is active and writes out only the snapped value.
+- ImGuizmo snaps the delta FROM DRAG START, so an object that started off-grid would land on
+  start + k*step. The triple is rounded again after write-back so the gizmo and the fields agree.
+  Locked axes are skipped; uniform scale rounds the mean and rescales, like the Scale field.
+Fields snap the OFFSET they display (from the file's position); a drop snaps its world position,
+which can leave the origin up to half a step off the surface it was dropped on (the status line
+says "snapped"). VERIFIED by eye: back_reflector, snap on at 0.01 m, an arbitrary 61 px drag on the
+Y handle moved the centre 0.350 -> 0.450 and the field reads 0.1000. The snap-OFF control run was
+not captured (the harness photographed another window twice), so "off is continuous" rests on the
+code path being the pre-Stage-4 one: step 0 calls plain `DragFloat` and passes ImGuizmo `nullptr`.
+
+Tooling: from the PowerShell tool, `cmake --build build/debug` fails with "cannot open float.h"
+(no MSVC environment); `cmake --build --preset debug` works.
 
 Not verified: drag and drop at a second display scale. Polyscope passes `ImGui::GetMousePos()`
 straight to its own picking, so the window-to-buffer scaling is inside Polyscope rather than in

@@ -1,6 +1,7 @@
 #include "scrt/viz/Panels.hpp"
 #include "scrt/viz/Icons.hpp"
 #include "scrt/viz/RayRenderer.hpp"
+#include "scrt/viz/Snap.hpp"
 #include "scrt/viz/Theme.hpp"
 
 #include "scrt/core/AABB.hpp"
@@ -16,6 +17,7 @@
 
 #include "imgui.h"       // must precede ImGuizmo.h: ImGuizmo.h declares against ImGui types
 #include "ImGuizmo.h"    // NOLINT(build/include_order)
+#include "imgui_internal.h"  // ImGui::GetActiveID, for snapped_drag's shadow value
 #include "polyscope/polyscope.h"
 #include "polyscope/view.h"
 #include <glm/gtc/type_ptr.hpp>
@@ -143,9 +145,38 @@ void set_mouse_grab(bool grab) {
 
 // ---- widgets ------------------------------------------------------------------
 
+/// DragFloat that lands on multiples of `step` (when step > 0) without sticking mid-drag.
+///
+/// Rounding the value ImGui edits in place does not work: ImGui moves it by the sub-step drag
+/// delta, the rounding takes that delta straight back, and the field never leaves its value.
+/// So while a field is active the drag edits an unrounded shadow, and only the snapped result
+/// is written out. `scale` selects snap_scale, which never rounds down to zero.
+bool snapped_drag(const char* id, float* v, float speed, float lo, float hi, const char* fmt,
+                  double step, bool scale = false) {
+    if (!(step > 0.0)) return ImGui::DragFloat(id, v, speed, lo, hi, fmt);
+
+    static ImGuiID shadow_id = 0;
+    static float   shadow    = 0.0f;
+    const ImGuiID  wid       = ImGui::GetID(id);
+    float          temp      = *v;
+    float* const   edited    = (ImGui::GetActiveID() == wid && shadow_id == wid) ? &shadow : &temp;
+
+    const bool changed = ImGui::DragFloat(id, edited, speed, lo, hi, fmt);
+    if (ImGui::IsItemActive() && edited == &temp) {
+        shadow_id = wid;
+        shadow    = temp;
+    }
+    if (!changed) return false;
+    const double s = scale ? snap_scale(*edited, step) : snap_to(*edited, step);
+    const float  out = static_cast<float>(s);
+    if (out == *v) return false;
+    *v = out;
+    return true;
+}
+
 /// Three-component drag row that greys out the components whose axis is locked.
 bool locked_drag3(const char* label, float* v, float speed, float lo, float hi,
-                  const char* fmt, const bool lock[3]) {
+                  const char* fmt, const bool lock[3], double step = 0.0, bool scale = false) {
     // Axis colours, the convention every 3D tool shares: X red, Y green, Z blue. They are
     // deliberately desaturated - three saturated bars in a row fight the amber accent that means
     // "selected" everywhere else in this interface.
@@ -179,7 +210,7 @@ bool locked_drag3(const char* label, float* v, float speed, float lo, float hi,
                               ImVec4(kAxis[i].x, kAxis[i].y, kAxis[i].z, 0.34f));
         ImGui::PushStyleColor(ImGuiCol_FrameBgActive,
                               ImVec4(kAxis[i].x, kAxis[i].y, kAxis[i].z, 0.46f));
-        if (ImGui::DragFloat(kAxisId[i], &v[i], speed, lo, hi, fmt)) changed = true;
+        if (snapped_drag(kAxisId[i], &v[i], speed, lo, hi, fmt, step, scale)) changed = true;
         ImGui::PopStyleColor(3);
         ImGui::EndDisabled();
 
@@ -284,9 +315,23 @@ bool run_gizmo(ObjectEditState& st, surfaces::ScaleSupport support, bool uniform
         (g_tool.op == GizmoOp::Scale) ? ImGuizmo::LOCAL
                                       : (g_tool.world ? ImGuizmo::WORLD : ImGuizmo::LOCAL);
 
+    // ImGuizmo's snap: translate reads all three entries (metres), rotate and scale read only
+    // snap[0] (degrees, and a factor). It snaps the delta FROM DRAG START, with hysteresis; the
+    // triple is rounded to the same step after write-back as well, so an object that started
+    // off-grid lands on the values the numeric fields would give rather than on start + k*step.
+    const SnapSettings& snap = snap_settings();
+    float snap_step[3] = {0.0f, 0.0f, 0.0f};
+    switch (g_tool.op) {
+        case GizmoOp::Translate: std::fill(snap_step, snap_step + 3, snap.translate_m); break;
+        case GizmoOp::Rotate:    std::fill(snap_step, snap_step + 3, snap.rotate_deg);  break;
+        case GizmoOp::Scale:     std::fill(snap_step, snap_step + 3, snap.scale);       break;
+    }
+    const bool snapping = snap.enabled && snap_step[0] > 0.0f;
+
     const bool moved = ImGuizmo::Manipulate(
         glm::value_ptr(view), glm::value_ptr(proj),
-        static_cast<ImGuizmo::OPERATION>(mask), space, m);
+        static_cast<ImGuizmo::OPERATION>(mask), space, m, nullptr,
+        snapping ? snap_step : nullptr);
 
     const bool using_now = ImGuizmo::IsUsing();
     set_mouse_grab(ImGuizmo::IsOver() || using_now);
@@ -344,6 +389,38 @@ bool run_gizmo(ObjectEditState& st, surfaces::ScaleSupport support, bool uniform
     }
     if (uniform_scale) collapse_uniform(st.scale, scale_at_drag_start);
     for (int i = 0; i < 3; ++i) st.scale[i] = std::max(kMinScale, st.scale[i]);
+
+    // Same rounding as the numeric fields, so the two input paths still cannot disagree. Locked
+    // axes are skipped: a lock promises the value survives exactly, and it came from t0/r0/s0.
+    if (snapping) {
+        const double step = snap_step[0];
+        switch (g_tool.op) {
+            case GizmoOp::Translate:
+                for (int i = 0; i < 3; ++i)
+                    if (!g_tool.lock[i]) st.trans[i] = static_cast<float>(snap_to(st.trans[i], step));
+                break;
+            case GizmoOp::Rotate:
+                for (int i = 0; i < 3; ++i)
+                    if (!g_tool.lock[i])
+                        st.rot_deg[i] = static_cast<float>(snap_to(st.rot_deg[i], step));
+                break;
+            case GizmoOp::Scale:
+                if (uniform_scale) {
+                    // Round the mean and rescale by the ratio, exactly as the "Scale" field
+                    // does, so an existing aspect ratio is kept rather than rounded apart.
+                    const double mean = (st.scale[0] + st.scale[1] + st.scale[2]) / 3.0;
+                    const double ratio =
+                        (mean > kMinScale) ? snap_scale(mean, step) / mean : 1.0;
+                    for (int i = 0; i < 3; ++i)
+                        st.scale[i] = std::max(kMinScale, static_cast<float>(st.scale[i] * ratio));
+                } else {
+                    for (int i = 0; i < 3; ++i)
+                        if (!g_tool.lock[i])
+                            st.scale[i] = static_cast<float>(snap_scale(st.scale[i], step));
+                }
+                break;
+        }
+    }
     return true;
 }
 
@@ -468,6 +545,35 @@ void draw_tool_controls(surfaces::ScaleSupport support) {
     ImGui::Checkbox("Y##lock", &g_tool.lock[1]); tip |= ImGui::IsItemHovered(); ImGui::SameLine();
     ImGui::Checkbox("Z##lock", &g_tool.lock[2]); tip |= ImGui::IsItemHovered();
     if (tip) ImGui::SetTooltip("%s", kLockTip);
+
+    // Snap: one switch and three steps, read by the handles, the fields below AND a drop from
+    // the library, so all three ways of placing something land on the same values.
+    SnapSettings& snap = snap_settings();
+    ImGui::Checkbox("Snap to steps", &snap.enabled);
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip(
+            "Handles, the Move/Turn/Size fields and a drag from the library all round to\n"
+            "these steps. Move and Turn round the OFFSET shown in the fields (from where the\n"
+            "file put the object); a library drop rounds its world position.");
+    ImGui::BeginDisabled(!snap.enabled);
+    const float w3 = std::max(1.0f, (ImGui::GetContentRegionAvail().x -
+                                     ImGui::GetStyle().ItemInnerSpacing.x * 2.0f) / 3.0f);
+    const float sp = ImGui::GetStyle().ItemInnerSpacing.x;
+    ImGui::SetNextItemWidth(w3);
+    ImGui::DragFloat("##snap_m", &snap.translate_m, 0.001f, 0.001f, 10.0f, "%.3f m");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("Move step, metres");
+    ImGui::SameLine(0.0f, sp);
+    ImGui::SetNextItemWidth(w3);
+    ImGui::DragFloat("##snap_deg", &snap.rotate_deg, 0.5f, 0.5f, 180.0f, "%.1f deg");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("Turn step, degrees");
+    ImGui::SameLine(0.0f, sp);
+    ImGui::SetNextItemWidth(w3);
+    ImGui::DragFloat("##snap_s", &snap.scale, 0.01f, 0.01f, 10.0f, "x%.2f");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip("Size step, as a scale factor");
+    ImGui::EndDisabled();
 }
 
 /// Draws the scale row and the non-uniform unlock, honouring the surface's ScaleSupport.
@@ -480,9 +586,11 @@ bool draw_scale_controls(ObjectEditState& st, surfaces::ScaleSupport support,
 
     bool changed = false;
     if (uniform_scale) {
+        const SnapSettings& snap = snap_settings();
         const float mean = (st.scale[0] + st.scale[1] + st.scale[2]) / 3.0f;
         float       u    = mean;
-        if (ImGui::DragFloat("Scale", &u, 0.005f, kMinScale, 1000.0f, "%.4f")) {
+        if (snapped_drag("Scale", &u, 0.005f, kMinScale, 1000.0f, "%.4f",
+                         snap.enabled ? snap.scale : 0.0, true)) {
             // Scale the whole triple by the same ratio, so any existing (previously
             // unlocked) aspect ratio is preserved rather than flattened.
             const float k = (mean > kMinScale) ? (u / mean) : 1.0f;
@@ -491,7 +599,8 @@ bool draw_scale_controls(ObjectEditState& st, surfaces::ScaleSupport support,
             changed = true;
         }
     } else if (locked_drag3("Scale", st.scale, 0.005f, kMinScale, 1000.0f, "%.4f",
-                            g_tool.lock)) {
+                            g_tool.lock,
+                            snap_settings().enabled ? snap_settings().scale : 0.0, true)) {
         changed = true;
     }
 
@@ -621,9 +730,12 @@ void draw_transform_panel(PanelContext& ctx) {
 
         // These fields and the gizmo write the very same triples, so they cannot disagree.
         // Click a field to type an exact value; drag it for fine adjustment.
-        if (locked_drag3("Move (m)", st->trans, 0.005f, 0.0f, 0.0f, "%.4f", g_tool.lock))
+        const SnapSettings& snap = snap_settings();
+        if (locked_drag3("Move (m)", st->trans, 0.005f, 0.0f, 0.0f, "%.4f", g_tool.lock,
+                         snap.enabled ? snap.translate_m : 0.0))
             changed = true;
-        if (locked_drag3("Turn (deg)", st->rot_deg, 0.5f, 0.0f, 0.0f, "%.2f", g_tool.lock))
+        if (locked_drag3("Turn (deg)", st->rot_deg, 0.5f, 0.0f, 0.0f, "%.2f", g_tool.lock,
+                         snap.enabled ? snap.rotate_deg : 0.0))
             changed = true;
         if (draw_scale_controls(*st, support, uniform_scale)) changed = true;
 
