@@ -150,8 +150,24 @@ void Viewer::scan_examples_dir() {
         if (e.path().extension() == ".json")
             available_scenes_.push_back(e.path());
     std::sort(available_scenes_.begin(), available_scenes_.end());
+
+    // The QA scenes used to check each feature live one folder down, OUTSIDE the four folders the
+    // regression corpus sweeps, and are listed after the examples. Without this they could only be
+    // opened through the file dialog, and the user moved one up into examples/ to reach it - which
+    // silently added it to the corpus.
+    const auto qa_dir = examples_dir_ / "feature_checks";
+    std::vector<std::filesystem::path> qa;
+    if (std::filesystem::is_directory(qa_dir))
+        for (const auto& e : std::filesystem::directory_iterator(qa_dir))
+            if (e.path().extension() == ".json") qa.push_back(e.path());
+    std::sort(qa.begin(), qa.end());
+
     for (const auto& p : available_scenes_)
         scene_display_names_.push_back(p.filename().string());
+    for (const auto& p : qa) {
+        available_scenes_.push_back(p);
+        scene_display_names_.push_back("QA / " + p.filename().string());
+    }
 }
 
 // ---- load_from_file ----------------------------------------------------------

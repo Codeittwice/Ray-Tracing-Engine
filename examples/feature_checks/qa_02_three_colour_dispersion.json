@@ -1,0 +1,32 @@
+{
+    "scene": {
+        "name": "QA 02: 450, 532 and 650 nm lasers through one N-SF11 biconvex lens (expect about 12.7 mW in total). Measured sharpest screen x: blue 168.0, green 167.0, red 166.5 mm - blue focuses nearest the lens. The screen sits at the green focus. The flux map sums all colours and rays draw in one colour, so check dispersion by editing the receiver translation x in this file and re-opening it",
+        "materials": [
+            {"id": "N-SF11 dense flint", "type": "dielectric", "n": 1.7847, "sellmeier": "n_sf11"}
+        ],
+        "elements": [
+            {
+                "name": "sf11_biconvex",
+                "material": "N-SF11 dense flint",
+                "surface": {"type": "thick_lens", "radius1": 0.05, "radius2": -0.05,
+                            "center_thickness_m": 0.006, "diameter_m": 0.0254},
+                "transform": {"translation": [0.2, 0.0, 0.1], "rotation_euler_deg": [0.0, 90.0, 0.0]},
+                "body": {"post": true}
+            }
+        ],
+        "receiver": {
+            "surface": {"type": "plane", "half_width": 0.006, "half_height": 0.006},
+            "grid": {"nx": 96, "ny": 96},
+            "transform": {"translation": [0.167, 0.0, 0.1], "rotation_euler_deg": [0.0, 90.0, 0.0]}
+        },
+        "sources": [
+            {"type": "laser", "origin": [0.4, 0.0, 0.1], "direction": [-1.0, 0.0, 0.0],
+             "power_w": 0.005, "wavelength_nm": 450.0, "beam_diameter_m": 0.01, "divergence_mrad": 0.0},
+            {"type": "laser", "origin": [0.4, 0.0, 0.1], "direction": [-1.0, 0.0, 0.0],
+             "power_w": 0.005, "wavelength_nm": 532.0, "beam_diameter_m": 0.01, "divergence_mrad": 0.0},
+            {"type": "laser", "origin": [0.4, 0.0, 0.1], "direction": [-1.0, 0.0, 0.0],
+             "power_w": 0.005, "wavelength_nm": 650.0, "beam_diameter_m": 0.01, "divergence_mrad": 0.0}
+        ]
+    },
+    "trace": {"n_primary_rays": 300000, "max_bounces": 8, "rng_seed": 102}
+}

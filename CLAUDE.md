@@ -260,6 +260,49 @@ Not verified: drag and drop at a second display scale. Polyscope passes `ImGui::
 straight to its own picking, so the window-to-buffer scaling is inside Polyscope rather than in
 this code, but that reasoning has not been checked against a scaled monitor.
 
+### Wave 5 progress (in flight) - polarisation and interference
+
+Design: `docs/plans/v2_waves_4_to_8_design.md` section 5. Touches the tracer, Fresnel and the
+schema, so the corpus runs after every such stage and a cold audit closes the wave.
+
+Decided with the user before code:
+- **Polarisation is OPT-IN on a laser** (`"polarisation"`, default unpolarised), so every corpus
+  scene stays identical; library lasers set it realistically. Unpolarised rays run the old code.
+- **A coherent receiver REFUSES a randomly sampled source** (hard error saying why): random rays
+  summed with phase are speckle that looks like fringes.
+- **Ray size:** measure the corpus before and after; if it is more than about 10% slower, stop and
+  show the user before splitting the ray type.
+
+- [x] Stage 0 - baseline corpus captured twice for timing spread
+- [x] Stage 1 - Fresnel returns rs/rp; the unpolarised average bit-identical (`==` sweep)
+- [ ] Stage 2 - Ray payload: polarised flag, Jones vector + s-axis, optical path; nothing reads it
+- [ ] Stage 3 - polarised rays through existing mirrors and dielectrics; source polarisation key
+- [ ] Stage 4 - polariser, waveplate, polarising beam splitter (Malus, quarter-wave checks)
+- [ ] Stage 5 - optical path length with the index inside a dielectric
+- [ ] Stage 6 - coherent receiver, coherence length, grid sampling, Michelson example
+
+**Timing baseline (Stage 0), release, 98-scene corpus, summed `wall_time_s`:** 20.59 s (end of
+Wave 4), 21.10 s and 20.86 s (two captures at Stage 0) - a spread of about +-1.2%, dominated by one
+12 s scene. The ray-size decision in Stage 2 compares against these three.
+
+**Stage 1 found the sign convention by testing it.** The existing `rp = (n2 ci - n1 ct)/(n2 ci +
+n1 ct)` gives **rp = -rs at normal incidence** - not the rs = rp convention the first draft of the
+header claimed. The bit-identity sweep (5000+ angle/index pairs, `==` against the pre-Wave-5 body
+kept verbatim in `tests/test_fresnel.cpp`) passed; the corpus after Stage 1 is identical.
+
+**QA scenes (`examples/feature_checks/qa_*.json`), asked for by the user to examine by hand.** Every
+one was traced (release `scrt_compare`) and its number is in its name; the Scene Browser lists the
+folder as "QA / ...". Two were WRONG on first trace and fixed, and are the reason to trace every
+QA scene before handing it over:
+- `rotation_euler_deg` is composed `Rx * Ry * Rz`, so a DIRECTION is turned by Z first, then Y,
+  then X. A 45-degree splitter whose height stays vertical is `[90, 45, 0]`; `[90, 0, 45]` left the
+  coating parallel to the beam and the "50:50" screen read the full 5 mW.
+- The Sellmeier preset is `n_sf11`, not `sf11`; the loader refused the scene outright.
+- QA 02's name first promised "a green spot inside blue/red blur". The flux map is not per colour
+  and rays draw in one colour, so nothing on screen could show that. The foci were MEASURED
+  instead (screen-position scan per colour: blue 168.0, green 167.0, red 166.5 mm, blue nearest
+  the lens as it must be) and the name says how to check them.
+
 ### The measurement Wave 1 settled, worth not repeating
 
 Only `fresnel_lens_cooker.json` splits among the golden scenes — 19617 splits per 20k-ray trace —
