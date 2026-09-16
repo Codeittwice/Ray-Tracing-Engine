@@ -128,7 +128,7 @@ using SurfaceDoc = std::variant<PlaneDoc, SphereDoc, ParaboloidDoc, CylParaboloi
 struct BodyDoc {
     double substrate_m{0.0}; ///< Slab this thick behind the surface (local -Z); 0 = none.
     bool   cube{false};      ///< Draw a cube whose diagonal is the (flat) surface.
-    bool   post{false};      ///< Draw a 12.7 mm post from the part down to z = 0.
+    bool   post{false};      ///< Draw a thin post from the part down to z = 0.
 };
 
 struct ElementDoc {

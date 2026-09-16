@@ -51,6 +51,10 @@ void  set_ray_opacity(float a);
 bool show_grid();
 void set_show_grid(bool on);
 
+/// Whether the drawn-only posts under bench parts are shown (they are never traced either way).
+bool show_posts();
+void set_show_posts(bool on);
+
 /// Separable Gaussian blur of an `nx` x `ny` flux grid, row-major, with `sigma` in bins.
 ///
 /// Returns `in` unchanged when sigma is not positive or the grid is degenerate. Edges are

@@ -98,6 +98,9 @@ public:
     /// Topology edit (mesh swap): remove the structure and register the new tessellation.
     void reregister_surface(std::uint64_t id, int tess_segs = 32);
 
+    /// Re-draws every surface's body (after a body setting such as Show posts changes).
+    void sync_bodies();
+
     /// Remove one surface's structure and forget its registry entry.
     void remove_surface_structure(std::uint64_t id);
 
@@ -123,6 +126,9 @@ void apply_ray_appearance();
 
 /// Makes the placement grid match the Show-grid setting and the move-snap step; call per frame.
 void sync_grid(const scene::Scene* scene);
+
+/// Makes the alignment-axis line match align_axis(); defaults the axis to the first laser. Per frame.
+void sync_axis(const scene::Scene* scene);
 
 /// Polyscope structure name of the placement grid.
 const char* grid_structure_name();

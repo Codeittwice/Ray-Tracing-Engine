@@ -2,6 +2,8 @@
 #include "scrt/viz/Appearance.hpp"
 #include "scrt/viz/Body.hpp"
 #include "scrt/viz/Snap.hpp"
+#include "scrt/viz/Align.hpp"
+#include "scrt/sources/Laser.hpp"
 #include "scrt/viz/ViewSettings.hpp"
 #include "scrt/materials/Material.hpp"
 #include "scrt/math/Constants.hpp"
@@ -226,7 +228,10 @@ void RayRenderer::sync_body(std::uint64_t id) {
                                                             : body_post_structure_name(nm);
         std::vector<math::vec3>    verts;
         std::vector<std::uint32_t> idx;
-        const bool want = body && tessellate_body(*surf, *body, part, verts, idx);
+        // Posts can be hidden (Settings); the substrate or cube cannot, because hiding it would
+        // hide what the part IS rather than what it stands on.
+        const bool shown = (part != BodyPart::Post) || show_posts();
+        const bool want  = shown && body && tessellate_body(*surf, *body, part, verts, idx);
         const bool have = polyscope::hasSurfaceMesh(sname);
         if (!want) {
             if (have) polyscope::removeSurfaceMesh(sname, false);
@@ -245,7 +250,7 @@ void RayRenderer::sync_body(std::uint64_t id) {
         mesh->setBackFacePolicy(polyscope::BackFacePolicy::Identical);
         mesh->setMaterial("clay");
         if (part == BodyPart::Post) {
-            mesh->setSurfaceColor({0.62f, 0.63f, 0.66f});          // turned steel
+            mesh->setSurfaceColor({0.045f, 0.045f, 0.05f});        // black anodised post
         } else if (body->cube) {
             mesh->setSurfaceColor({0.70f, 0.85f, 0.95f});          // the cube's glass
             mesh->setTransparency(0.22f);
@@ -255,6 +260,11 @@ void RayRenderer::sync_body(std::uint64_t id) {
             mesh->setSurfaceColor({0.20f, 0.20f, 0.23f});          // black-anodised substrate
         }
     }
+}
+
+void RayRenderer::sync_bodies() {
+    if (!scene_) return;
+    for (const auto& s : scene_->surfaces()) sync_body(s->id());
 }
 
 void RayRenderer::remove_body_structures(const std::string& surface_structure) {
@@ -339,6 +349,43 @@ void apply_ray_appearance() {
 
 const char* grid_structure_name() { return "placement_grid"; }
 
+namespace {
+
+/// A curve network that is left OUT of Polyscope's scene extents.
+///
+/// Every registered structure is folded into state::boundingBox and lengthScale, which size the
+/// ground plane and every "relative" length. The design note (4.4) says a CurveNetwork cannot opt
+/// out; it can: Structure::hasExtents() is virtual and CurveNetwork does not override it. So the
+/// grid and the alignment axis can reach past the scene without resizing anything.
+class ExtentlessCurveNetwork : public polyscope::CurveNetwork {
+public:
+    using polyscope::CurveNetwork::CurveNetwork;
+    bool hasExtents() override { return false; }
+};
+
+/// Registers (replacing) a decoration line set that does not count toward the scene extents.
+polyscope::CurveNetwork* register_decoration_lines(
+    const std::string& name, const std::vector<glm::vec3>& nodes,
+    const std::vector<std::array<std::size_t, 2>>& edges) {
+    auto* s = new ExtentlessCurveNetwork(name, nodes, edges);
+    if (!polyscope::registerStructure(s)) {
+        delete s;
+        return nullptr;
+    }
+    return s;
+}
+
+/// Polyscope's current scene box, which (with the decorations excluded) is exactly what the
+/// scene draws: surfaces, bodies, receiver, aperture and ray paths. False when empty.
+bool scene_box(glm::vec3& lo, glm::vec3& hi) {
+    polyscope::updateStructureExtents();
+    lo = std::get<0>(polyscope::state::boundingBox);
+    hi = std::get<1>(polyscope::state::boundingBox);
+    return lo.x <= hi.x && lo.y <= hi.y && lo.z <= hi.z;
+}
+
+} // namespace
+
 void sync_grid(const scene::Scene* scene) {
     if (!polyscope::isInitialized()) return;
     static float drawn_step = -1.0f;
@@ -351,47 +398,95 @@ void sync_grid(const scene::Scene* scene) {
     }
     if (has && step == drawn_step) return;
 
-    // Anything registered with Polyscope is folded into its global extents (a CurveNetwork cannot
-    // opt out), so a grid even slightly larger than what is on screen would resize the ground
-    // plane and every relative length. So the grid is sized from POLYSCOPE'S OWN bounding box,
-    // with the old grid removed first, and lies inside it: it adds nothing to the extents.
-    //
-    // Not the optical scene's bounds, which is what this first did. Those exclude the drawn
-    // bodies, so on a bench whose parts all stand on posts the lowest OPTICAL point was 7.5 cm up,
-    // the grid floated there, and every post ran straight through it to the real floor below.
+    glm::vec3 lo, hi;
     if (has) polyscope::removeCurveNetwork(grid_structure_name(), false);
-    polyscope::updateStructureExtents();
-    const glm::vec3 lo = std::get<0>(polyscope::state::boundingBox);
-    const glm::vec3 hi = std::get<1>(polyscope::state::boundingBox);
-    if (!(lo.x <= hi.x) || !(lo.y <= hi.y) || !(lo.z <= hi.z)) return;
-    struct { math::vec3 lo, hi; math::vec3 min() const { return lo; } math::vec3 max() const { return hi; } }
-        b{math::vec3(lo), math::vec3(hi)};
-    const double z  = std::clamp(0.0, b.min().z, b.max().z);
-    double       ux = 0.0, uy = 0.0;
-    const auto   xs = grid_positions(b.min().x, b.max().x, step, 201, ux);
-    const auto   ys = grid_positions(b.min().y, b.max().y, step, 201, uy);
+    if (!scene_box(lo, hi)) return;
+
+    // At z = 0 when the scene reaches the floor (bodies' posts do), and 30% of the larger
+    // horizontal span wider than the scene on every side - asked for by the user, who found a grid
+    // that stopped exactly at the outermost part too tight to place anything beside it. Possible
+    // only because the grid no longer counts toward the extents.
+    const double z      = std::clamp(0.0, static_cast<double>(lo.z), static_cast<double>(hi.z));
+    const double span   = std::max(hi.x - lo.x, hi.y - lo.y);
+    const double margin = std::max(0.3 * span, 5.0 * static_cast<double>(step));
+    const double x0 = lo.x - margin, x1 = hi.x + margin, y0 = lo.y - margin, y1 = hi.y + margin;
+
+    double     ux = 0.0, uy = 0.0;
+    const auto xs = grid_positions(x0, x1, step, 241, ux);
+    const auto ys = grid_positions(y0, y1, step, 241, uy);
     if (xs.empty() || ys.empty()) return;
 
-    std::vector<std::array<double, 3>>      nodes;
+    std::vector<glm::vec3>                  nodes;
     std::vector<std::array<std::size_t, 2>> edges;
-    auto seg = [&](double x0, double y0, double x1, double y1) {
+    auto seg = [&](double ax, double ay, double bx, double by) {
         edges.push_back({nodes.size(), nodes.size() + 1});
-        nodes.push_back({x0, y0, z});
-        nodes.push_back({x1, y1, z});
+        nodes.emplace_back(ax, ay, z);
+        nodes.emplace_back(bx, by, z);
     };
-    for (double x : xs) seg(x, b.min().y, x, b.max().y);
-    for (double y : ys) seg(b.min().x, y, b.max().x, y);
+    for (double x : xs) seg(x, y0, x, y1);
+    for (double y : ys) seg(x0, y, x1, y);
 
-    auto* net = polyscope::registerCurveNetwork(grid_structure_name(), nodes, edges);
+    auto* net = register_decoration_lines(grid_structure_name(), nodes, edges);
+    if (!net) return;
     net->setColor({0.46f, 0.48f, 0.52f});
-    // Absolute radius, a fixed fraction of the drawn spacing: relative radii scale with the
-    // very lengthScale this grid must not disturb.
-    // Measured: 0.02 x a 1 cm step is 0.2 mm, sub-pixel on a 1.3 m cooker, and the grid drew as
-    // speckle. A floor of 0.05% of the scene diagonal keeps a line about a pixel wide at the
-    // framing the scene loads with.
-    const double diag = glm::length(b.max() - b.min());
+    // Absolute radius. Measured: 0.02 x a 1 cm step is 0.2 mm, sub-pixel on a 1.3 m cooker, and the
+    // grid drew as speckle; a floor of 0.05% of the scene diagonal keeps a line about a pixel wide.
+    const double diag = glm::length(glm::dvec3(hi - lo));
     net->setRadius(static_cast<float>(std::max(0.02 * std::max(ux, uy), 0.0005 * diag)), false);
     drawn_step = step;
+}
+
+void sync_axis(const scene::Scene* scene) {
+    if (!polyscope::isInitialized()) return;
+    static const char* const kName = "alignment_axis";
+    static bool       drawn  = false;
+    static AlignAxis  drawn_as{};
+    AlignAxis&        axis   = align_axis();
+    const bool        has    = polyscope::hasCurveNetwork(kName);
+
+    // A load removes every structure: the axis belonged to the old scene, so start again from the
+    // new scene's first laser rather than carry a line that may run through nothing.
+    if (drawn && !has) {
+        axis.valid = false;
+        drawn      = false;
+    }
+    if (!axis.valid && scene) {
+        for (const auto& src : scene->sources()) {
+            if (const auto* laser = dynamic_cast<const sources::Laser*>(src.get())) {
+                axis.origin    = laser->origin();
+                axis.direction = laser->direction();
+                axis.valid     = true;
+                break;
+            }
+        }
+    }
+
+    const bool want = scene && axis.valid && axis.show;
+    if (!want) {
+        if (has) polyscope::removeCurveNetwork(kName, false);
+        drawn = false;
+        return;
+    }
+    const bool same = has && drawn_as.origin == axis.origin && drawn_as.direction == axis.direction;
+    if (same) return;
+
+    glm::vec3 lo, hi;
+    if (has) polyscope::removeCurveNetwork(kName, false);
+    if (!scene_box(lo, hi)) return;
+    // Long enough to cross the whole scene from wherever the axis starts: centred on the point of
+    // the axis nearest the scene's centre, one and a half scene diagonals long.
+    const math::vec3 d    = glm::normalize(axis.direction);
+    const math::vec3 c    = closest_point_on_axis(math::vec3(0.5f * (lo + hi)), axis.origin, d);
+    const double     half = 0.75 * glm::length(glm::dvec3(hi - lo)) + 0.05;
+    std::vector<glm::vec3> nodes = {glm::vec3(c - half * d), glm::vec3(c + half * d)};
+    std::vector<std::array<std::size_t, 2>> edges = {{0, 1}};
+    auto* net = register_decoration_lines(kName, nodes, edges);
+    if (!net) return;
+    net->setColor({0.95f, 0.42f, 0.22f});
+    net->setRadius(static_cast<float>(std::max(0.0006, 0.001 * glm::length(glm::dvec3(hi - lo)))),
+                   false);
+    drawn    = true;
+    drawn_as = axis;
 }
 
 void RayRenderer::clear() {

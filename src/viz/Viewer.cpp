@@ -691,6 +691,7 @@ void Viewer::draw_gui() {
     // Every frame, but it does work only when the setting or the step changed, or a scene load
     // removed every structure (and with them the grid).
     sync_grid(scene_);
+    sync_axis(scene_);
 }
 
 

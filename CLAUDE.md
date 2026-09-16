@@ -236,6 +236,22 @@ current version keeps the property by construction (a structure inside the box c
 Grid line radius is absolute: `max(0.02 x spacing, 0.0005 x diagonal)` - 0.2 mm lines drew as
 speckle on a 1.3 m cooker. A click on a post or substrate selects the part it belongs to.
 
+**Asked for by the user after Wave 4 shipped (committed during Wave 5):**
+- Posts are 6 mm (`kPostRadius` 0.003), black, and hidable (Settings > Show posts). Substrates and
+  cubes cannot be hidden: they are what the part IS, not what it stands on.
+- **The design note's "a CurveNetwork cannot opt out of the scene extents" is wrong.**
+  `Structure::hasExtents()` is virtual and CurveNetwork does not override it, so
+  `ExtentlessCurveNetwork` (RayRenderer.cpp) returns false and is registered with
+  `polyscope::registerStructure`. The grid now reaches 30% beyond the scene on every side, and the
+  alignment axis is drawn the same way; neither can move the ground plane or a relative length.
+- **Alignment axis** (`include/scrt/viz/Align.hpp`, tool state, not saved): starts on the first
+  laser's beam, re-settable from any part ("Set axis from this part": through its centre along its
+  local +Z). "Centre on axis" moves the part's centre onto the line (locked axes skipped); "Face
+  along axis" turns it about its own centre so local +Z lies on the line, never flipping it over
+  (Rodrigues onto the nearer end). VERIFIED by readout on QA 03: the white card at (0.100, 0.150,
+  0.100) went to (0.100, -0.000, 0.100) with Centre, and from extent 0.050 x 0.000 x 0.050 to
+  0.000 x 0.050 x 0.050 with Face, centre unchanged.
+
 **User-reported, fixed alongside Stage 6:**
 - Ray defaults are now 0.3 mm and opacity 0.20 (the user's chosen values).
 - The Settings window opened wide and shrank into place: `AlwaysAutoResize` fits the content

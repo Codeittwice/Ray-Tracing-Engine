@@ -1,6 +1,7 @@
 #include "scrt/viz/Panels.hpp"
 #include "scrt/viz/Icons.hpp"
 #include "scrt/viz/RayRenderer.hpp"
+#include "scrt/viz/Align.hpp"
 #include "scrt/viz/Snap.hpp"
 #include "scrt/viz/Theme.hpp"
 
@@ -662,6 +663,61 @@ bool draw_centre_controls(PanelContext& ctx, ObjectEditState& st,
               "Height (Z) is left alone, so a reflector keeps its stand-off."
             : "The scene has no receiver.");
     }
+
+    // ---- the alignment axis ----
+    // Two buttons that make "perfectly aligned" exact rather than by eye: the part's centre onto
+    // the axis line, and its optical axis (local +Z, the normal of every flat part and the axis of
+    // every lens and dish) along it. Both go through the same triples the gizmo writes.
+    AlignAxis& axis = align_axis();
+    ImGui::BeginDisabled(!axis.valid);
+    if (ImGui::Button("Centre on axis", ImVec2(w2, 0))) {
+        const math::vec3 c = st.pivot + math::vec3(st.trans[0], st.trans[1], st.trans[2]);
+        const math::vec3 p = closest_point_on_axis(c, axis.origin, axis.direction);
+        for (int i = 0; i < 3; ++i) centre_axis(st, i, p[i]);   // skips locked axes
+        changed = true;
+    }
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip(axis.valid
+            ? "Moves this part so its centre lies exactly on the alignment axis (the orange\n"
+              "line). Locked axes are left alone."
+            : "No alignment axis yet: load a scene with a laser, or use \"Set axis from this part\".");
+    ImGui::SameLine();
+    const bool any_lock = g_tool.lock[0] || g_tool.lock[1] || g_tool.lock[2];
+    ImGui::BeginDisabled(any_lock);
+    if (ImGui::Button("Face along axis", ImVec2(w2, 0))) {
+        // Rotate about the part's own centre: K' = T(trans) * Rq * R * S, so the offset is kept.
+        const math::vec3 n  = surf.transform().normal_to_world({0.0, 0.0, 1.0});
+        const math::mat4 Rq = math::mat4(rotation_onto_axis(n, axis.direction));
+        float r16[16];
+        const float zero[3] = {0.0f, 0.0f, 0.0f}, one[3] = {1.0f, 1.0f, 1.0f};
+        ImGuizmo::RecomposeMatrixFromComponents(zero, st.rot_deg, one, r16);
+        const math::mat4 R  = from_f16(r16);
+        const math::mat4 K  = glm::translate(math::mat4(1.0), math::vec3(st.trans[0], st.trans[1],
+                                                                         st.trans[2])) *
+                              Rq * R *
+                              glm::scale(math::mat4(1.0), math::vec3(st.scale[0], st.scale[1],
+                                                                     st.scale[2]));
+        float k16[16];
+        to_f16(K, k16);
+        ImGuizmo::DecomposeMatrixToComponents(k16, st.trans, st.rot_deg, st.scale);
+        changed = true;
+    }
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        ImGui::SetTooltip(any_lock
+            ? "Clear the axis locks first: turning a part to face the axis may need every axis."
+            : "Turns this part about its own centre so its optical axis (a flat part's normal,\n"
+              "a lens's axis) lies along the alignment axis. It never flips the part over.");
+    ImGui::EndDisabled();
+
+    if (ImGui::Button("Set axis from this part", ImVec2(-1, 0))) {
+        axis.origin    = st.pivot + math::vec3(st.trans[0], st.trans[1], st.trans[2]);
+        axis.direction = glm::normalize(surf.transform().normal_to_world({0.0, 0.0, 1.0}));
+        axis.valid     = true;
+    }
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Makes the alignment axis run through this part's centre along its\n"
+                          "optical axis - e.g. set it from the first lens, then line the rest up.");
     return changed;
 }
 

@@ -65,6 +65,10 @@ namespace { bool g_show_grid = true; }
 bool show_grid() { return g_show_grid; }
 void set_show_grid(bool on) { g_show_grid = on; }
 
+namespace { bool g_show_posts = true; }
+bool show_posts() { return g_show_posts; }
+void set_show_posts(bool on) { g_show_posts = on; }
+
 // ---- gaussian_smooth --------------------------------------------------------------------------
 
 std::vector<double> gaussian_smooth(const std::vector<double>& in, int nx, int ny, double sigma) {

@@ -64,3 +64,36 @@ TEST_CASE("snap_scale never rounds a scale down to zero") {
     CHECK(snap_scale(1.26, 0.1) == doctest::Approx(1.3));
     CHECK(snap_scale(1.24, 0.1) == doctest::Approx(1.2));
 }
+
+// ---- alignment axis (include/scrt/viz/Align.hpp) ------------------------------------------
+
+#include "scrt/viz/Align.hpp"
+
+TEST_CASE("closest_point_on_axis projects onto the line, whatever the direction's length") {
+    using scrt::math::vec3;
+    const vec3 p = scrt::viz::closest_point_on_axis({0.3, 0.2, -0.1}, {0.0, 0.0, 0.1}, {2.0, 0.0, 0.0});
+    CHECK(p.x == doctest::Approx(0.3));
+    CHECK(p.y == doctest::Approx(0.0));
+    CHECK(p.z == doctest::Approx(0.1));
+    // A point already on the axis stays exactly where it is.
+    const vec3 q = scrt::viz::closest_point_on_axis({0.5, 0.0, 0.1}, {0.0, 0.0, 0.1}, {1.0, 0.0, 0.0});
+    CHECK(q == vec3{0.5, 0.0, 0.1});
+}
+
+TEST_CASE("rotation_onto_axis lays a normal on the axis without flipping it over") {
+    using scrt::math::vec3;
+    const vec3 axis = glm::normalize(vec3{1.0, 1.0, 0.0});
+    for (const vec3 n : {vec3{0, 0, 1}, vec3{0.3, -0.8, 0.52}, vec3{-1, -0.9, 0.1}, vec3{1, 1, 0}}) {
+        const vec3 from = glm::normalize(n);
+        const vec3 out  = scrt::viz::rotation_onto_axis(from, axis) * from;
+        CHECK(std::fabs(std::fabs(glm::dot(out, axis)) - 1.0) < 1e-12);
+        // The nearer end of the axis is kept: a normal already pointing "back" still points back.
+        CHECK((glm::dot(out, axis) > 0.0) == (glm::dot(from, axis) >= 0.0));
+    }
+    // Already aligned: exactly the identity.
+    const auto I = scrt::viz::rotation_onto_axis(axis, axis);
+    CHECK(I == scrt::math::mat3(1.0));
+    // A rotation, not a stretch.
+    const auto R = scrt::viz::rotation_onto_axis(glm::normalize(vec3{0.3, -0.8, 0.52}), axis);
+    CHECK(glm::determinant(R) == doctest::Approx(1.0));
+}

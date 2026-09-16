@@ -1,6 +1,7 @@
 #include "scrt/viz/Panels.hpp"
 #include "scrt/viz/Icons.hpp"
 #include "scrt/viz/Fonts.hpp"
+#include "scrt/viz/Align.hpp"
 #include "scrt/viz/RayRenderer.hpp"
 #include "scrt/viz/Theme.hpp"
 #include "scrt/viz/ViewSettings.hpp"
@@ -177,6 +178,23 @@ void draw_settings_window(PanelContext& ctx) {
         tip("Lines at the move-snap step (Place this object > Snap to steps), coarsened when\n"
             "they would be too dense. Drawn at z = 0 when the scene reaches the floor, and only\n"
             "across the scene's own extent, so it never changes the view's sense of scale.");
+    }
+
+    {
+        bool on = show_posts();
+        if (ImGui::Checkbox("Show posts", &on)) {
+            set_show_posts(on);
+            if (ctx.scene) RayRenderer(ctx.scene).sync_bodies();
+        }
+        tip("The black posts drawn under bench parts. Drawn only - no ray ever meets one -\n"
+            "so hiding them changes the picture and nothing else.");
+    }
+
+    {
+        bool on = align_axis().show;
+        if (ImGui::Checkbox("Show alignment axis", &on)) align_axis().show = on;
+        tip("The orange line that \"Centre on axis\" and \"Face along axis\" (Place this object)\n"
+            "line parts up with. It starts on the first laser's beam.");
     }
 
     ImGui::Spacing();
