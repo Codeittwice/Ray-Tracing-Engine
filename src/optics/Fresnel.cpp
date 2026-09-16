@@ -3,13 +3,24 @@
 
 namespace scrt::optics {
 
+FresnelAmplitudes fresnel_amplitudes(double cos_theta_i, double cos_theta_t,
+                                     double n1, double n2) noexcept {
+    // rs and rp are written EXACTLY as they were inside fresnel_unpolarized, which now reads them
+    // from here. Changing either expression, even to an algebraically equal one, can move the
+    // last bit of every dielectric result in the corpus.
+    const double rs = (n1 * cos_theta_i - n2 * cos_theta_t) /
+                      (n1 * cos_theta_i + n2 * cos_theta_t);
+    const double rp = (n2 * cos_theta_i - n1 * cos_theta_t) /
+                      (n2 * cos_theta_i + n1 * cos_theta_t);
+    const double ts = (2.0 * n1 * cos_theta_i) / (n1 * cos_theta_i + n2 * cos_theta_t);
+    const double tp = (2.0 * n1 * cos_theta_i) / (n2 * cos_theta_i + n1 * cos_theta_t);
+    return {rs, rp, ts, tp};
+}
+
 FresnelResult fresnel_unpolarized(double cos_theta_i, double cos_theta_t,
                                    double n1, double n2) noexcept {
-    double rs = (n1 * cos_theta_i - n2 * cos_theta_t) /
-                (n1 * cos_theta_i + n2 * cos_theta_t);
-    double rp = (n2 * cos_theta_i - n1 * cos_theta_t) /
-                (n2 * cos_theta_i + n1 * cos_theta_t);
-    double R  = 0.5 * (rs * rs + rp * rp);
+    const FresnelAmplitudes a = fresnel_amplitudes(cos_theta_i, cos_theta_t, n1, n2);
+    double R = 0.5 * (a.rs * a.rs + a.rp * a.rp);
     return {R, 1.0 - R};
 }
 
