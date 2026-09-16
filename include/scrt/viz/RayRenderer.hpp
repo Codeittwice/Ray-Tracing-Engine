@@ -121,6 +121,12 @@ private:
 /// waiting for the next trace to re-register the curve network.
 void apply_ray_appearance();
 
+/// Makes the placement grid match the Show-grid setting and the move-snap step; call per frame.
+void sync_grid(const scene::Scene* scene);
+
+/// Polyscope structure name of the placement grid.
+const char* grid_structure_name();
+
 /// Polyscope structure name of the collection aperture disk.
 const char* aperture_structure_name();
 

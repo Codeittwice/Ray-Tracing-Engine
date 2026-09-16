@@ -10,6 +10,7 @@
 #include "polyscope/view.h"
 
 #include <array>
+#include <cfloat>
 
 #include "imgui.h"
 
@@ -44,7 +45,11 @@ void draw_settings_window(PanelContext& ctx) {
     // Centred on first appearance only, so dragging it somewhere sticks for the session.
     const ImVec2 centre(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f);
     ImGui::SetNextWindowPos(centre, ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(560.0f * ui_scale(), 0.0f), ImGuiCond_FirstUseEver);
+    // Width is CONSTRAINED, not just initialised. With AlwaysAutoResize alone the window fits its
+    // content while the sliders and the Close button (width -1) fit the window, and the two chase
+    // each other down over a dozen frames: the panel visibly opened wide and shrank into place.
+    const float w = 560.0f * ui_scale();
+    ImGui::SetNextWindowSizeConstraints(ImVec2(w, 0.0f), ImVec2(w, FLT_MAX));
 
     if (!ImGui::Begin(ICON_FA_GEAR "  Settings", ctx.settings_open,
                       ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize)) {
@@ -160,6 +165,18 @@ void draw_settings_window(PanelContext& ctx) {
             apply_ray_appearance();
         }
         tip("Turn this down when the rays hide the cooker they are bouncing off.");
+    }
+
+    ImGui::Spacing();
+
+    // ---- placement grid ----
+    ImGui::TextDisabled("Placement grid");
+    {
+        bool on = show_grid();
+        if (ImGui::Checkbox("Show grid", &on)) set_show_grid(on);
+        tip("Lines at the move-snap step (Place this object > Snap to steps), coarsened when\n"
+            "they would be too dense. Drawn at z = 0 when the scene reaches the floor, and only\n"
+            "across the scene's own extent, so it never changes the view's sense of scale.");
     }
 
     ImGui::Spacing();

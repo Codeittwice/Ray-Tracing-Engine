@@ -1,6 +1,7 @@
 #include "scrt/viz/RayRenderer.hpp"
 #include "scrt/viz/Appearance.hpp"
 #include "scrt/viz/Body.hpp"
+#include "scrt/viz/Snap.hpp"
 #include "scrt/viz/ViewSettings.hpp"
 #include "scrt/materials/Material.hpp"
 #include "scrt/math/Constants.hpp"
@@ -334,6 +335,63 @@ void apply_ray_appearance() {
     if (a < 1.0f && polyscope::options::transparencyMode == polyscope::TransparencyMode::None)
         polyscope::options::transparencyMode = polyscope::TransparencyMode::Pretty;
     polyscope::requestRedraw();
+}
+
+const char* grid_structure_name() { return "placement_grid"; }
+
+void sync_grid(const scene::Scene* scene) {
+    if (!polyscope::isInitialized()) return;
+    static float drawn_step = -1.0f;
+    const bool   want = scene && show_grid();
+    const bool   has  = polyscope::hasCurveNetwork(grid_structure_name());
+    const float  step = snap_settings().translate_m;
+    if (!want) {
+        if (has) polyscope::removeCurveNetwork(grid_structure_name(), false);
+        return;
+    }
+    if (has && step == drawn_step) return;
+
+    // Anything registered with Polyscope is folded into its global extents (a CurveNetwork cannot
+    // opt out), so a grid even slightly larger than what is on screen would resize the ground
+    // plane and every relative length. So the grid is sized from POLYSCOPE'S OWN bounding box,
+    // with the old grid removed first, and lies inside it: it adds nothing to the extents.
+    //
+    // Not the optical scene's bounds, which is what this first did. Those exclude the drawn
+    // bodies, so on a bench whose parts all stand on posts the lowest OPTICAL point was 7.5 cm up,
+    // the grid floated there, and every post ran straight through it to the real floor below.
+    if (has) polyscope::removeCurveNetwork(grid_structure_name(), false);
+    polyscope::updateStructureExtents();
+    const glm::vec3 lo = std::get<0>(polyscope::state::boundingBox);
+    const glm::vec3 hi = std::get<1>(polyscope::state::boundingBox);
+    if (!(lo.x <= hi.x) || !(lo.y <= hi.y) || !(lo.z <= hi.z)) return;
+    struct { math::vec3 lo, hi; math::vec3 min() const { return lo; } math::vec3 max() const { return hi; } }
+        b{math::vec3(lo), math::vec3(hi)};
+    const double z  = std::clamp(0.0, b.min().z, b.max().z);
+    double       ux = 0.0, uy = 0.0;
+    const auto   xs = grid_positions(b.min().x, b.max().x, step, 201, ux);
+    const auto   ys = grid_positions(b.min().y, b.max().y, step, 201, uy);
+    if (xs.empty() || ys.empty()) return;
+
+    std::vector<std::array<double, 3>>      nodes;
+    std::vector<std::array<std::size_t, 2>> edges;
+    auto seg = [&](double x0, double y0, double x1, double y1) {
+        edges.push_back({nodes.size(), nodes.size() + 1});
+        nodes.push_back({x0, y0, z});
+        nodes.push_back({x1, y1, z});
+    };
+    for (double x : xs) seg(x, b.min().y, x, b.max().y);
+    for (double y : ys) seg(b.min().x, y, b.max().x, y);
+
+    auto* net = polyscope::registerCurveNetwork(grid_structure_name(), nodes, edges);
+    net->setColor({0.46f, 0.48f, 0.52f});
+    // Absolute radius, a fixed fraction of the drawn spacing: relative radii scale with the
+    // very lengthScale this grid must not disturb.
+    // Measured: 0.02 x a 1 cm step is 0.2 mm, sub-pixel on a 1.3 m cooker, and the grid drew as
+    // speckle. A floor of 0.05% of the scene diagonal keeps a line about a pixel wide at the
+    // framing the scene loads with.
+    const double diag = glm::length(b.max() - b.min());
+    net->setRadius(static_cast<float>(std::max(0.02 * std::max(ux, uy), 0.0005 * diag)), false);
+    drawn_step = step;
 }
 
 void RayRenderer::clear() {

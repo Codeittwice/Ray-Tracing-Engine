@@ -47,6 +47,10 @@ void  set_ray_radius_m(float r);
 float ray_opacity();
 void  set_ray_opacity(float a);
 
+/// Whether the placement grid is drawn (lines at the move-snap step, inside the scene's bounds).
+bool show_grid();
+void set_show_grid(bool on);
+
 /// Separable Gaussian blur of an `nx` x `ny` flux grid, row-major, with `sigma` in bins.
 ///
 /// Returns `in` unchanged when sigma is not positive or the grid is degenerate. Edges are

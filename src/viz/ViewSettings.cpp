@@ -16,8 +16,8 @@ std::string g_colormap      = "viridis";
 // this app, and a map nobody can read is worse than a map that is a little soft. The slider in
 // Settings turns it off for anyone who wants the raw bins.
 float       g_sigma         = 1.0f;
-float       g_ray_radius    = 0.0015f;
-float       g_ray_opacity   = 1.0f;
+float       g_ray_radius    = 0.0003f;
+float       g_ray_opacity   = 0.20f;
 
 /// ImPlot colormap ids built from Polyscope ramps, keyed by name. ImPlot keeps every colormap it
 /// is given for the life of its context, so each name is registered exactly once.
@@ -60,6 +60,10 @@ void  set_ray_radius_m(float r) { g_ray_radius = std::clamp(r, 0.0002f, 0.02f); 
 
 float ray_opacity() { return g_ray_opacity; }
 void  set_ray_opacity(float a) { g_ray_opacity = std::clamp(a, 0.05f, 1.0f); }
+
+namespace { bool g_show_grid = true; }
+bool show_grid() { return g_show_grid; }
+void set_show_grid(bool on) { g_show_grid = on; }
 
 // ---- gaussian_smooth --------------------------------------------------------------------------
 

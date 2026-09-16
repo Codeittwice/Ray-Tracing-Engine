@@ -1,0 +1,147 @@
+{
+    "scene":  {
+                  "name":  "Wave 4 check: substrates, splitter cube and posts on a laser bench",
+                  "materials":  [
+                                    {
+                                        "id":  "al",
+                                        "type":  "real_mirror",
+                                        "reflectance":  0.9,
+                                        "slope_error_mrad":  0.5
+                                    },
+                                    {
+                                        "id":  "bs",
+                                        "type":  "beam_splitter",
+                                        "reflectance":  0.5,
+                                        "absorptance":  0.02
+                                    },
+                                    {
+                                        "id":  "card",
+                                        "type":  "diffuser",
+                                        "albedo":  0.8
+                                    }
+                                ],
+                  "elements":  [
+                                   {
+                                       "name":  "round_mirror",
+                                       "material":  "al",
+                                       "surface":  {
+                                                       "type":  "disk",
+                                                       "radius":  0.0254
+                                                   },
+                                       "transform":  {
+                                                         "translation":  [
+                                                                             0.0,
+                                                                             0.0,
+                                                                             0.1
+                                                                         ],
+                                                         "rotation_euler_deg":  [
+                                                                                    0.0,
+                                                                                    -90.0,
+                                                                                    0.0
+                                                                                ]
+                                                     },
+                                       "body":  {
+                                                    "substrate_m":  0.006,
+                                                    "post":  true
+                                                }
+                                   },
+                                   {
+                                       "name":  "splitter_cube",
+                                       "material":  "bs",
+                                       "surface":  {
+                                                       "type":  "plane",
+                                                       "half_width":  0.017960512242138307,
+                                                       "half_height":  0.0127
+                                                   },
+                                       "transform":  {
+                                                         "translation":  [
+                                                                             0.12,
+                                                                             0.0,
+                                                                             0.1
+                                                                         ],
+                                                         "rotation_euler_deg":  [
+                                                                                    90.0,
+                                                                                    45.0,
+                                                                                    0.0
+                                                                                ]
+                                                     },
+                                       "body":  {
+                                                    "cube":  true,
+                                                    "post":  true
+                                                }
+                                   },
+                                   {
+                                       "name":  "square_mirror",
+                                       "material":  "al",
+                                       "surface":  {
+                                                       "type":  "plane",
+                                                       "half_width":  0.025,
+                                                       "half_height":  0.025
+                                                   },
+                                       "transform":  {
+                                                         "translation":  [
+                                                                             0.24,
+                                                                             0.0,
+                                                                             0.1
+                                                                         ],
+                                                         "rotation_euler_deg":  [
+                                                                                    0.0,
+                                                                                    90.0,
+                                                                                    0.0
+                                                                                ]
+                                                     },
+                                       "body":  {
+                                                    "substrate_m":  0.006,
+                                                    "post":  true
+                                                }
+                                   }
+                               ],
+                  "receiver":  {
+                                   "surface":  {
+                                                   "type":  "plane",
+                                                   "half_width":  0.01,
+                                                   "half_height":  0.01
+                                               },
+                                   "grid":  {
+                                                "nx":  16,
+                                                "ny":  16
+                                            },
+                                   "transform":  {
+                                                     "translation":  [
+                                                                         0.12,
+                                                                         0.2,
+                                                                         0.1
+                                                                     ],
+                                                     "rotation_euler_deg":  [
+                                                                                90.0,
+                                                                                0.0,
+                                                                                0.0
+                                                                            ]
+                                                 }
+                               },
+                  "sources":  [
+                                  {
+                                      "type":  "laser",
+                                      "origin":  [
+                                                     0.12,
+                                                     -0.2,
+                                                     0.1
+                                                 ],
+                                      "direction":  [
+                                                        0,
+                                                        1,
+                                                        0
+                                                    ],
+                                      "power_w":  0.005,
+                                      "wavelength_nm":  632.8,
+                                      "beam_diameter_m":  0.002,
+                                      "divergence_mrad":  1
+                                  }
+                              ]
+              },
+    "trace":  {
+                  "n_primary_rays":  20000,
+                  "max_bounces":  8,
+                  "rng_seed":  3
+              }
+}

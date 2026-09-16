@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 namespace scrt::viz {
 
@@ -25,6 +26,24 @@ inline SnapSettings& snap_settings() {
 inline double snap_to(double v, double step) {
     if (!(step > 0.0) || !std::isfinite(v)) return v;
     return std::round(v / step) * step;
+}
+
+/// Grid-line positions: multiples of `step` inside [lo, hi], never outside it.
+///
+/// The step is doubled until there are at most `max_lines`, and the step actually used is
+/// written to `used`. Never outside [lo, hi] matters: Polyscope folds every structure into the
+/// scene extents, so a grid line a hair beyond the scene would resize the ground plane and every
+/// relative length (see the grid note in docs/plans/v2_waves_4_to_8_design.md, 4.4).
+inline std::vector<double> grid_positions(double lo, double hi, double step, int max_lines,
+                                          double& used) {
+    std::vector<double> out;
+    used = step;
+    if (!(step > 0.0) || !(hi >= lo) || !std::isfinite(lo) || !std::isfinite(hi) || max_lines < 1)
+        return out;
+    while ((hi - lo) / used + 1.0 > max_lines) used *= 2.0;
+    for (double k = std::ceil(lo / used - 1e-9); k * used <= hi + 1e-9 * used; k += 1.0)
+        out.push_back(std::clamp(k * used, lo, hi));
+    return out;
 }
 
 /// Rounds a scale factor to `step`, never below one step (a scale of 0 is not invertible).

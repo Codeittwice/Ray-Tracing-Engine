@@ -163,8 +163,17 @@ void refresh_row_table(const PanelContext& ctx) {
 /// An empty pick is a click on the background, and it clears the selection - that is the only
 /// way to get back to "nothing selected" without reloading the scene.
 void sync_from_pick(PanelContext& ctx) {
-    auto              pick   = polyscope::pick::getSelection();
-    const std::string picked = pick.first ? pick.first->getName() : std::string{};
+    auto        pick   = polyscope::pick::getSelection();
+    std::string picked = pick.first ? pick.first->getName() : std::string{};
+    // A click on a part's drawn-only post or substrate selects the part it holds. Without this
+    // the click fell through as "a structure the tree does not list" and did nothing.
+    for (const std::string& suffix : {body_mount_structure_name(""), body_post_structure_name("")}) {
+        if (picked.size() > suffix.size() &&
+            picked.compare(picked.size() - suffix.size(), suffix.size(), suffix) == 0) {
+            picked.resize(picked.size() - suffix.size());
+            break;
+        }
+    }
     if (picked == g_last_pick) return;
     g_last_pick = picked;
 

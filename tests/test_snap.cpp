@@ -34,6 +34,30 @@ TEST_CASE("a non-positive or NaN step leaves the value alone, bit for bit") {
     CHECK(snap_scale(0.123456789, 0.0) == 0.123456789);
 }
 
+TEST_CASE("grid_positions stays inside the range and coarsens to the line budget") {
+    double used = 0.0;
+    auto p = scrt::viz::grid_positions(-0.034, 0.051, 0.01, 100, used);
+    CHECK(used == 0.01);
+    REQUIRE(p.size() == 9);                        // -0.03 .. 0.05
+    CHECK(p.front() == doctest::Approx(-0.03));
+    CHECK(p.back() == doctest::Approx(0.05));
+
+    p = scrt::viz::grid_positions(-1.0, 1.0, 0.01, 50, used);
+    CHECK(p.size() <= 50);
+    CHECK(used == doctest::Approx(0.08));          // 0.01 doubled until 2/used + 1 <= 50
+
+    // An endpoint that is itself a multiple must not be pushed past the range by rounding.
+    p = scrt::viz::grid_positions(0.0, 0.3, 0.1, 100, used);
+    for (double x : p) {
+        CHECK(x >= 0.0);
+        CHECK(x <= 0.3);
+    }
+    CHECK(p.size() == 4);
+
+    CHECK(scrt::viz::grid_positions(1.0, 0.0, 0.1, 100, used).empty());
+    CHECK(scrt::viz::grid_positions(0.0, 1.0, 0.0, 100, used).empty());
+}
+
 TEST_CASE("snap_scale never rounds a scale down to zero") {
     CHECK(snap_scale(0.04, 0.1) == doctest::Approx(0.1));
     CHECK(snap_scale(0.0, 0.1) == doctest::Approx(0.1));

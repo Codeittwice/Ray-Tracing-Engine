@@ -157,7 +157,7 @@ touches the tracer, an intersect or an interact).
 - [x] Stage 3 - drag a component from the library into the 3D view
 - [x] Stage 4 - snapping (ImGuizmo's `snap` argument, plus the numeric fields and a library drop)
 - [x] Stage 5 - procedural geometry (mirror substrates, splitter cubes, posts)
-- [ ] Stage 6 - the grid, and the Polyscope extents trap it triggers
+- [x] Stage 6 - the grid, and the Polyscope extents trap it triggers
 
 **Two things measured rather than assumed, both of which would have shipped wrong:**
 
@@ -224,6 +224,34 @@ end-of-wave corpus diff checks that claim on a real scene.
   NOT looked at: `optical_bench.json` itself (a laser scene, which the screenshot harness cannot
   photograph) and a drag of a part with a post (the re-tessellation path is exercised only by
   reasoning and by the unit tests of the geometry).
+
+**The grid (Stage 6)** is a `CurveNetwork` at the move-snap step (`sync_grid`, called every frame,
+works only when the setting or step changed or a load removed it), toggled in Settings. It is
+sized from **Polyscope's own `state::boundingBox`**, recomputed with the old grid removed, and
+lies inside it, so it adds nothing to the extents. The first version used the OPTICAL scene's
+bounds: the user's screenshot of a bench showed the grid floating 7.5 cm up at the lowest optic
+while every post ran through it to the real floor (bodies are not in the optical bounds).
+Measured on that first version: `lengthScale` 1.30000007 -> 1.30000007 on the default scene; the
+current version keeps the property by construction (a structure inside the box cannot grow it).
+Grid line radius is absolute: `max(0.02 x spacing, 0.0005 x diagonal)` - 0.2 mm lines drew as
+speckle on a 1.3 m cooker. A click on a post or substrate selects the part it belongs to.
+
+**User-reported, fixed alongside Stage 6:**
+- Ray defaults are now 0.3 mm and opacity 0.20 (the user's chosen values).
+- The Settings window opened wide and shrank into place: `AlwaysAutoResize` fits the content
+  while its width -1 widgets fit the window, and they chased each other down. Width is now a
+  size CONSTRAINT. Measured by frame burst: 697 px in every frame from 335 ms after the click
+  (the first 335 ms were not captured).
+- **Scenes used to test a feature live in `examples/feature_checks/`** so the user can open them.
+  That folder is NOT in the corpus's four directories. `w4_bodies_check.json` is a LASER bench:
+  an earlier version swapped the laser for an overhead sun to dodge the screenshot harness, and
+  the user rightly called the resulting picture wrong (sun rays grazing vertical mirrors from
+  above). Don't change a test scene's physics to suit the instrument. The harness photographed
+  that laser scene correctly this time, so the earlier "laser scenes capture the wallpaper" gap
+  is intermittent, not systematic.
+- **A running `scrt_app.exe` locks the exe and every rebuild fails at link (LNK1104)**, which
+  `run.bat` shows as a red FAILED - and the user then runs the STALE build and reports that the
+  fix did not work. Check `Get-Process scrt_app` before concluding a fix failed.
 
 Tooling: from the PowerShell tool, `cmake --build build/debug` fails with "cannot open float.h"
 (no MSVC environment); `cmake --build --preset debug` works.
