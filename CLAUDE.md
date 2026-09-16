@@ -50,7 +50,7 @@ tools. The sun becomes one source among several; there are no modes.
 - [x] Wave 1 — Foundations: the scene is actually mutable
 - [x] Wave 2 — General sources; the sun stops being special
 - [x] Wave 3 — Components and materials as libraries
-- [ ] Wave 4 — Representative geometry, grid and snapping
+- [x] Wave 4 — Representative geometry, grid and snapping
 - [ ] Wave 5 — Polarisation and interference
 - [ ] Wave 6 — Diffraction, as a second engine
 - [ ] Wave 7 — The optimiser
@@ -146,7 +146,7 @@ and passed.
 - [x] Stage 5 - `diffuser` material (Lambertian, albedo); realistic blacks are low-albedo diffusers (G1)
 - [x] Stage 6 - material library (presets + user entries beside the AI config), component catalogue, `examples/optical_bench.json`
 
-### Wave 4 progress (in flight)
+### Wave 4 (complete, shipped as v1.13.0; corpus 98/98 identical)
 
 Design: `docs/plans/v2_waves_4_to_8_design.md` sections 4.1-4.8. Gating follows the reduced
 policy above: goldens and full ctest every stage, corpus once at the end (nothing in this wave
