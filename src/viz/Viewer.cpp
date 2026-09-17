@@ -410,6 +410,7 @@ void Viewer::register_scene() {
     RayRenderer renderer(scene_, editor_ ? &editor_->doc() : nullptr);
     renderer.register_surfaces(32);
     renderer.register_aperture();
+    renderer.register_sources();
     update_receiver_flux(); // registers zeroed heatmap mesh
 
     // Tell the flux window whether a concentration ratio even exists for this scene. It is
@@ -639,6 +640,7 @@ void Viewer::draw_gui() {
     // A component dragged out of the library needs somewhere to land, and the 3D view is not
     // an ImGui window. This creates its overlay only while a drag is in flight.
     draw_viewport_drop_target(ctx, lay.viewport_min, lay.viewport_max);
+    draw_trace_toolbar(ctx, lay.viewport_min, lay.viewport_max);
 
     // ---- right column, bottom: what is selected, and how to place it --
     ImGui::SetNextWindowPos(lay.right_bottom_pos, ImGuiCond_Always);

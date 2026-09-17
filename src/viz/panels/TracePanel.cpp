@@ -1,5 +1,8 @@
 #include "scrt/viz/Panels.hpp"
 #include "scrt/scene/SceneEditor.hpp"
+#include "scrt/viz/Icons.hpp"
+
+#include <cmath>
 
 #include <cstdio>
 
@@ -193,6 +196,68 @@ void draw_trace_panel(PanelContext& ctx) {
                       "hot the pot gets or how fast it cools.");
         }
     }
+}
+
+void draw_trace_toolbar(PanelContext& ctx, const ImVec2& vmin, const ImVec2& vmax) {
+    // Asked for by the user: checking a design meant switching to the Simulate tab and back for
+    // every change. The toolbar calls the SAME ctx.run_trace / ctx.cancel_trace as that tab, so the
+    // two cannot disagree about what a Preview or a Full Trace is.
+    if (!ctx.cfg || vmax.x - vmin.x < 200.0f) return;
+    const float pad = ImGui::GetStyle().WindowPadding.y;
+    ImGui::SetNextWindowPos(ImVec2(0.5f * (vmin.x + vmax.x), vmin.y + pad), ImGuiCond_Always,
+                            ImVec2(0.5f, 0.0f));
+    ImGui::SetNextWindowBgAlpha(0.85f);
+    const ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                                   ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+                                   ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoCollapse |
+                                   ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
+                                   ImGuiWindowFlags_NoScrollbar;
+    if (!ImGui::Begin("##trace_toolbar", nullptr, flags)) {
+        ImGui::End();
+        return;
+    }
+
+    if (!ctx.trace_running) {
+        if (ImGui::Button(ICON_FA_PLAY "  Preview")) {
+            if (ctx.run_trace) ctx.run_trace(10'000);
+        }
+        tip("A fast 10,000-ray run, the same as Preview on the Simulate tab.");
+        ImGui::SameLine();
+        char full[64];
+        const auto n = static_cast<unsigned long long>(ctx.cfg->n_primary_rays);
+        if (n >= 1'000'000)
+            std::snprintf(full, sizeof(full), ICON_FA_PLAY "  Full trace (%.3gM rays)", n / 1e6);
+        else if (n >= 1'000)
+            std::snprintf(full, sizeof(full), ICON_FA_PLAY "  Full trace (%.3gk rays)", n / 1e3);
+        else
+            std::snprintf(full, sizeof(full), ICON_FA_PLAY "  Full trace (%llu rays)", n);
+        if (ImGui::Button(full)) {
+            if (ctx.run_trace) ctx.run_trace(ctx.cfg->n_primary_rays);
+        }
+        tip("The full ray count set on the Simulate tab.");
+    } else {
+        const float frac = ctx.trace_rays_total > 0
+                               ? static_cast<float>(static_cast<double>(ctx.trace_rays_done) /
+                                                    static_cast<double>(ctx.trace_rays_total))
+                               : 0.0f;
+        ImGui::ProgressBar(frac < 0.f ? 0.f : (frac > 1.f ? 1.f : frac),
+                           ImVec2(ImGui::GetFontSize() * 12.0f, 0.0f));
+        ImGui::SameLine();
+        if (ImGui::Button(ICON_FA_STOP "  Cancel")) {
+            if (ctx.cancel_trace) ctx.cancel_trace();
+        }
+    }
+
+    // The one number a design check is for, beside the buttons that produce it.
+    if (ctx.acc && ctx.traced && !ctx.trace_running) {
+        ImGui::SameLine();
+        const double w = ctx.acc->total_power_w();
+        if (w != 0.0 && std::fabs(w) < 1.0)
+            ImGui::TextDisabled("|  on target: %.3g mW", w * 1e3);
+        else
+            ImGui::TextDisabled("|  on target: %.4g W", w);
+    }
+    ImGui::End();
 }
 
 } // namespace scrt::viz

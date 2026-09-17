@@ -409,6 +409,28 @@ possible failure for this application.
 - **A Michelson with a known path difference produces the analytic fringe spacing.**
 - Ray-size performance measured before and after on the corpus, and the number recorded.
 
+## 5.8 From the user's hands-on testing (added mid-wave, after Stage 4)
+
+**Quick features, before Stage 5** - none of them depends on the physics still to come:
+
+1. Double-click a scene in the Scene Browser loads it.
+2. A toolbar over the 3D view with Preview and Full Trace, so checking a design needs no tab switch.
+   The Simulate tab stays as it is.
+3. A laser is drawn as a body: a housing that ends at the source's origin, the beam leaving its front.
+4. Laser QA scenes get receiver grids near 0.1 mm per bin; at 48x48 over 20 mm a 2 mm beam covered
+   about five bins.
+
+**Stage 7 - user feedback, after Stage 6**, because the coherent receiver changes what the flux map
+shows and Stages 5-6 give each ray the path and phase an inspector ought to show:
+
+5. **The flux map uses a fixed scale taken from the source** (the user's choice over locking the scale
+   on a chosen trace, or letting the first trace set it). 100% is the total source power divided by
+   the receiver area - the flux if all the light fell evenly on the screen. A weaker design therefore
+   visibly dims, and a focused spot may read above 100%. A sensitivity slider rescales the display;
+   nothing adapts to the trace. For a coherent receiver the same reference applies to intensity.
+6. Rays carry an indicator of wavelength (colour) and polarisation (a marker), and clicking a ray
+   reports its wavelength, power, polarisation state, optical path length and phase.
+
 ---
 
 # Wave 6 — diffraction, as a second engine

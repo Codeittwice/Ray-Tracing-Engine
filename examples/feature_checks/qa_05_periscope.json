@@ -22,7 +22,7 @@
         ],
         "receiver": {
             "surface": {"type": "plane", "half_width": 0.01, "half_height": 0.01},
-            "grid": {"nx": 48, "ny": 48},
+            "grid": {"nx": 200, "ny": 200},
             "transform": {"translation": [0.3, 0.0, 0.2], "rotation_euler_deg": [0.0, 90.0, 0.0]}
         },
         "sources": [

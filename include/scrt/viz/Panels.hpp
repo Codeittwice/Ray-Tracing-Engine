@@ -229,6 +229,9 @@ void draw_viewport_drop_target(PanelContext& ctx, const ImVec2& vmin, const ImVe
 void draw_sun_panel(PanelContext& ctx);
 /// Draws the trace controls and results panel.
 void draw_trace_panel(PanelContext& ctx);
+
+/// Draws the Preview / Full Trace toolbar floating at the top of the 3D viewport rect.
+void draw_trace_toolbar(PanelContext& ctx, const ImVec2& vmin, const ImVec2& vmax);
 /// Draws the 3D model import panel (file, unit detection, submesh split, placement).
 void draw_import_panel(PanelContext& ctx);
 

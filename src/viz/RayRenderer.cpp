@@ -301,6 +301,122 @@ void RayRenderer::register_aperture() {
     mesh->setTransparency(0.4f);
 }
 
+// ---- light sources ------------------------------------------------------------
+
+namespace {
+
+/// Approximate sRGB of a visible wavelength (380-780 nm); a neutral grey outside that band.
+/// The usual piecewise ramp with intensity rolled off at both ends of the visible range.
+glm::vec3 wavelength_rgb(double nm) {
+    double r = 0.0, g = 0.0, b = 0.0;
+    if (nm >= 380 && nm < 440)      { r = -(nm - 440) / 60; b = 1; }
+    else if (nm >= 440 && nm < 490) { g = (nm - 440) / 50; b = 1; }
+    else if (nm >= 490 && nm < 510) { g = 1; b = -(nm - 510) / 20; }
+    else if (nm >= 510 && nm < 580) { r = (nm - 510) / 70; g = 1; }
+    else if (nm >= 580 && nm < 645) { r = 1; g = -(nm - 645) / 65; }
+    else if (nm >= 645 && nm <= 780){ r = 1; }
+    else return {0.55f, 0.55f, 0.58f};   // infrared or ultraviolet: no honest colour
+    double k = 1.0;
+    if (nm < 420) k = 0.3 + 0.7 * (nm - 380) / 40;
+    else if (nm > 700) k = 0.3 + 0.7 * (780 - nm) / 80;
+    return {static_cast<float>(r * k), static_cast<float>(g * k), static_cast<float>(b * k)};
+}
+
+/// Closed prism between two equal rings (side quads and fan caps), appended to pv/pf.
+void add_ring_prism(const std::vector<math::vec3>& bot, const std::vector<math::vec3>& top,
+                    std::vector<std::array<double, 3>>&        pv,
+                    std::vector<std::array<std::uint32_t, 3>>& pf) {
+    const auto n  = static_cast<std::uint32_t>(bot.size());
+    const auto b0 = static_cast<std::uint32_t>(pv.size());
+    for (const auto& p : bot) pv.push_back({p.x, p.y, p.z});
+    for (const auto& p : top) pv.push_back({p.x, p.y, p.z});
+    for (std::uint32_t i = 0; i < n; ++i) {
+        const std::uint32_t j = (i + 1) % n;
+        pf.push_back({b0 + i, b0 + j, b0 + n + j});
+        pf.push_back({b0 + i, b0 + n + j, b0 + n + i});
+    }
+    for (std::uint32_t i = 1; i + 1 < n; ++i) {
+        pf.push_back({b0, b0 + i + 1, b0 + i});
+        pf.push_back({b0 + n, b0 + n + i, b0 + n + i + 1});
+    }
+}
+
+std::vector<math::vec3> circle(math::vec3 c, math::vec3 u, math::vec3 v, double r, int n) {
+    std::vector<math::vec3> out;
+    for (int k = 0; k < n; ++k) {
+        const double a = math::TWO_PI * k / n;
+        out.push_back(c + r * (std::cos(a) * u + std::sin(a) * v));
+    }
+    return out;
+}
+
+const std::string kLaserPrefix = "laser_";
+
+} // namespace
+
+void RayRenderer::register_sources() {
+    // Remove what a previous call drew: this runs on load and again when Show posts changes.
+    for (int i = 1; i <= 64; ++i) {
+        const std::string base = kLaserPrefix + std::to_string(i);
+        for (const std::string& s : {base + " [housing]", base + " [window]", base + " [post]"})
+            if (polyscope::hasSurfaceMesh(s)) polyscope::removeSurfaceMesh(s, false);
+    }
+    if (!scene_) return;
+
+    int index = 0;
+    for (const auto& src : scene_->sources()) {
+        const auto* laser = dynamic_cast<const sources::Laser*>(src.get());
+        if (!laser) continue;
+        if (++index > 64) break;
+        const std::string base = kLaserPrefix + std::to_string(index);
+
+        // The user asked for a laser to be an object rather than light appearing from nowhere.
+        // Presentation only: nothing traces the housing, and it ends exactly at the source origin
+        // so the beam visibly leaves its front face.
+        const math::vec3 d = glm::normalize(laser->direction());
+        math::vec3       u, v;
+        scene::orthonormal_frame(d, u, v);
+        const math::vec3 front = laser->origin();
+        const double     len   = 0.12;
+        const double     rad   = 0.0125;
+        const math::vec3 back  = front - len * d;
+
+        std::vector<std::array<double, 3>>        pv;
+        std::vector<std::array<std::uint32_t, 3>> pf;
+        add_ring_prism(circle(back, u, v, rad, 32), circle(front, u, v, rad, 32), pv, pf);
+        auto* housing = polyscope::registerSurfaceMesh(base + " [housing]", pv, pf);
+        housing->setMaterial("clay");
+        housing->setSurfaceColor({0.13f, 0.13f, 0.15f});
+        housing->setSmoothShade(true);
+        housing->setBackFacePolicy(polyscope::BackFacePolicy::Identical);
+
+        // The exit window: the beam's own diameter (at least 2 mm so it is visible), just proud of
+        // the front face, in the colour of the wavelength.
+        pv.clear();
+        pf.clear();
+        const double wr = std::clamp(0.5 * laser->beam_diameter_m(), 0.001, rad * 0.9);
+        add_ring_prism(circle(front, u, v, wr, 24), circle(front + 0.0008 * d, u, v, wr, 24), pv, pf);
+        auto* window = polyscope::registerSurfaceMesh(base + " [window]", pv, pf);
+        window->setMaterial("flat");
+        window->setSurfaceColor(wavelength_rgb(laser->wavelength_nm()));
+
+        // A post under the housing's middle, like the bench parts, when it is lifted off the floor.
+        const math::vec3 mid = front - 0.5 * len * d;
+        const double     top = mid.z - rad * 0.5;
+        if (show_posts() && top > 1e-6) {
+            pv.clear();
+            pf.clear();
+            const math::vec3 X{1, 0, 0}, Y{0, 1, 0};
+            add_ring_prism(circle({mid.x, mid.y, 0.0}, X, Y, kPostRadius, 16),
+                           circle({mid.x, mid.y, top}, X, Y, kPostRadius, 16), pv, pf);
+            auto* post = polyscope::registerSurfaceMesh(base + " [post]", pv, pf);
+            post->setMaterial("clay");
+            post->setSurfaceColor({0.045f, 0.045f, 0.05f});
+            post->setBackFacePolicy(polyscope::BackFacePolicy::Identical);
+        }
+    }
+}
+
 void RayRenderer::register_paths(const tracer::TraceResult& result) {
     if (result.sampled_paths.empty()) return;
 

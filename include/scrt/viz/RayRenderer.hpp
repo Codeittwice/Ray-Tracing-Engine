@@ -78,6 +78,10 @@ public:
     /// Tessellate and register all optical surfaces as Polyscope meshes.
     void register_surfaces(int tess_segs = 32);
 
+    /// Draws each laser as a housing ending at its origin, with a wavelength-coloured exit window
+    /// and a post. Presentation only; re-run it when Show posts changes.
+    void register_sources();
+
     /// Register the collection aperture as a translucent disk.
     void register_aperture();
 

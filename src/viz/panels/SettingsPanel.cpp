@@ -184,7 +184,10 @@ void draw_settings_window(PanelContext& ctx) {
         bool on = show_posts();
         if (ImGui::Checkbox("Show posts", &on)) {
             set_show_posts(on);
-            if (ctx.scene) RayRenderer(ctx.scene).sync_bodies();
+            if (ctx.scene) {
+                RayRenderer(ctx.scene).sync_bodies();
+                RayRenderer(ctx.scene).register_sources();
+            }
         }
         tip("The black posts drawn under bench parts. Drawn only - no ray ever meets one -\n"
             "so hiding them changes the picture and nothing else.");

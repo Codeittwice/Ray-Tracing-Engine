@@ -344,8 +344,39 @@ Unit tests (`tests/test_polarising_optics.cpp`): Malus over 0-90, 1/ER when cros
 through a sheet polariser, QWP linear -> circular -> crossed, HWP rotates by twice its axis, PBS arms
 and leak. NOT fixed, noticed on the QA 09 screenshot: the outliner files every element under
 "Reflectors" (a waveplate, a polariser, and - as before - every lens). A naming bug in the tree.
+- [x] Quick features from user testing (before Stage 5; none depends on the physics still to come)
+  - [x] Q1 - double-click a scene in the Scene Browser to load it
+  - [x] Q2 - a toolbar over the 3D view with Preview and Full Trace, so a design check needs no tab switch (the Simulate tab stays)
+  - [x] Q3 - a drawn laser body: a housing ending at the source's origin, beam leaving its front
+  - [x] Q4 - finer receiver grids on the laser QA scenes (about 0.1 mm bins; a 2 mm beam covered 5 bins at 48x48)
+
+**Quick features, as built.** Q1: the browser is `Selectable` rows (a `ListBox` cannot report a
+double-click), 14 rows tall instead of 6, with a hint line; VERIFIED by a real double-click on
+`parabolic_dish.json` that replaced the QA 03 tree with `primary_dish` and a Sun. Q2:
+`draw_trace_toolbar` (TracePanel.cpp) floats at the top of the viewport rect and calls the SAME
+`ctx.run_trace` / `ctx.cancel_trace` as the Simulate tab; shows progress + Cancel while running and
+"on target: X mW" after. Q3: `RayRenderer::register_sources` draws each laser as a 25 x 120 mm
+housing ending at the origin, a wavelength-coloured exit window the beam's size, and a black post;
+re-run on Show posts. Presentation only. Q4: QA receivers regridded to 0.1 mm bins (QA 04 kept at
+0.05 mm - its slits are 0.1 mm); total power unchanged on every scene, peaks now resolved (QA 01
+focus 11.8 -> 115 kW/m2).
+
+**Q4 found a real crash, fixed:** the flux heatmap drew one quad per receiver bin into an ImGui draw
+list with 16-bit indices, so a 200x200 receiver (160k vertices) aborted the debug build ("Too many
+vertices in ImDrawList") and would have drawn garbage in release. Any grid above about 128x128 would
+have done it; no scene had one. `FluxPlotter` now block-averages to at most 120 cells a side for
+DRAWING only - the stated power and hottest spot still come from the raw bins, and the 3D receiver
+(Polyscope's own GL) is unaffected.
 - [ ] Stage 5 - optical path length with the index inside a dielectric
 - [ ] Stage 6 - coherent receiver, coherence length, grid sampling, Michelson example
+- [ ] Stage 7 - user feedback, deliberately after Stage 6 because the coherent receiver changes what the
+  flux map shows and Stages 5-6 give rays the path and phase an inspector should show:
+  - [ ] Flux map on a FIXED scale taken from the source, chosen by the user over "lock on a trace" and
+    "first trace sets it": 100% = total source power / receiver area (the flux if all the light fell
+    evenly on the screen), so a weaker design visibly dims and a focused spot can exceed 100%. A
+    sensitivity slider rescales the display; the scale never adapts to the trace.
+  - [ ] Rays show wavelength (colour) and polarisation (a marker), and a clicked ray reports its
+    wavelength, power, polarisation state, optical path and phase.
 
 **Timing baseline (Stage 0), release, 98-scene corpus, summed `wall_time_s`:** 20.59 s (end of
 Wave 4), 21.10 s and 20.86 s (two captures at Stage 0) - a spread of about +-1.2%, dominated by one

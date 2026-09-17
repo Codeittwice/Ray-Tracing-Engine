@@ -23,21 +23,34 @@ bool draw_browser_body(PanelContext& ctx) {
         return false;
     }
 
-    std::vector<const char*> names;
-    names.reserve(ctx.scene_display_names->size());
-    for (const auto& n : *ctx.scene_display_names)
-        names.push_back(n.c_str());
-
-    ImGui::SetNextItemWidth(-1);
-    ImGui::ListBox("##scenes", ctx.selected_scene_idx,
-                   names.data(), static_cast<int>(names.size()), 6);
+    // Selectable rows rather than ImGui::ListBox: a ListBox cannot report a double-click, and a
+    // double-click is how the user expected to open a scene. 14 rows rather than 6, because the list
+    // is about a hundred scenes long and six rows made it a keyhole.
+    bool open_now = false;
+    ImGui::TextDisabled("Double-click a scene to open it.");
+    if (ImGui::BeginListBox("##scenes",
+                            ImVec2(-1.0f, ImGui::GetTextLineHeightWithSpacing() * 14.25f))) {
+        const auto& names = *ctx.scene_display_names;
+        for (int i = 0; i < static_cast<int>(names.size()); ++i) {
+            const bool selected = (*ctx.selected_scene_idx == i);
+            if (ImGui::Selectable(names[static_cast<std::size_t>(i)].c_str(), selected,
+                                  ImGuiSelectableFlags_AllowDoubleClick)) {
+                *ctx.selected_scene_idx = i;
+                if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) open_now = true;
+            }
+            if (selected) ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndListBox();
+    }
 
     if (!ctx.load_error->empty())
         ImGui::TextColored({1.0f, 0.3f, 0.3f, 1.0f}, "%s", ctx.load_error->c_str());
 
     bool loaded = false;
     ImGui::BeginDisabled(*ctx.selected_scene_idx < 0);
-    if (ImGui::Button("Load selected scene", ImVec2(-1, 0))) {
+    if (ImGui::Button("Load selected scene", ImVec2(-1, 0))) open_now = true;
+    ImGui::EndDisabled();
+    if (open_now && *ctx.selected_scene_idx >= 0) {
         ctx.load_error->clear();
         const std::filesystem::path& path =
             (*ctx.available_scenes)[static_cast<std::size_t>(*ctx.selected_scene_idx)];
@@ -54,7 +67,6 @@ bool draw_browser_body(PanelContext& ctx) {
             *ctx.load_error = e.what();
         }
     }
-    ImGui::EndDisabled();
     return loaded;
 }
 
