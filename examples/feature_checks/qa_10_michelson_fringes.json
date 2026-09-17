@@ -1,0 +1,44 @@
+{
+    "scene": {
+        "name": "QA 10: Michelson interferometer on a COHERENT screen - He-Ne 632.8 nm, 50:50 splitter, mirror M2 tilted 0.5 mrad. Expect straight fringes 0.633 mm apart (lambda / sin 2 alpha), dark ones near 0 and bright ones 4x one arm. Tilt M2 more on the Design/placement panel and the fringes crowd together; move M1 and they slide",
+        "materials": [
+            {"id": "Beamsplitter 50:50 (lossless)", "type": "beam_splitter", "reflectance": 0.5, "absorptance": 0.0},
+            {"id": "Ideal mirror (reference)", "type": "perfect_mirror"}
+        ],
+        "elements": [
+            {
+                "name": "splitter_cube",
+                "material": "Beamsplitter 50:50 (lossless)",
+                "surface": {"type": "plane", "half_width": 0.017960512242138307, "half_height": 0.0127},
+                "transform": {"translation": [0.0, 0.0, 0.1], "rotation_euler_deg": [90.0, 45.0, 0.0]},
+                "body": {"cube": true, "post": true}
+            },
+            {
+                "name": "M1_fixed",
+                "material": "Ideal mirror (reference)",
+                "surface": {"type": "disk", "radius": 0.0127},
+                "transform": {"translation": [0.1, 0.0, 0.1], "rotation_euler_deg": [0.0, 90.0, 0.0]},
+                "body": {"substrate_m": 0.006, "post": true}
+            },
+            {
+                "name": "M2_tilted_0.5mrad",
+                "material": "Ideal mirror (reference)",
+                "surface": {"type": "disk", "radius": 0.0127},
+                "transform": {"translation": [0.0, 0.1, 0.1], "rotation_euler_deg": [90.02864788975654, 0.0, 0.0]},
+                "body": {"substrate_m": 0.006, "post": true}
+            }
+        ],
+        "receiver": {
+            "surface": {"type": "plane", "half_width": 0.004, "half_height": 0.004},
+            "grid": {"nx": 160, "ny": 160},
+            "transform": {"translation": [0.0, -0.1, 0.1], "rotation_euler_deg": [90.0, 0.0, 0.0]},
+            "coherent": true
+        },
+        "sources": [
+            {"type": "laser", "origin": [-0.2, 0.0, 0.1], "direction": [1.0, 0.0, 0.0],
+             "power_w": 0.005, "wavelength_nm": 632.8, "beam_diameter_m": 0.004, "divergence_mrad": 0.0,
+             "polarisation": {"linear_deg": 0.0}, "sampling": "grid"}
+        ]
+    },
+    "trace": {"n_primary_rays": 300000, "max_bounces": 8, "rng_seed": 110}
+}
