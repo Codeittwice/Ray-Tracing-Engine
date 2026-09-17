@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <complex>
 #include <vector>
 
 namespace scrt::scene {
@@ -37,6 +38,18 @@ struct TraceConfig {
 ///
 /// INVARIANT: `edges` forms a tree rooted at node 0 (the emission point). Every node except 0
 /// appears exactly once as an edge's `to`.
+/// What the light was doing along one recorded path edge - for drawing and for the ray inspector.
+/// Recorded, never read by the physics.
+struct RayEdgeInfo {
+    double               wavelength_nm = 550.0;
+    double               power_w       = 0.0;
+    double               opl_end_m     = 0.0;   ///< Optical path length at the edge's END [m].
+    bool                 polarised     = false;
+    math::vec3           direction     {0.0, 0.0, 1.0};
+    math::vec3           s_axis        {0.0, 1.0, 0.0};
+    std::complex<double> Es, Ep;                ///< Jones vector in (s_axis, direction x s_axis).
+};
+
 struct RayPath {
     std::vector<math::vec3>                   nodes;         ///< nodes[0] is where the ray began.
     std::vector<std::array<std::uint32_t, 2>> edges;         ///< (from, to) indices into nodes.
@@ -44,6 +57,11 @@ struct RayPath {
     /// 4%-reflected branch from a 96%-transmitted one, which is the point of looking at a beam
     /// splitter at all.
     std::vector<double>                       edge_power_w;
+    /// Per edge, parallel to `edges`: wavelength, polarisation state and optical path.
+    std::vector<RayEdgeInfo>                  edge_info;
+    /// True for a single-wavelength source (a laser): its rays are drawn in their wavelength's
+    /// colour. Sunlight is broadband, and one colour for it would misrepresent it.
+    bool                                      monochromatic = false;
 };
 
 /// Summary returned after a completed run.

@@ -1,0 +1,36 @@
+{
+    "scene": {
+        "name": "QA 16: ray inspector - a green (532 nm) vertically polarised laser through a quarter-wave plate at 45 deg, then a half-wave plate at 0 deg. Rays are drawn GREEN (their wavelength). The white polarisation marks are a single vertical line before the first plate, an equal cross (circular) between the plates, and a cross again after the second. Click a ray segment: the Selection panel reads 'linear, 0.0 deg from vertical', then 'circular, right', then 'circular, left' (a half-wave plate flips the hand; right = clockwise looking into the beam, checked by hand and by tests/test_ray_inspector.cpp)",
+        "materials": [
+            {"id": "Quarter-wave plate (ideal)", "type": "waveplate", "retardance_waves": 0.25, "fast_axis_deg": 45.0, "transmission": 1.0},
+            {"id": "Half-wave plate (ideal)", "type": "waveplate", "retardance_waves": 0.5, "fast_axis_deg": 0.0, "transmission": 1.0}
+        ],
+        "elements": [
+            {
+                "name": "quarter_wave_plate_45",
+                "material": "Quarter-wave plate (ideal)",
+                "surface": {"type": "disk", "radius": 0.0127},
+                "transform": {"translation": [0.0, 0.0, 0.1], "rotation_euler_deg": [0.0, 90.0, 0.0]},
+                "body": {"post": true}
+            },
+            {
+                "name": "half_wave_plate_0",
+                "material": "Half-wave plate (ideal)",
+                "surface": {"type": "disk", "radius": 0.0127},
+                "transform": {"translation": [0.12, 0.0, 0.1], "rotation_euler_deg": [0.0, 90.0, 0.0]},
+                "body": {"post": true}
+            }
+        ],
+        "receiver": {
+            "surface": {"type": "plane", "half_width": 0.01, "half_height": 0.01},
+            "grid": {"nx": 200, "ny": 200},
+            "transform": {"translation": [0.25, 0.0, 0.1], "rotation_euler_deg": [0.0, 90.0, 0.0]}
+        },
+        "sources": [
+            {"type": "laser", "origin": [-0.15, 0.0, 0.1], "direction": [1.0, 0.0, 0.0],
+             "power_w": 0.005, "wavelength_nm": 532.0, "beam_diameter_m": 0.003, "divergence_mrad": 0.0,
+             "polarisation": {"linear_deg": 0.0}}
+        ]
+    },
+    "trace": {"n_primary_rays": 50000, "max_bounces": 8, "rng_seed": 116, "power_cutoff_w": 1e-15}
+}

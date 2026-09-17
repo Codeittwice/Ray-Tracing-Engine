@@ -419,7 +419,7 @@ beam edge was fitted as a fringe. A bin-centre phase correction added on a guess
 nothing measurable at 12 bins per fringe; it is kept as the physically right sampling and its comment
 says so. Also: doctest `Approx(x).epsilon(e)` adds an absolute scale of 1, so on sub-millimetre
 numbers it passes anything - use an explicit relative check.
-- [ ] Stage 7 - user feedback, deliberately after Stage 6 because the coherent receiver changes what the
+- [x] Stage 7 - user feedback, deliberately after Stage 6 because the coherent receiver changes what the
   flux map shows and Stages 5-6 give rays the path and phase an inspector should show:
   - [ ] Flux map on a FIXED scale taken from the source, chosen by the user over "lock on a trace" and
     "first trace sets it": 100% = total source power / receiver area (the flux if all the light fell
@@ -427,6 +427,45 @@ numbers it passes anything - use an explicit relative check.
     sensitivity slider rescales the display; the scale never adapts to the trace.
   - [ ] Rays show wavelength (colour) and polarisation (a marker), and a clicked ray reports its
     wavelength, power, polarisation state, optical path and phase.
+
+**Stage 7a (fixed flux scale).** `flux_reference_wm2` = total source power / receiver area; the heatmap
+and the 3D receiver (`setMapRange`) both colour against reference / sensitivity, never against the
+trace's peak. Heatmap values above full scale are CLAMPED before ImPlot (it does not clamp). Colour bar
+in percent, reference in W/m2, hottest spot as a percentage. **Measured on QA 11, a real consequence
+of the chosen definition:** three 2 mm spots on a 16 mm screen peak at 6024% of the reference, so at
+x1 all three saturate and look identical although they are 10 : 5 : 1. The slider reaches x0.0001;
+whether the default should be something other than x1 is the user's call, not changed.
+
+**Stage 7b (ray display and inspector).** `RayPath::edge_info` records wavelength, power, optical path,
+and the Jones state per edge (recording only - corpus 100/100 identical); `monochromatic` marks laser
+paths. Laser rays are drawn in their wavelength's colour (`light_colour`), sunlight in the old yellow.
+Polarised edges get the polarisation ellipse's axes as white ticks at their midpoint (an
+`ExtentlessCurveNetwork`). Clicking "ray_paths" names an edge (Polyscope numbers a curve network's
+picks nodes first, then edges) and the Selection panel shows wavelength, power, polarisation,
+optical path and phase. The description is ONE pure function, `optics::describe_polarisation`, shared
+with `tests/test_ray_inspector.cpp`, which traces QA 16 and checks every recorded edge.
+**That test caught a wrong claim of mine:** QA 16's name first said "circular, left" after a
+quarter-wave plate at 45 deg. The engine says right, and working it by hand agrees (Ep/Es = -i, and
+E(t) = s cos wt - p sin wt turns clockwise looking into the beam). The name was a guess; now it is
+tested.
+
+**NOT VERIFIED BY EYE:** everything in 7b's drawing (colours, polarisation ticks, clicking a ray, the
+panel read-out), and the 7a heatmap after the slider range change. The workstation was LOCKED: the
+capture showed the Windows lock screen ("Press Ctrl+Alt+Delete to unlock"). This is very likely what
+the old "the harness photographs the wallpaper for laser scenes" note below actually was - not the
+capture path, not laser scenes.
+
+**Power cutoff finding (engine default NOT changed, a decision for the user).** `TraceConfig::
+power_cutoff_w` is an ABSOLUTE 1e-9 W per ray, sized for solar rays. A 5 mW laser over 200k rays is
+2.5e-8 W per ray, so Fresnel ghosts (x 0.04 x 0.04) and extinction leaks (x 1e-3) were dropped: QA 15
+read 92.16% instead of (1-R)^2/(1-R^2) = 92.308%, QA 07 25.53% instead of the full series 25.77%,
+QA 13's 1/1000 leak read 0. All laser QA scenes now set `"power_cutoff_w": 1e-15` and match theory to
+the printed digit. A cutoff relative to each primary ray's starting power would fix every scene, but
+would move solar corpus results slightly.
+
+**QA scenes now 01-16** (`examples/feature_checks/`), every number in a name traced first: 11 fixed
+scale (three powers), 12 half-wave rotator, 13 HWP + PBS variable splitter, 14 coherence washout, 15
+window at normal incidence, 16 ray inspector.
 
 **Timing baseline (Stage 0), release, 98-scene corpus, summed `wall_time_s`:** 20.59 s (end of
 Wave 4), 21.10 s and 20.86 s (two captures at Stage 0) - a spread of about +-1.2%, dominated by one

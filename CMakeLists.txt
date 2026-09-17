@@ -178,6 +178,7 @@ target_sources(scrt_tests PRIVATE
     tests/test_polarising_optics.cpp
     tests/test_optical_path.cpp
     tests/test_coherent.cpp
+    tests/test_ray_inspector.cpp
     # The library and the config path it uses are GUI-free (json and filesystem only),
     # so the test binary compiles them directly rather than linking scrt_viz, which
     # would drag in Polyscope, GLFW and a window.

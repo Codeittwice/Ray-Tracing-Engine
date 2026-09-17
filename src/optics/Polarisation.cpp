@@ -1,6 +1,8 @@
 #include "scrt/optics/Polarisation.hpp"
 
+#include <algorithm>
 #include <cmath>
+#include "scrt/math/Constants.hpp"
 
 namespace scrt::optics {
 
@@ -96,6 +98,35 @@ void set_polarisation(core::Ray& r, PolarisationKind kind, double angle_rad) noe
         case PolarisationKind::Unpolarised:
             break;
     }
+}
+
+PolarisationDescription describe_polarisation(cplx es, cplx ep, math::vec3 s_axis,
+                                              math::vec3 d) noexcept {
+    PolarisationDescription out;
+    const double s0 = std::norm(es) + std::norm(ep);
+    const double s3 = s0 > 0.0 ? 2.0 * (std::conj(es) * ep).imag() / s0 : 0.0;
+    out.ellipticity_deg = 0.5 * std::asin(std::clamp(s3, -1.0, 1.0)) * 180.0 / math::PI;
+
+    // Major axis: rotate the complex field by -arg(F.F)/2 so its real part is the major axis.
+    const math::vec3 p  = glm::cross(d, s_axis);
+    const cplx       fx = es * s_axis.x + ep * p.x, fy = es * s_axis.y + ep * p.y,
+                     fz = es * s_axis.z + ep * p.z;
+    const cplx       rot = std::exp(cplx(0.0, -0.5 * std::arg(fx * fx + fy * fy + fz * fz)));
+    const math::vec3 major{(rot * fx).real(), (rot * fy).real(), (rot * fz).real()};
+    math::vec3 up{0.0, 0.0, 1.0};
+    if (std::fabs(glm::dot(up, d)) > 0.999) up = {1.0, 0.0, 0.0};
+    up = glm::normalize(up - glm::dot(up, d) * d);
+    const math::vec3 across = glm::cross(d, up);
+    double a = std::atan2(glm::dot(major, across), glm::dot(major, up)) * 180.0 / math::PI;
+    if (a > 90.0) a -= 180.0;      // an axis, not a direction
+    if (a <= -90.0) a += 180.0;
+    out.axis_deg = a;
+
+    using K = PolarisationDescription::Kind;
+    out.kind = std::fabs(out.ellipticity_deg) < 1.0   ? K::Linear
+             : std::fabs(out.ellipticity_deg) > 44.0  ? K::Circular
+                                                       : K::Elliptical;
+    return out;
 }
 
 } // namespace scrt::optics

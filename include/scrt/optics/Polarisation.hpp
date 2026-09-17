@@ -58,4 +58,19 @@ enum class PolarisationKind { Unpolarised, Linear, CircularLeft, CircularRight }
 /// with s, p = direction x s is (Es, Ep) = (1, +i)/sqrt(2); RIGHT is (1, -i)/sqrt(2).
 void set_polarisation(core::Ray& r, PolarisationKind kind, double angle_rad) noexcept;
 
+/// A polarisation state described the way a person reads it (the ray inspector, and its tests).
+struct PolarisationDescription {
+    enum class Kind { Linear, Circular, Elliptical } kind = Kind::Linear;
+    /// Major axis, degrees from vertical measured in the plane across the beam (the reference a
+    /// laser's linear_deg uses), folded into (-90, 90].
+    double axis_deg = 0.0;
+    /// Ellipticity angle chi = asin(s3)/2 in degrees: 0 linear, +45 left circular, -45 right.
+    double ellipticity_deg = 0.0;
+};
+
+/// Describes a Jones state (Es along s_axis, Ep along direction x s_axis). Linear when |chi| < 1 deg,
+/// circular when |chi| > 44 deg, elliptical otherwise.
+PolarisationDescription describe_polarisation(cplx Es, cplx Ep, math::vec3 s_axis,
+                                              math::vec3 direction) noexcept;
+
 } // namespace scrt::optics

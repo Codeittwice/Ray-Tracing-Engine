@@ -134,6 +134,21 @@ void sync_grid(const scene::Scene* scene);
 /// Makes the alignment-axis line match align_axis(); defaults the axis to the first laser. Per frame.
 void sync_axis(const scene::Scene* scene);
 
+/// Display colour of a wavelength [nm]: an sRGB approximation of the visible spectrum, neutral grey
+/// outside 380-780 nm.
+glm::vec3 light_colour(double wavelength_nm);
+
+/// What the light was doing along recorded ray edge `index` (the order the "ray_paths" network was
+/// built in), or nullptr when there is no such edge.
+const tracer::RayEdgeInfo* ray_edge(long index);
+
+/// Recorded ray edge for a Polyscope pick index on "ray_paths" (a node maps to an edge touching it).
+long ray_edge_for_pick(std::size_t local_index);
+
+/// The ray edge the user clicked, for the Selection panel; -1 when none.
+void set_picked_ray_edge(long index);
+long picked_ray_edge();
+
 /// Polyscope structure name of the placement grid.
 const char* grid_structure_name();
 

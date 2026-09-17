@@ -88,6 +88,8 @@ void Tracer::trace_one(core::Ray r, FluxAccumulator& acc, math::Rng& rng,
             path->nodes.push_back(h.position);
             path->edges.push_back({parent_node, node});
             path->edge_power_w.push_back(r.power);
+            path->edge_info.push_back({r.wavelength_nm, r.power, r.opl_m, r.polarised, r.direction,
+                                       r.s_axis, r.Es, r.Ep});
             parent_node = node;
         }
 
@@ -162,6 +164,8 @@ void Tracer::trace_one(core::Ray r, scene::Receiver& receiver, math::Rng& rng,
             path->nodes.push_back(h.position);
             path->edges.push_back({parent_node, node});
             path->edge_power_w.push_back(r.power);
+            path->edge_info.push_back({r.wavelength_nm, r.power, r.opl_m, r.polarised, r.direction,
+                                       r.s_axis, r.Es, r.Ep});
             parent_node = node;
         }
 
@@ -308,7 +312,10 @@ TraceResult Tracer::run(const TraceConfig& cfg, TraceControl* ctl) const {
             r.id        = static_cast<std::uint32_t>(ray_start + i);
             r.source    = source_index(*scene_, e.source);
 
-            if (path_ptr) path_buf.nodes.push_back(r.origin);   // node 0: where the ray began
+            if (path_ptr) {
+                path_buf.nodes.push_back(r.origin);   // node 0: where the ray began
+                path_buf.monochromatic = (e.source->type_name() == "laser");
+            }
             trace_one(r, slot_receiver, slot_rng, path_ptr, 0u, cfg.max_bounces,
                       cfg.power_cutoff_w, hits);
 
@@ -455,7 +462,10 @@ TraceResult Tracer::run(const TraceConfig& cfg, FluxAccumulator& acc, TraceContr
             r.id        = static_cast<std::uint32_t>(ray_start + i);
             r.source    = source_index(*scene_, e.source);
 
-            if (path_ptr) path_buf.nodes.push_back(r.origin);   // node 0: where the ray began
+            if (path_ptr) {
+                path_buf.nodes.push_back(r.origin);   // node 0: where the ray began
+                path_buf.monochromatic = (e.source->type_name() == "laser");
+            }
             trace_one(r, slot_acc, slot_rng, path_ptr, 0u, cfg.max_bounces,
                       cfg.power_cutoff_w, hits);
 

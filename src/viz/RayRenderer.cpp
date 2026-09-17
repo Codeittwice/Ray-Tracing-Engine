@@ -417,11 +417,61 @@ void RayRenderer::register_sources() {
     }
 }
 
+namespace {
+
+/// Every recorded edge, in the order register_paths laid them into the "ray_paths" network, so a pick
+/// index maps straight back to what the light was doing there. GUI thread only.
+std::vector<tracer::RayEdgeInfo> g_ray_edges;
+/// Node index -> first edge touching it, so a click that lands on a node still names a ray.
+std::vector<long>                g_node_first_edge;
+long                             g_picked_edge = -1;
+
+const char* const kRayPolarisationName = "ray_polarisation";
+
+// Defined with the grid, further down this file (same unnamed namespace).
+polyscope::CurveNetwork* register_decoration_lines(const std::string& name,
+                                                   const std::vector<glm::vec3>& nodes,
+                                                   const std::vector<std::array<std::size_t, 2>>& edges);
+
+} // namespace
+
+glm::vec3 light_colour(double wavelength_nm) { return wavelength_rgb(wavelength_nm); }
+
+const tracer::RayEdgeInfo* ray_edge(long index) {
+    return (index >= 0 && static_cast<std::size_t>(index) < g_ray_edges.size())
+               ? &g_ray_edges[static_cast<std::size_t>(index)]
+               : nullptr;
+}
+
+long ray_edge_for_pick(std::size_t local_index) {
+    // Polyscope numbers a curve network's pickable elements nodes first, then edges.
+    const std::size_t n_nodes = g_node_first_edge.size();
+    if (local_index < n_nodes) return g_node_first_edge[local_index];
+    const std::size_t e = local_index - n_nodes;
+    return e < g_ray_edges.size() ? static_cast<long>(e) : -1;
+}
+
+void set_picked_ray_edge(long index) { g_picked_edge = index; }
+long picked_ray_edge() { return ray_edge(g_picked_edge) ? g_picked_edge : -1; }
+
 void RayRenderer::register_paths(const tracer::TraceResult& result) {
+    g_ray_edges.clear();
+    g_node_first_edge.clear();
+    g_picked_edge = -1;
+    if (polyscope::hasCurveNetwork(kRayPolarisationName))
+        polyscope::removeCurveNetwork(kRayPolarisationName, false);
     if (result.sampled_paths.empty()) return;
 
-    std::vector<std::array<double, 3>>  nodes;
+    std::vector<std::array<double, 3>>      nodes;
     std::vector<std::array<std::size_t, 2>> edges;
+    std::vector<glm::vec3>                  colours;
+
+    // Polarisation ticks: the axes of each polarised edge's polarisation ellipse, drawn across the
+    // ray at its midpoint. Linear light is one line, circular an equal cross, elliptical a long and a
+    // short line. Unpolarised light gets none - it has no axis to draw.
+    std::vector<glm::vec3>                  tick_nodes;
+    std::vector<std::array<std::size_t, 2>> tick_edges;
+    const double tick_half = std::max(0.0015, 6.0 * static_cast<double>(ray_radius_m()));
 
     // A path is a tree now, so its edges are given rather than implied by adjacency. The old
     // "join consecutive points" loop drew a split as a line that ran out along the reflected
@@ -430,17 +480,66 @@ void RayRenderer::register_paths(const tracer::TraceResult& result) {
     for (const auto& path : result.sampled_paths) {
         if (path.edges.empty()) continue;
         const std::size_t base = nodes.size();
-        for (const auto& p : path.nodes)
-            nodes.push_back({p.x, p.y, p.z});
-        for (const auto& e : path.edges)
+        for (const auto& pt : path.nodes) {
+            nodes.push_back({pt.x, pt.y, pt.z});
+            g_node_first_edge.push_back(-1);
+        }
+        for (std::size_t k = 0; k < path.edges.size(); ++k) {
+            const auto& e = path.edges[k];
+            const long  flat = static_cast<long>(edges.size());
             edges.push_back({base + e[0], base + e[1]});
+            for (std::size_t endpoint : {base + e[0], base + e[1]})
+                if (g_node_first_edge[endpoint] < 0) g_node_first_edge[endpoint] = flat;
+
+            tracer::RayEdgeInfo info;
+            if (k < path.edge_info.size()) info = path.edge_info[k];
+            else if (k < path.edge_power_w.size()) info.power_w = path.edge_power_w[k];
+            g_ray_edges.push_back(info);
+
+            // Laser light in its wavelength's colour; sunlight (broadband) in the old ray yellow.
+            colours.push_back(path.monochromatic ? wavelength_rgb(info.wavelength_nm)
+                                                 : glm::vec3{1.0f, 0.85f, 0.2f});
+
+            if (info.polarised) {
+                const math::vec3 a = path.nodes[e[0]], b = path.nodes[e[1]];
+                const math::vec3 mid = 0.5 * (a + b);
+                const math::vec3 s   = info.s_axis;
+                const math::vec3 p   = glm::cross(info.direction, s);
+                // Field as a complex world vector, then the ellipse axes: rotate the phase by
+                // theta0 = -arg(F.F)/2 so the real part is the major axis and the imaginary the minor.
+                const std::complex<double> fx = info.Es * s.x + info.Ep * p.x;
+                const std::complex<double> fy = info.Es * s.y + info.Ep * p.y;
+                const std::complex<double> fz = info.Es * s.z + info.Ep * p.z;
+                const std::complex<double> ff = fx * fx + fy * fy + fz * fz;
+                const std::complex<double> rot = std::exp(std::complex<double>(0.0, -0.5 * std::arg(ff)));
+                const math::vec3 major{(rot * fx).real(), (rot * fy).real(), (rot * fz).real()};
+                const math::vec3 minor{(rot * fx).imag(), (rot * fy).imag(), (rot * fz).imag()};
+                for (const math::vec3& axis : {major, minor}) {
+                    if (glm::length(axis) < 0.05) continue;   // a pure linear state has no minor axis
+                    const math::vec3 u = axis * tick_half;
+                    tick_edges.push_back({tick_nodes.size(), tick_nodes.size() + 1});
+                    tick_nodes.emplace_back(glm::vec3(mid - u));
+                    tick_nodes.emplace_back(glm::vec3(mid + u));
+                }
+            }
+        }
     }
 
     if (nodes.empty()) return;
 
     auto* net = polyscope::registerCurveNetwork("ray_paths", nodes, edges);
     net->setColor({1.0f, 0.85f, 0.2f});
+    auto* q = net->addEdgeColorQuantity("light", colours);
+    q->setEnabled(true);
     apply_ray_appearance();
+
+    if (!tick_nodes.empty()) {
+        auto* ticks = register_decoration_lines(kRayPolarisationName, tick_nodes, tick_edges);
+        if (ticks) {
+            ticks->setColor({0.95f, 0.95f, 1.0f});
+            ticks->setRadius(std::max(0.00015f, 0.6f * ray_radius_m()), false);
+        }
+    }
 }
 
 void apply_ray_appearance() {

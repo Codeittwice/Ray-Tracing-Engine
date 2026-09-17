@@ -174,8 +174,17 @@ void sync_from_pick(PanelContext& ctx) {
             break;
         }
     }
+    // A click on a drawn ray names that ray for the inspector (Stage 7b). Handled before the
+    // same-pick check, because clicking along one ray is the SAME structure every time.
+    if (picked == "ray_paths") {
+        set_picked_ray_edge(ray_edge_for_pick(pick.second));
+        if (g_last_pick != picked) clear_selection(ctx);
+        g_last_pick = picked;
+        return;
+    }
     if (picked == g_last_pick) return;
     g_last_pick = picked;
+    set_picked_ray_edge(-1);
 
     if (picked.empty()) {
         clear_selection(ctx);
