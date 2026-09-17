@@ -476,6 +476,13 @@ LoadedScene build_scene(const SceneDocument& doc, const std::filesystem::path& b
                     "(a laser with \"sampling\": \"grid\"). A '" + std::string(src->type_name()) +
                     "' source samples at random, and random rays summed with their phases give "
                     "speckle, not an interference pattern.");
+        // Found by the Wave 5 audit: the same speckle comes from a MATERIAL that scatters at random.
+        for (const auto& m : scene->materials())
+            if (m && !m->deterministic())
+                throw std::runtime_error(
+                    "SceneLoader: a coherent receiver cannot be used with a material that scatters at random "
+                    "(a diffuser, or a real_mirror with slope_error_mrad above 0): random directions summed "
+                    "with their phases give speckle, not an interference pattern.");
     }
 
     // ---- Trace config and finish -------------------------------------------

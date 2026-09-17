@@ -293,8 +293,9 @@ void draw_viewport_drop_target(PanelContext& ctx, const ImVec2& vmin, const ImVe
             if (pl->DataSize == static_cast<int>(sizeof(int)))
                 std::memcpy(&idx, pl->Data, sizeof(int));
             const auto& comps = builtin_components();
-            if (ctx.trace_running) {
-                say("The scene is locked while a trace runs.", true);
+            if (ctx.trace_running || ctx.sweep_busy) {
+                say(ctx.trace_running ? "The scene is locked while a trace runs."
+                                      : "The scene is locked while a sweep is open.", true);
             } else if (idx < 0 || idx >= static_cast<int>(comps.size())) {
                 say("Dropped something the library does not recognise.", true);
             } else {

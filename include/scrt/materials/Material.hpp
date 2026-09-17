@@ -21,6 +21,10 @@ struct Interaction {
 class Material {
 public:
     virtual ~Material() = default;
+
+    /// False when interact() draws random directions (slope error, diffuse scatter): summed with their
+    /// phases on a coherent receiver such rays are speckle, so a coherent scene with one is refused.
+    virtual bool deterministic() const { return true; }
     Material(const Material&) = delete;
     Material& operator=(const Material&) = delete;
     Material(Material&&) = delete;

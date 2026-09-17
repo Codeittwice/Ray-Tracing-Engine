@@ -171,4 +171,7 @@ TEST_CASE("polarisation materials: built from the document, refused when impossi
     CHECK_THROWS(build("polariser", {{"transmission", 1.5}}));
     CHECK_THROWS(build("waveplate", {{"transmission", -0.1}}));
     CHECK_THROWS(build("polarising_beam_splitter", {{"extinction_ratio", 0.0}}));
+    // Below 2 the leak exceeds the right arm and the cube reverses p and s (Wave 5 audit).
+    CHECK_THROWS(build("polarising_beam_splitter", {{"extinction_ratio", 1.5}}));
+    CHECK_NOTHROW(build("polarising_beam_splitter", {{"extinction_ratio", 2.0}}));
 }

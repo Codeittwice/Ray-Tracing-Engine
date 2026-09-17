@@ -60,6 +60,11 @@ std::vector<double> coherence_lengths_or_throw(const scene::Scene& sc) {
                                      "' source samples at random, which would give speckle.");
         out.push_back(src->coherence_length_m());
     }
+    for (const auto& m : sc.materials())
+        if (m && !m->deterministic())
+            throw std::runtime_error("Tracer: a coherent receiver cannot sum rays from a material that scatters "
+                                     "at random (a diffuser, or a real mirror with slope error): its "
+                                     "rays would add as speckle.");
     return out;
 }
 

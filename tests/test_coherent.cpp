@@ -8,6 +8,7 @@
 #include "scrt/io/SceneLoader.hpp"
 #include "scrt/math/Constants.hpp"
 #include "scrt/scene/Receiver.hpp"
+#include "scrt/scene/SceneEditor.hpp"
 #include "scrt/tracer/Tracer.hpp"
 
 #include <algorithm>
@@ -186,4 +187,37 @@ TEST_CASE("coherent receiver: a randomly sampled source is refused at load, with
     }
     // The same scene with an incoherent receiver loads fine.
     CHECK_NOTHROW(io::build_scene(io::parse_document(michelson(0.5e-3, 0.1, 0.0, "random", false), true), "."));
+}
+
+TEST_CASE("coherent receiver: a material that scatters at random is refused too (Wave 5 audit)") {
+    auto with_mirror = [](json mirror) {
+        json j = michelson(0.5e-3, 0.1, 0.0, "grid");
+        j["scene"]["materials"][1] = std::move(mirror);
+        return j;
+    };
+    CHECK_NOTHROW(io::build_scene(io::parse_document(
+        with_mirror({{"id", "mirror"}, {"type", "real_mirror"}, {"reflectance", 0.95}}), true), "."));
+    try {
+        io::build_scene(io::parse_document(with_mirror({{"id", "mirror"}, {"type", "real_mirror"},
+                                                        {"reflectance", 0.95}, {"slope_error_mrad", 0.5}}),
+                                           true), ".");
+        FAIL("a coherent receiver with a slope-error mirror loaded");
+    } catch (const std::exception& e) {
+        CHECK(std::string(e.what()).find("scatters at random") != std::string::npos);
+    }
+    CHECK_THROWS(io::build_scene(io::parse_document(
+        with_mirror({{"id", "mirror"}, {"type", "diffuser"}, {"albedo", 0.9}}), true), "."));
+}
+
+TEST_CASE("coherent receiver: the editor refuses a random laser, so a saved scene always reopens") {
+    auto ls = io::build_scene(io::parse_document(michelson(0.5e-3, 0.1, 0.0, "grid"), true), ".");
+    scene::SceneEditor ed(std::move(ls), ".");
+    const auto n = ed.doc().sources.size();
+    io::LaserSourceDoc random_laser;   // a library laser: random sampling
+    CHECK_THROWS(ed.add_source(random_laser));
+    CHECK(ed.doc().sources.size() == n);
+    io::LaserSourceDoc grid_laser;
+    grid_laser.sampling = "grid";
+    CHECK_NOTHROW(ed.add_source(grid_laser));
+    CHECK(ed.doc().sources.size() == n + 1);
 }

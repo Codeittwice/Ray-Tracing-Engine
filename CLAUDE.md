@@ -51,7 +51,7 @@ tools. The sun becomes one source among several; there are no modes.
 - [x] Wave 2 — General sources; the sun stops being special
 - [x] Wave 3 — Components and materials as libraries
 - [x] Wave 4 — Representative geometry, grid and snapping
-- [ ] Wave 5 — Polarisation and interference
+- [x] Wave 5 — Polarisation and interference
 - [ ] Wave 6 — Diffraction, as a second engine
 - [ ] Wave 7 — The optimiser
 - [ ] Wave 8 — The assistant, with tools
@@ -276,14 +276,15 @@ Not verified: drag and drop at a second display scale. Polyscope passes `ImGui::
 straight to its own picking, so the window-to-buffer scaling is inside Polyscope rather than in
 this code, but that reasoning has not been checked against a scaled monitor.
 
-### Wave 5 progress (in flight) - polarisation and interference
+### Wave 5 (complete, shipped as v1.14.0; corpus 100/100 identical) - polarisation and interference
 
 Design: `docs/plans/v2_waves_4_to_8_design.md` section 5. Touches the tracer, Fresnel and the
 schema, so the corpus runs after every such stage and a cold audit closes the wave.
 
 Decided with the user before code:
 - **Polarisation is OPT-IN on a laser** (`"polarisation"`, default unpolarised), so every corpus
-  scene stays identical; library lasers set it realistically. Unpolarised rays run the old code.
+  scene stays identical. (The plan said library lasers would set it realistically; they do NOT - every
+  library laser is still unpolarised and randomly sampled. Found by the Wave 5 audit.) Unpolarised rays run the old code.
 - **A coherent receiver REFUSES a randomly sampled source** (hard error saying why): random rays
   summed with phase are speckle that looks like fringes.
 - **Ray size:** measure the corpus before and after; if it is more than about 10% slower, stop and
@@ -515,6 +516,26 @@ against the offset with the current frame marked. The Flux Analysis window shows
   multi-face receiver is refused.
 
 **QA 17** (sweep a Michelson mirror by lambda/2) **and QA 18** (turn a polariser: Malus as a curve).
+
+**End-of-wave cold audit (Opus, read-only, `ca0a8d5..b630d8a`).** No bit-identity, thread-race or
+schema defect: unpolarised/random paths unchanged, Jones frames and energy consistent, coherent merge
+correct across threads, every new mutation path guarded against the worker. Six real defects, all fixed:
+1. **A polarising beam splitter with extinction ratio below 2 reversed its arms** for polarised light
+   (the leak 1/ER exceeded the right arm) while still splitting unpolarised light 50:50. ER >= 2 is now
+   required (`require_pbs_er`), and the Design slider starts at 2.
+2. **A scene could be saved that would not reopen:** the loader refuses a coherent receiver with a
+   random source, but `SceneEditor::add_source` did not - any library laser dropped on QA 10 did it. The
+   editor now refuses the same thing, before any mutation.
+3. A library drop into the 3D view ignored the sweep lock; it now respects `sweep_busy`.
+4. **The coherent refusal only looked at sources.** A diffuser or a slope-error `real_mirror` scatters at
+   random and gives the same speckle. `Material::deterministic()` (false for those two) is checked by
+   the loader and by the tracer's coherent path. Corpus re-run after this tracer change: 0 differences.
+5. `cancel_and_join_trace` did not clear `pending_error_`, so a thrown run's message could surface after
+   a later good trace.
+6. Live's ray count now respects the Rays slider on every run and resets on scene load; a polariser at
+   an edge-on pose builds a perpendicular axis instead of trusting an unpolarised ray's default s axis.
+Tests: `test_coherent.cpp` (slope-error mirror and diffuser refused, slope 0 loads; the editor refuses
+a random laser and accepts a grid one), `test_polarising_optics.cpp` (ER 1.5 refused, 2 accepted).
 
 **Timing baseline (Stage 0), release, 98-scene corpus, summed `wall_time_s`:** 20.59 s (end of
 Wave 4), 21.10 s and 20.86 s (two captures at Stage 0) - a spread of about +-1.2%, dominated by one

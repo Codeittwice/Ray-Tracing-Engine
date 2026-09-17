@@ -193,6 +193,8 @@ void Viewer::load_from_file(const std::filesystem::path& path) {
 void Viewer::load_scene_internal(io::LoadedScene ls) {
     // A sweep refers to a part of the scene being replaced; drop it without restoring anything.
     sweep_         = SweepRunner{};
+    live_rays_     = 20000;   // the adapted count belonged to the old scene's cost
+    live_last_s_   = -1.0;
     sweep_open_    = false;
     sweep_playing_ = false;
     // Nothing below may run while a worker is reading the scene we are about to replace.
@@ -423,6 +425,7 @@ void Viewer::cancel_and_join_trace() {
     trace_done_.store(false, std::memory_order_relaxed);
     pending_result_ = {};
     pending_acc_.reset();
+    pending_error_.clear();   // a thrown run's message must not surface on the next good trace
 }
 
 // ---- Stage 8: live preview and sweeps ------------------------------------------
@@ -441,6 +444,8 @@ void Viewer::run_live_preview() {
         scene_->build_acceleration_structure();
         need_rebuild_ = false;
     }
+    // The Rays slider is the ceiling on EVERY run, not only when the count grows.
+    live_rays_ = std::clamp<std::size_t>(live_rays_, 2000, std::max<std::size_t>(cfg_.n_primary_rays, 2000));
     tracer::TraceConfig cfg = cfg_;
     cfg.n_primary_rays      = live_rays_;
     auto* recv              = scene_->receiver();

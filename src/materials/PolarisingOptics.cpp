@@ -22,6 +22,15 @@ void require_er(double er, const char* who) {
                                     std::to_string(er) + ")");
 }
 
+/// A polarising beam splitter leaks 1/ER of each polarisation into the wrong arm, so below ER = 2 the
+/// "wrong" arm carries MORE of that polarisation than the right one and the part reverses its arms
+/// for polarised light while still splitting unpolarised light 50:50 (found by the Wave 5 audit).
+void require_pbs_er(double er) {
+    if (!std::isfinite(er) || er < 2.0)
+        throw std::invalid_argument("PolarisingBeamSplitter: extinction_ratio must be finite and >= 2 (got " +
+                                    std::to_string(er) + "); below 2 the cube reflects more p than s");
+}
+
 void require_unit(double v, const char* who, const char* what) {
     if (!std::isfinite(v) || v < 0.0 || v > 1.0)
         throw std::invalid_argument(std::string(who) + ": " + what + " must be in [0, 1] (got " +
@@ -36,7 +45,12 @@ math::vec3 axis_across_ray(const core::Hit& h, double deg, const core::Ray& r) {
     math::vec3   w = h.surface ? h.surface->transform().direction_to_world(local) : local;
     w -= glm::dot(w, r.direction) * r.direction;
     const double len = glm::length(w);
-    return len > 1e-9 ? w / len : r.s_axis;
+    if (len > 1e-9) return w / len;
+    // Degenerate pose. An unpolarised ray's s_axis is only a default and can lie ALONG the ray (a beam
+    // along Y), so build a perpendicular from scratch instead.
+    math::vec3 ref{0.0, 0.0, 1.0};
+    if (std::fabs(glm::dot(ref, r.direction)) > 0.999) ref = {1.0, 0.0, 0.0};
+    return glm::normalize(ref - glm::dot(ref, r.direction) * r.direction);
 }
 
 /// Complex component of a polarised ray's field along a real unit vector.
@@ -136,7 +150,7 @@ Interaction Waveplate::interact(const core::Ray& r, const core::Hit& h, math::Rn
 PolarisingBeamSplitter::PolarisingBeamSplitter(double er) : extinction_(1.0) { set_extinction_ratio(er); }
 
 void PolarisingBeamSplitter::set_extinction_ratio(double er) {
-    require_er(er, "PolarisingBeamSplitter");
+    require_pbs_er(er);
     extinction_ = er;
 }
 

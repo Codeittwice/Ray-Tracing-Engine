@@ -192,7 +192,7 @@ void draw_materials_panel(PanelContext& ctx) {
                 } else if (auto* pbs = dynamic_cast<materials::PolarisingBeamSplitter*>(mat_ptr.get())) {
                     float er = static_cast<float>(pbs->extinction_ratio());
                     ImGui::Indent();
-                    if (ImGui::SliderFloat("Extinction ratio##pbs", &er, 1.0f, 1.0e5f, "%.0f",
+                    if (ImGui::SliderFloat("Extinction ratio##pbs", &er, 2.0f, 1.0e5f, "%.0f",
                                            ImGuiSliderFlags_Logarithmic))
                         set_param(mat_id, "extinction_ratio", er);
                     tip("Transmits p and reflects s. 1/ER of each leaks into the wrong arm; a good "

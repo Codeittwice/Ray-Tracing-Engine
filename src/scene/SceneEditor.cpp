@@ -375,6 +375,13 @@ bool SceneEditor::remove_material(const std::string& id) {
 
 std::size_t SceneEditor::add_source(io::SourceDoc sd) {
     auto src = io::build_source(sd, *scene_);  // throws before any mutation
+    // The loader refuses a coherent receiver with a randomly sampled source, so accepting one here let
+    // the user SAVE a file that would not reopen (found by the Wave 5 audit: any library laser on QA 10).
+    if (doc_.receiver.coherent && !src->deterministic_sampling())
+        throw std::invalid_argument(
+            "This scene's receiver is coherent, which needs every source to use grid sampling; a '" +
+            std::string(src->type_name()) + "' that samples at random would give speckle. Set the laser's "
+            "\"sampling\" to \"grid\" in the scene file.");
     const std::size_t idx = scene_->add_source(std::move(src));
     doc_.sources.push_back(std::move(sd));
     dirty_ = true;

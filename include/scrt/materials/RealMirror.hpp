@@ -15,6 +15,8 @@ public:
 
     double reflectance()    const { return rho_; }
     double slope_error()    const { return slope_error_; }
+    /// Random only when it has a slope error.
+    bool   deterministic() const override { return slope_error_ == 0.0; }
 
     void set_reflectance(double r)       noexcept { rho_ = r; }
     void set_slope_error_mrad(double s)  noexcept { slope_error_ = s; }

@@ -26,6 +26,8 @@ public:
     explicit Diffuser(double albedo);
 
     Interaction interact(const core::Ray& r, const core::Hit& h, math::Rng& rng) const override;
+    /// A Lambertian scatter is random by definition.
+    bool deterministic() const override { return false; }
 
     double albedo() const { return albedo_; }
     /// Throws std::invalid_argument unless the new albedo is in [0, 1].
