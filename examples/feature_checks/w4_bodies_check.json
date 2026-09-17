@@ -139,6 +139,6 @@
     "trace":  {
                   "n_primary_rays":  20000,
                   "max_bounces":  8,
-                  "rng_seed":  3
+                  "rng_seed":  3, "power_cutoff_w": 1e-15
               }
 }

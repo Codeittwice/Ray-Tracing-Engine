@@ -31,5 +31,5 @@
              "power_w": 0.005, "wavelength_nm": 532.0, "beam_diameter_m": 0.003, "divergence_mrad": 0.5}
         ]
     },
-    "trace": {"n_primary_rays": 200000, "max_bounces": 8, "rng_seed": 103}
+    "trace": {"n_primary_rays": 200000, "max_bounces": 8, "rng_seed": 103, "power_cutoff_w": 1e-15}
 }

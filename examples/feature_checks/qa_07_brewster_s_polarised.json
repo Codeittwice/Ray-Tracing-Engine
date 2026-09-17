@@ -1,6 +1,6 @@
 {
     "scene": {
-        "name": "QA 07: the same window and screen with the laser polarised ACROSS the plane of incidence (s, linear_deg 0) - now the window reflects: measured 1.277 mW = 25.5% of the beam, against 14.8% (front face, cos^2 of twice Brewster) + 10.7% (back face) = 25.55% predicted",
+        "name": "QA 07: the same window and screen with the laser polarised ACROSS the plane of incidence (s, linear_deg 0) - now the window reflects: measured 1.2887 mW = 25.77% of the beam, against the full series of internal reflections 0.148 + 0.852^2 x 0.148 / (1 - 0.148^2) = 25.77% predicted",
         "materials": [
             {"id": "Crown glass n = 1.5", "type": "dielectric", "n": 1.5}
         ],
@@ -25,5 +25,5 @@
              "polarisation": {"linear_deg": 0.0}}
         ]
     },
-    "trace": {"n_primary_rays": 100000, "max_bounces": 8, "rng_seed": 106}
+    "trace": {"n_primary_rays": 100000, "max_bounces": 8, "rng_seed": 106, "power_cutoff_w": 1e-15}
 }

@@ -1,6 +1,6 @@
 {
     "scene": {
-        "name": "QA 06: laser polarised IN the plane of incidence (p, linear_deg 90) hits a glass window at Brewster's angle (56.3 deg) - the screen catches the reflection, and it reads 0 W (measured). Compare QA 07, where the same screen catches 1.28 mW",
+        "name": "QA 06: laser polarised IN the plane of incidence (p, linear_deg 90) hits a glass window at Brewster's angle (56.3 deg) - the screen catches the reflection, and it reads 0 W (measured). Compare QA 07, where the same screen catches 1.29 mW",
         "materials": [
             {"id": "Crown glass n = 1.5", "type": "dielectric", "n": 1.5}
         ],
@@ -25,5 +25,5 @@
              "polarisation": {"linear_deg": 90.0}}
         ]
     },
-    "trace": {"n_primary_rays": 100000, "max_bounces": 8, "rng_seed": 106}
+    "trace": {"n_primary_rays": 100000, "max_bounces": 8, "rng_seed": 106, "power_cutoff_w": 1e-15}
 }

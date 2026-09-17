@@ -40,5 +40,5 @@
              "polarisation": {"linear_deg": 0.0}, "sampling": "grid"}
         ]
     },
-    "trace": {"n_primary_rays": 300000, "max_bounces": 8, "rng_seed": 110}
+    "trace": {"n_primary_rays": 300000, "max_bounces": 8, "rng_seed": 110, "power_cutoff_w": 1e-15}
 }
