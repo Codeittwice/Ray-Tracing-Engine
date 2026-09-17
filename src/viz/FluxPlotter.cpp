@@ -140,9 +140,30 @@ void FluxPlotter::draw_heatmap_tab(const tracer::FluxAccumulator& acc, double dn
     const double sigma = static_cast<double>(flux_smoothing_sigma());
     const std::vector<double> shown = gaussian_smooth(flux, nx, ny, sigma);
 
-    std::vector<float> data(shown.size());
-    for (std::size_t i = 0; i < shown.size(); ++i)
-        data[i] = static_cast<float>(shown[i]);
+    // Block-average down to at most kMaxCellsPerSide cells a side for DRAWING. ImPlot draws each
+    // heatmap cell as its own quad into one ImGui draw list with 16-bit indices, so more than
+    // 65536 vertices (about 128x128 cells) is an assertion in debug and garbage in release. A
+    // 200x200 laser receiver hit exactly that. Averaging keeps the picture honest - the mean flux of
+    // each block - and every stated number above and below still comes from the raw bins.
+    constexpr int kMaxCellsPerSide = 120;
+    const int     k   = std::max(1, (std::max(nx, ny) + kMaxCellsPerSide - 1) / kMaxCellsPerSide);
+    const int     dnx = (nx + k - 1) / k;
+    const int     dny = (ny + k - 1) / k;
+    std::vector<float> data(static_cast<std::size_t>(dnx) * static_cast<std::size_t>(dny), 0.0f);
+    for (int bj = 0; bj < dny; ++bj) {
+        for (int bi = 0; bi < dnx; ++bi) {
+            double sum = 0.0;
+            int    cnt = 0;
+            for (int j = bj * k; j < std::min(ny, (bj + 1) * k); ++j)
+                for (int i = bi * k; i < std::min(nx, (bi + 1) * k); ++i) {
+                    sum += shown[static_cast<std::size_t>(j) * static_cast<std::size_t>(nx) +
+                                 static_cast<std::size_t>(i)];
+                    ++cnt;
+                }
+            data[static_cast<std::size_t>(bj) * static_cast<std::size_t>(dnx) +
+                 static_cast<std::size_t>(bi)] = cnt > 0 ? static_cast<float>(sum / cnt) : 0.0f;
+        }
+    }
 
     // Taken over the FLOATS that are actually handed to ImPlot, not the doubles they came from.
     // ImPlot maps a value to a colour with (siz-1)*t + 0.5 and does not clamp the result, so a
@@ -199,7 +220,7 @@ void FluxPlotter::draw_heatmap_tab(const tracer::FluxAccumulator& acc, double dn
         ImPlot::SetupAxis(ImAxis_X1, "x (m)");
         ImPlot::SetupAxis(ImAxis_Y1, "y (m)");
         double hw = acc.half_width(), hh = acc.half_height();
-        ImPlot::PlotHeatmap("flux", data.data(), ny, nx,
+        ImPlot::PlotHeatmap("flux", data.data(), dny, dnx,
                             0.0, vmax, nullptr,
                             ImPlotPoint(-hw, -hh),
                             ImPlotPoint( hw,  hh));
