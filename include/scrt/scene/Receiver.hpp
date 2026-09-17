@@ -61,6 +61,13 @@ public:
     /// Create an empty receiver with the same face names, dimensions, grids, and modes.
     Receiver clone_empty() const;
 
+    /// Puts every face in coherent (field-summing) or incoherent mode; see FluxAccumulator::set_coherent.
+    void set_coherent(bool on);
+    /// True when the faces sum fields rather than power.
+    bool coherent() const;
+    /// Coherence length per source index [m], passed to every face (0 = fully coherent).
+    void set_coherence_lengths(const std::vector<double>& lengths);
+
     /// Return all receiver faces.
     std::span<const std::unique_ptr<ReceiverFace>> faces() const { return faces_; }
     /// Return all receiver faces.

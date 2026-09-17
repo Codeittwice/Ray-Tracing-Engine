@@ -219,3 +219,38 @@ TEST_CASE("Laser wavelength reaches Dielectric::n_at through the tracer: Snell a
     CHECK(x_ir - x_blue == doctest::Approx(expected(n_ir) - expected(n_blue)).epsilon(1e-6));
     CHECK(x_ir - x_blue > 1e-3);   // about a centimetre over a metre of drop: not noise
 }
+
+TEST_CASE("Laser grid sampling: equal-area, deterministic, inside the beam, and draws nothing") {
+    scrt::sources::Laser l;
+    l.set_origin({0.0, 0.0, 0.0});
+    l.set_direction({0.0, 0.0, 1.0});
+    l.set_beam_diameter_m(0.01);
+    l.set_divergence_mrad(0.0);
+    l.set_sampling(scrt::sources::Laser::Sampling::Grid);
+    CHECK(l.deterministic_sampling());
+
+    const std::size_t n = 20000;
+    scrt::math::Rng   rng(42), untouched(42);
+    std::size_t       inner = 0;
+    for (std::size_t k = 0; k < n; ++k) {
+        const auto r  = l.sample_ray_indexed(rng, k, n);
+        const double rr = std::hypot(r.origin.x, r.origin.y);
+        CHECK(rr <= 0.005 + 1e-12);
+        if (rr < 0.0025) ++inner;
+        const auto again = l.sample_ray_indexed(rng, k, n);
+        CHECK(again.origin == r.origin);
+    }
+    // Equal area per point: a quarter of the disk's area lies inside half its radius.
+    CHECK(static_cast<double>(inner) / n == doctest::Approx(0.25).epsilon(0.002));
+    // No Rng draws: the generator is exactly where an unused one with the same seed is.
+    CHECK(rng.uniform01() == untouched.uniform01());
+
+    // Random mode is sample_ray, draw for draw.
+    l.set_sampling(scrt::sources::Laser::Sampling::Random);
+    CHECK_FALSE(l.deterministic_sampling());
+    scrt::math::Rng a(9), b(9);
+    const auto ra = l.sample_ray_indexed(a, 3, 10);
+    const auto rb = l.sample_ray(b);
+    CHECK(ra.origin == rb.origin);
+    CHECK(ra.direction == rb.direction);
+}

@@ -4,16 +4,66 @@
 #include "scrt/materials/Material.hpp"
 #include "scrt/scene/Receiver.hpp"
 #include "scrt/scene/Scene.hpp"
+#include "scrt/sources/LightSource.hpp"
+#include "scrt/surfaces/Surface.hpp"
 #include <algorithm>
 #include <chrono>
 #include <execution>
 #include <limits>
 #include <mutex>
 #include <numeric>
+#include <stdexcept>
+#include <string>
 #include <thread>
 #include <vector>
 
 namespace scrt::tracer {
+
+namespace {
+
+/// Folds one interaction into a ray's branch tag: which surface, and whether it reflected (0) or went
+/// through (1). Two rays with equal tags travelled the same physical arm, which is what lets a
+/// coherent receiver normalise each arm by its own ray count before adding arms as fields.
+std::uint32_t mix_branch(std::uint32_t branch, std::uint64_t surface_id, unsigned how) {
+    std::uint64_t x = (static_cast<std::uint64_t>(branch) << 32) ^ (surface_id * 2u + how);
+    x ^= x >> 33;
+    x *= 0xff51afd7ed558ccdULL;
+    x ^= x >> 33;
+    x *= 0xc4ceb9fe1a85ec53ULL;
+    x ^= x >> 33;
+    return static_cast<std::uint32_t>(x);
+}
+
+/// Tags both outgoing branches of an interaction. Touches only Ray::branch: no power, direction or
+/// draw, so every existing result is unchanged.
+void stamp_branches(materials::Interaction& ia, const surfaces::Surface& s) {
+    ia.reflected.branch   = mix_branch(ia.reflected.branch, s.id(), 0u);
+    ia.transmitted.branch = mix_branch(ia.transmitted.branch, s.id(), 1u);
+}
+
+/// Index of src in the scene's source list (0 if absent, which cannot happen for a planned source).
+std::uint32_t source_index(const scene::Scene& sc, const sources::LightSource* src) {
+    const auto list = sc.sources();
+    for (std::size_t i = 0; i < list.size(); ++i)
+        if (list[i].get() == src) return static_cast<std::uint32_t>(i);
+    return 0u;
+}
+
+/// Coherence length per source index for a coherent receiver; THROWS if any source samples at
+/// random. build_scene already refuses such a file - this guards a source added in the editor since.
+std::vector<double> coherence_lengths_or_throw(const scene::Scene& sc) {
+    std::vector<double> out;
+    for (const auto& src : sc.sources()) {
+        if (!src->deterministic_sampling())
+            throw std::runtime_error("Tracer: a coherent receiver needs every source to use grid "
+                                     "sampling; a '" + std::string(src->type_name()) +
+                                     "' source samples at random, which would give speckle.");
+        out.push_back(src->coherence_length_m());
+    }
+    return out;
+}
+
+} // namespace
 
 void Tracer::trace_one(core::Ray r, FluxAccumulator& acc, math::Rng& rng,
                        RayPath* path, std::uint32_t parent_node, int max_bounces,
@@ -58,6 +108,7 @@ void Tracer::trace_one(core::Ray r, FluxAccumulator& acc, math::Rng& rng,
         }
 
         auto inter = h.surface->material()->interact(r, h, rng);
+        stamp_branches(inter, *h.surface);
         switch (inter.kind) {
             case materials::InteractionKind::Absorbed:
                 return;
@@ -135,6 +186,7 @@ void Tracer::trace_one(core::Ray r, scene::Receiver& receiver, math::Rng& rng,
         }
 
         auto inter = h.surface->material()->interact(r, h, rng);
+        stamp_branches(inter, *h.surface);
         switch (inter.kind) {
             case materials::InteractionKind::Absorbed:
                 return;
@@ -162,6 +214,8 @@ TraceResult Tracer::run(const TraceConfig& cfg, TraceControl* ctl) const {
         return {};
 
     scene_receiver->clear_accumulators();
+    if (scene_receiver->coherent())
+        scene_receiver->set_coherence_lengths(coherence_lengths_or_throw(*scene_));
 
     auto t0 = std::chrono::steady_clock::now();
 
@@ -249,9 +303,10 @@ TraceResult Tracer::run(const TraceConfig& cfg, TraceControl* ctl) const {
             }
 
             const EmissionPlan::Entry& e = plan.entry_for(ray_start + i);
-            core::Ray r = e.source->sample_ray(slot_rng);
+            core::Ray r = e.source->sample_ray_indexed(slot_rng, (ray_start + i) - e.first, e.count);
             r.power    *= e.per_ray_w;
             r.id        = static_cast<std::uint32_t>(ray_start + i);
+            r.source    = source_index(*scene_, e.source);
 
             if (path_ptr) path_buf.nodes.push_back(r.origin);   // node 0: where the ray began
             trace_one(r, slot_receiver, slot_rng, path_ptr, 0u, cfg.max_bounces,
@@ -296,6 +351,14 @@ TraceResult Tracer::run(const TraceConfig& cfg, TraceControl* ctl) const {
 TraceResult Tracer::run(const TraceConfig& cfg, FluxAccumulator& acc, TraceControl* ctl) const {
     auto t0 = std::chrono::steady_clock::now();
 
+    // The caller's accumulator sums the way the scene's receiver is declared to, so the GUI preview
+    // and scrt_compare show interference exactly when the file asks for it.
+    const bool coherent = scene_->receiver() && scene_->receiver()->coherent();
+    std::vector<double> coherence;
+    if (coherent) coherence = coherence_lengths_or_throw(*scene_);
+    if (acc.coherent() != coherent) acc.set_coherent(coherent);
+    if (coherent) acc.set_coherence_lengths(coherence);
+
     // Each source states its own strength in watts (for a sun: DNI * aperture area *
     // foreshortening); the plan divides the primary rays among them by power and prices
     // each ray at total_power_w() / count. A scene with nothing emitting traces to nothing,
@@ -327,7 +390,11 @@ TraceResult Tracer::run(const TraceConfig& cfg, FluxAccumulator& acc, TraceContr
     std::vector<FluxAccumulator> slot_accs;
     slot_accs.reserve(nthreads);
     for (int i = 0; i < nthreads; ++i)
+    {
         slot_accs.emplace_back(acc.half_width(), acc.half_height(), acc.nx(), acc.ny());
+        slot_accs.back().set_coherent(coherent);
+        slot_accs.back().set_coherence_lengths(coherence);
+    }
 
     TraceResult result;
     result.primary_rays_traced = cfg.n_primary_rays;
@@ -383,9 +450,10 @@ TraceResult Tracer::run(const TraceConfig& cfg, FluxAccumulator& acc, TraceContr
             }
 
             const EmissionPlan::Entry& e = plan.entry_for(ray_start + i);
-            core::Ray r = e.source->sample_ray(slot_rng);
+            core::Ray r = e.source->sample_ray_indexed(slot_rng, (ray_start + i) - e.first, e.count);
             r.power    *= e.per_ray_w;
             r.id        = static_cast<std::uint32_t>(ray_start + i);
+            r.source    = source_index(*scene_, e.source);
 
             if (path_ptr) path_buf.nodes.push_back(r.origin);   // node 0: where the ray began
             trace_one(r, slot_acc, slot_rng, path_ptr, 0u, cfg.max_bounces,

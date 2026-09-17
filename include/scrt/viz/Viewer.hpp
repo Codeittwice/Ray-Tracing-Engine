@@ -137,6 +137,8 @@ private:
     std::atomic<bool>                        trace_running_{false}; ///< True from launch to pickup.
     std::atomic<bool>                        trace_done_{false};    ///< Worker finished; result waiting.
     tracer::TraceResult                      pending_result_;       ///< Worker-written, GUI-read after join.
+    std::string                              pending_error_;        ///< Worker-written reason a trace threw.
+    std::string                              trace_error_;          ///< Last trace failure, shown by the toolbar.
     std::unique_ptr<tracer::FluxAccumulator> pending_acc_;          ///< Worker-written, GUI-read after join.
 
     /// Applies every queued element mutation; called once at the end of draw_gui().

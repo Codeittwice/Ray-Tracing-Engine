@@ -57,10 +57,47 @@ void Laser::set_polarisation(optics::PolarisationKind kind, double linear_deg) {
     polarisation_deg_ = linear_deg;
 }
 
+void Laser::set_coherence_length_m(double m) {
+    require_finite_nonneg(m, "set_coherence_length_m");
+    coherence_length_m_ = m;
+}
+
+namespace {
+
+/// Radical inverse of k in the given base (van der Corput): a low-discrepancy sequence in [0, 1).
+double radical_inverse(std::size_t k, std::size_t base) {
+    double inv = 1.0 / static_cast<double>(base), f = inv, r = 0.0;
+    while (k > 0) {
+        r += f * static_cast<double>(k % base);
+        k /= base;
+        f *= inv;
+    }
+    return r;
+}
+
+} // namespace
+
+core::Ray Laser::sample_ray_indexed(math::Rng& rng, std::size_t k, std::size_t n) const {
+    if (sampling_ != Sampling::Grid || n == 0) return sample_ray(rng);
+    // Vogel's sunflower spiral: point k at radius sqrt((k+1/2)/n) and angle k times the golden angle
+    // covers the disk with equal area per point and no preferred direction - so every receiver bin
+    // under the beam sees rays from neighbouring, smoothly varying positions. No Rng draw at all.
+    const double r = std::sqrt((static_cast<double>(k) + 0.5) / static_cast<double>(n));
+    const double a = static_cast<double>(k) * 2.399963229728653;   // pi (3 - sqrt 5)
+    return make_ray({r * std::cos(a), r * std::sin(a)}, radical_inverse(k + 1, 2),
+                    radical_inverse(k + 1, 3));
+}
+
 core::Ray Laser::sample_ray(math::Rng& rng) const {
     // Always the same three draws (disk pair, theta, phi) whatever the parameters, so a
     // collimated pencil beam consumes the slot's RNG sequence exactly like a divergent one.
-    const math::vec2 disk = rng.unit_disk_concentric();
+    const math::vec2 disk  = rng.unit_disk_concentric();
+    const double     cap_u = rng.uniform01();
+    const double     phi_u = rng.uniform01();
+    return make_ray(disk, cap_u, phi_u);
+}
+
+core::Ray Laser::make_ray(math::vec2 disk, double cap_u, double phi_u) const {
     math::vec3 u, v;
     scene::orthonormal_frame(direction_, u, v);
     const math::vec3 origin =
@@ -71,9 +108,9 @@ core::Ray Laser::sample_ray(math::Rng& rng) const {
     // exact to theta^2/6 at 4.65 mrad but not at a divergence a user may type in degrees.
     // Same two draws in the same order (cap, then azimuth) as before.
     const double half  = 0.5 * divergence_mrad_ * 1e-3;
-    const double cos_t = 1.0 - rng.uniform01() * (1.0 - std::cos(half));
+    const double cos_t = 1.0 - cap_u * (1.0 - std::cos(half));
     const double sin_t = std::sqrt(std::max(0.0, 1.0 - cos_t * cos_t));
-    const double phi   = math::TWO_PI * rng.uniform01();
+    const double phi   = math::TWO_PI * phi_u;
 
     core::Ray ray;
     ray.origin        = origin;

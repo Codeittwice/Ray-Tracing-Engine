@@ -260,6 +260,9 @@ return std::visit(
                               : d.polarisation == "circular_right" ? PK::CircularRight
                                                                    : PK::Unpolarised;
                 laser->set_polarisation(kind, d.polarisation_linear_deg);
+                laser->set_sampling(d.sampling == "grid" ? sources::Laser::Sampling::Grid
+                                                         : sources::Laser::Sampling::Random);
+                laser->set_coherence_length_m(d.coherence_length_m);
                 return laser;
             },
         },
@@ -441,6 +444,7 @@ LoadedScene build_scene(const SceneDocument& doc, const std::filesystem::path& b
             const auto local = face->surface()->transform();
             face->set_transform(base.compose(local));
         }
+        recv->set_coherent(doc.receiver.coherent);
         scene->set_receiver(std::move(recv));
     } else {
         const auto& pd = std::get<PlaneReceiverDoc>(doc.receiver.kind);
@@ -453,12 +457,26 @@ LoadedScene build_scene(const SceneDocument& doc, const std::filesystem::path& b
 
         if (!is_default_transform(doc.receiver.transform))
             recv->set_transform(doc.receiver.transform.to_transform());
+        recv->set_coherent(doc.receiver.coherent);
         scene->set_receiver(std::move(recv));
     }
 
     // ---- Sources (after surfaces and receiver: a sun's auto_fit unions world_bounds) ------
     for (const auto& sd : doc.sources)
         scene->add_source(build_source(sd, *scene));
+
+    // A coherent receiver sums ray FIELDS. Randomly placed rays summed with their phases give
+    // speckle that looks like fringes and is noise - the worst failure this application could have -
+    // so the scene is refused, with the reason, rather than traced (decided with the user).
+    if (doc.receiver.coherent) {
+        for (const auto& src : scene->sources())
+            if (!src->deterministic_sampling())
+                throw std::runtime_error(
+                    "SceneLoader: a coherent receiver needs every source to use grid sampling "
+                    "(a laser with \"sampling\": \"grid\"). A '" + std::string(src->type_name()) +
+                    "' source samples at random, and random rays summed with their phases give "
+                    "speckle, not an interference pattern.");
+    }
 
     // ---- Trace config and finish -------------------------------------------
     tracer::TraceConfig cfg = doc.trace;

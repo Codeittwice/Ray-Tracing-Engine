@@ -233,6 +233,9 @@ struct LaserSourceDoc {
     /// "circular_right". In JSON: a string, or {"linear_deg": angle} for linear.
     std::string polarisation{"unpolarised"};
     double      polarisation_linear_deg{0.0};  ///< Degrees from vertical; used when linear.
+    /// "random" (default, omitted on write) or "grid" (deterministic; required by a coherent receiver).
+    std::string sampling{"random"};
+    double      coherence_length_m{0.0};  ///< 0 = fully coherent (default, omitted on write).
 };
 
 /// One entry of `scene.sources`. Visited with io::overloaded and NO catch-all in SceneWriter.cpp
@@ -290,6 +293,9 @@ struct ReceiverDoc {
                                                             ///< first alternative), matching the loader's
                                                             ///< `rj.value("type", "plane")` default.
     TransformDoc transform;  ///< SceneLoader.cpp:414-415 / 439-440 (absent key -> identity transform).
+    /// Wave 5: sum ray FIELDS (interference) instead of power. Requires every source to use grid
+    /// sampling; build_scene refuses otherwise. Omitted on write when false.
+    bool coherent{false};
 };
 
 /// Root document: the full contents of one scene JSON file plus its trace configuration.

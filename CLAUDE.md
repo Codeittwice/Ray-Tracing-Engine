@@ -379,7 +379,46 @@ and adds it back. Pure bookkeeping - no power, direction or draw changes: corpus
 VERIFIED through the real `Tracer` with a recording probe material (`tests/test_optical_path.cpp`):
 air 0.800 m; a 10 mm n = 1.5 window 0.805 m direct and 0.835 m for the first internal ghost (two
 extra passes of n t); a 4 mm pane 0.806 m.
-- [ ] Stage 6 - coherent receiver, coherence length, grid sampling, Michelson example
+- [x] Stage 6 - coherent receiver, coherence length, grid sampling, Michelson example
+
+**Stage 6.** A receiver with `"coherent": true` sums ray FIELDS. Pieces, each gated:
+- **Sources:** `LightSource::sample_ray_indexed(rng, k, n)` (default = `sample_ray`, same draws) and
+  `deterministic_sampling()`. A laser takes `"sampling": "grid"` - a Vogel sunflower spiral over the
+  beam disk, radical-inverse over the cone, no Rng draw - and `"coherence_length_m"` (0 = fully
+  coherent). The random path draws in the same order as before: corpus 100/100 identical.
+- **Ray tags** (`Ray` 152 -> 160 bytes): `source` (index in `Scene::sources()`) and `branch`, a hash
+  of (surface id, reflected/transmitted) folded in at every interaction by the tracer.
+- **`FluxAccumulator` coherent mode.** THE DESIGN NOTE'S "sum a exp(i phase), take |sum|^2" IS WRONG:
+  N in-phase rays of one beam give N^2 p, and normalising by primary rays fails the moment a mirror
+  tilt sends a primary's two arms into different bins. What is implemented: each ray adds
+  sqrt(P) exp(i 2 pi opl / lambda) - along its Jones vector, or a scalar channel if unpolarised - to
+  an ARM of its bin keyed (source, branch); an arm is normalised by its own count of distinct primary
+  rays (a change of `Ray::id` within a slot, since a primary's tree is traced before the next); arms
+  of one source add as fields with the cross term weighted by exp(-|mean path difference| / Lc);
+  different sources never interfere. The phase is carried to the bin CENTRE along the ray (local
+  plane wave). `incoherent_power_w()` keeps the plain sum alongside.
+- **Refusal (decided with the user):** `build_scene` refuses a coherent receiver with any source that
+  is not grid-sampled, with the reason; the tracer refuses the same (a laser added from the library
+  after load), and the GUI worker CATCHES it and the toolbar shows the message in red - a throw out
+  of a `jthread` would have been `std::terminate`.
+- The accumulator-overload `run` (GUI preview, `scrt_compare`) makes the caller's accumulator
+  coherent exactly when the scene's receiver is.
+
+VERIFIED (`tests/test_coherent.cpp`, JSON -> loader -> Tracer): a tilted Michelson (alpha 0.5 mrad,
+632.8 nm) gives dark fringes at 2.3181, 2.9508, 3.5835, 4.2166, 4.8492, 5.4818 mm - period
+0.632755 mm against lambda / sin 2 alpha = 0.6328 mm - visibility 0.996, total 0.489 of 0.5 W; arms
+0.2 m apart keep visibility 0.9988 fully coherent and fall to 0.0066 at Lc = 1 cm; one beam reads its
+incoherent power to 1e-9; a random laser is refused at load. In the app, QA 10 shows straight
+fringes across the beam, 2.47 mW on target, peak 442 W/m2 against 4 x 99.5 predicted.
+
+**Two things measured before they were believed, both in the TEST, not the engine:** the first
+visibility read 0.85 and the first period 0.606-0.621 mm. A bin-by-bin dump of arms showed the
+physics right (dark bins 0.4% of incoherent, bright exactly 4x one arm, equal arm powers). The test's
+"lit region" filter had dropped the dark fringes themselves, and then a partial-overlap dip at the
+beam edge was fitted as a fringe. A bin-centre phase correction added on a guess in between changed
+nothing measurable at 12 bins per fringe; it is kept as the physically right sampling and its comment
+says so. Also: doctest `Approx(x).epsilon(e)` adds an absolute scale of 1, so on sub-millimetre
+numbers it passes anything - use an explicit relative check.
 - [ ] Stage 7 - user feedback, deliberately after Stage 6 because the coherent receiver changes what the
   flux map shows and Stages 5-6 give rays the path and phase an inspector should show:
   - [ ] Flux map on a FIXED scale taken from the source, chosen by the user over "lock on a trace" and

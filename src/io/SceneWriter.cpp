@@ -263,6 +263,8 @@ json source_to_json(const SourceDoc& sd) {
                     j["polarisation"] = json{{"linear_deg", l.polarisation_linear_deg}};
                 else if (l.polarisation != "unpolarised")
                     j["polarisation"] = l.polarisation;
+                if (l.sampling != "random") j["sampling"] = l.sampling;
+                if (l.coherence_length_m > 0.0) j["coherence_length_m"] = l.coherence_length_m;
                 return j;
             },
         },
@@ -318,6 +320,7 @@ json receiver_to_json(const ReceiverDoc& recv) {
         },
         recv.kind);
     j["transform"] = transform_to_json(recv.transform);
+    if (recv.coherent) j["coherent"] = true;   // omitted when false: every existing file re-saves unchanged
     return j;
 }
 

@@ -57,7 +57,27 @@ public:
     optics::PolarisationKind polarisation() const { return polarisation_; }
     double polarisation_linear_deg() const { return polarisation_deg_; }
 
+    /// How rays are placed over the beam. Random (the default) is Monte Carlo sampling, which every
+    /// existing scene uses. Grid is a deterministic sunflower (Vogel) spiral over the beam disk and
+    /// a low-discrepancy pattern over the divergence cone, one point per allotted ray: required by a
+    /// coherent receiver, because random rays summed with their phases give speckle, not fringes.
+    enum class Sampling { Random, Grid };
+    void     set_sampling(Sampling s) { sampling_ = s; }
+    Sampling sampling() const { return sampling_; }
+
+    /// Coherence length [m]; 0 (the default) means fully coherent. Throws unless finite and >= 0.
+    void   set_coherence_length_m(double m);
+    double coherence_length_m() const override { return coherence_length_m_; }
+
+    bool      deterministic_sampling() const override { return sampling_ == Sampling::Grid; }
+    core::Ray sample_ray_indexed(math::Rng& rng, std::size_t k, std::size_t n) const override;
+
 private:
+    /// Builds the ray from a disk point in [-1,1]^2 (unit disk) and cap/azimuth fractions in [0,1).
+    core::Ray make_ray(math::vec2 disk, double cap_u, double phi_u) const;
+
+    Sampling   sampling_           {Sampling::Random};
+    double     coherence_length_m_ {0.0};
     math::vec3 origin_          {0.0, 0.0, 1.0};
     math::vec3 direction_       {0.0, 0.0, -1.0};
     double     power_w_         {1.0};

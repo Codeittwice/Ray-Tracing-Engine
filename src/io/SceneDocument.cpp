@@ -361,7 +361,8 @@ SunSourceDoc parse_sun(const json& sj, bool strict, bool in_sources) {
 LaserSourceDoc parse_laser(const json& lj, bool strict) {
     if (strict)
         reject_unknown_keys(lj, {"type", "origin", "direction", "power_w", "wavelength_nm",
-                                 "beam_diameter_m", "divergence_mrad", "polarisation"}, "laser");
+                                 "beam_diameter_m", "divergence_mrad", "polarisation", "sampling",
+                                 "coherence_length_m"}, "laser");
     LaserSourceDoc l;
     l.origin          = read_vec3(lj, "origin");
     l.direction       = read_vec3(lj, "direction");
@@ -398,6 +399,14 @@ LaserSourceDoc parse_laser(const json& lj, bool strict) {
                     "laser 'polarisation.linear_deg' must be finite");
         }
     }
+    if (lj.contains("sampling")) {
+        l.sampling = lj["sampling"].get<std::string>();
+        require(l.sampling == "random" || l.sampling == "grid",
+                "laser 'sampling' must be \"random\" or \"grid\"; got \"" + l.sampling + "\"");
+    }
+    l.coherence_length_m = lj.value("coherence_length_m", 0.0);
+    require(std::isfinite(l.coherence_length_m) && l.coherence_length_m >= 0.0,
+            "laser 'coherence_length_m' must be >= 0 (0 = fully coherent)");
     return l;
 }
 
@@ -517,7 +526,8 @@ SceneDocument parse_document(const json& root, bool strict) {
         const json& rj = s["receiver"];
         if (strict)
             reject_unknown_keys(
-                rj, {"surface", "grid", "transform", "depth", "top_mode", "type", "battery"},
+                rj, {"surface", "grid", "transform", "depth", "top_mode", "type", "battery",
+                     "coherent"},
                 "receiver");
 
         ReceiverDoc rd;
@@ -588,6 +598,7 @@ SceneDocument parse_document(const json& root, bool strict) {
         }
         if (rj.contains("transform"))
             rd.transform = parse_transform_doc(rj["transform"], strict);
+        rd.coherent = rj.value("coherent", false);
         doc.receiver = std::move(rd);
     }
 

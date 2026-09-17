@@ -248,6 +248,12 @@ void draw_trace_toolbar(PanelContext& ctx, const ImVec2& vmin, const ImVec2& vma
         }
     }
 
+    if (ctx.trace_error && !ctx.trace_error->empty() && !ctx.trace_running) {
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 40.0f);
+        ImGui::TextColored({1.0f, 0.35f, 0.3f, 1.0f}, "%s", ctx.trace_error->c_str());
+        ImGui::PopTextWrapPos();
+    }
+
     // The one number a design check is for, beside the buttons that produce it.
     if (ctx.acc && ctx.traced && !ctx.trace_running) {
         ImGui::SameLine();

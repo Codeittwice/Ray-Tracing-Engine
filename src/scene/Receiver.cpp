@@ -49,6 +49,10 @@ Receiver Receiver::clone_empty() const {
             face->accumulator().ny(),
             face->mode());
         new_face.set_transform(face->surface()->transform());
+        // A per-thread clone must sum the way the original does, or a coherent run would merge
+        // power-only slots into a field-summing receiver.
+        new_face.accumulator().set_coherent(face->accumulator().coherent());
+        new_face.accumulator().set_coherence_lengths(face->accumulator().coherence_lengths());
     }
     return clone;
 }
@@ -59,6 +63,18 @@ int Receiver::face_index_for_surface(const surfaces::Surface* surface) const {
             return static_cast<int>(i);
     }
     return -1;
+}
+
+void Receiver::set_coherent(bool on) {
+    for (auto& face : faces_) face->accumulator().set_coherent(on);
+}
+
+bool Receiver::coherent() const {
+    return !faces_.empty() && faces_.front()->accumulator().coherent();
+}
+
+void Receiver::set_coherence_lengths(const std::vector<double>& lengths) {
+    for (auto& face : faces_) face->accumulator().set_coherence_lengths(lengths);
 }
 
 void Receiver::clear_accumulators() noexcept {

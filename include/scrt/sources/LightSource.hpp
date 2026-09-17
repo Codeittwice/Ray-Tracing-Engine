@@ -1,6 +1,7 @@
 #pragma once
 #include "scrt/core/Ray.hpp"
 #include "scrt/math/Rng.hpp"
+#include <cstddef>
 #include <string_view>
 
 namespace scrt::sources {
@@ -38,6 +39,22 @@ public:
     /// THREAD-SAFETY: const and callable concurrently from every worker slot; the passed-in
     /// Rng is the only mutable state an implementation may touch.
     virtual core::Ray sample_ray(math::Rng& rng) const = 0;
+
+    /// Primary ray `k` of the `n` the tracer allots to this source.
+    ///
+    /// A source that places rays on a deterministic pattern overrides this; every other source
+    /// ignores k and n and draws exactly as sample_ray does, consuming the Rng identically, so no
+    /// existing result moves. Same THREAD-SAFETY contract as sample_ray.
+    virtual core::Ray sample_ray_indexed(math::Rng& rng, std::size_t /*k*/, std::size_t /*n*/) const {
+        return sample_ray(rng);
+    }
+
+    /// True when sample_ray_indexed lays rays on a regular pattern rather than at random. A
+    /// coherent receiver requires it: randomly placed rays summed with their phases are speckle.
+    virtual bool deterministic_sampling() const { return false; }
+
+    /// Coherence length [m] used to weight interference between paths; 0 means fully coherent.
+    virtual double coherence_length_m() const { return 0.0; }
 
     /// Short lower-case type tag for reporting and the document: "sun", "laser".
     virtual std::string_view type_name() const = 0;

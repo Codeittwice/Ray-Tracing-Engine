@@ -34,6 +34,13 @@ struct Ray {
     /// True only for a ray whose source declared a polarisation. False means: ignore the Jones
     /// vector and use the averaged (unpolarised) optics, bit for bit as before Wave 5.
     bool                 polarised{false};
+    /// Index of the emitting source in Scene::sources(). Sources are mutually incoherent, so a
+    /// coherent receiver never interferes rays from different sources.
+    std::uint32_t        source  {0};
+    /// Hash of the interaction history (which surface, reflected or transmitted). Rays with equal
+    /// branch travelled the same physical arm; a coherent receiver normalises each arm by its own
+    /// ray count before adding the arms' fields (see FluxAccumulator).
+    std::uint32_t        branch  {0};
 };
 
 } // namespace scrt::core

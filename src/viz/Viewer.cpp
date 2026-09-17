@@ -344,9 +344,17 @@ void Viewer::start_trace(std::size_t n_rays) {
     scene::Scene* sc = scene_;
     trace_thread_ = std::jthread(
         [this, sc, cfg, multi, acc = std::move(work_acc)]() mutable {
-            tracer::Tracer tr(*sc);
-            tracer::TraceResult r = multi ? tr.run(cfg, &trace_ctl_)
-                                          : tr.run(cfg, *acc, &trace_ctl_);
+            tracer::Tracer      tr(*sc);
+            tracer::TraceResult r;
+            // A throw escaping a jthread is std::terminate. The tracer refuses a coherent receiver
+            // with a randomly sampled source (a laser added from the library after load, say), and
+            // that refusal must reach the user as a message, not take the app down.
+            try {
+                r = multi ? tr.run(cfg, &trace_ctl_) : tr.run(cfg, *acc, &trace_ctl_);
+            } catch (const std::exception& e) {
+                r.cancelled    = true;
+                pending_error_ = e.what();
+            }
             // The multi-face run deposits into the scene receiver's own faces; copy the
             // summary grid out so the GUI never reads live scene state.
             if (multi && !r.cancelled && sc->receiver())
@@ -367,6 +375,9 @@ void Viewer::poll_trace() {
     if (trace_thread_.joinable()) trace_thread_.join();
     trace_done_.store(false, std::memory_order_relaxed);
     trace_running_.store(false, std::memory_order_release);
+
+    trace_error_ = std::move(pending_error_);
+    pending_error_.clear();
 
     // A cancelled run holds a partial sum, so it is dropped and the previous result stays on
     // screen; only a completed run is published.
@@ -485,6 +496,7 @@ PanelContext Viewer::make_panel_context() {
     // Trace progress is read from the control's atomics, so the panel can poll it every
     // frame while the worker is mid-run.
     ctx.trace_running        = trace_running_.load(std::memory_order_acquire);
+    ctx.trace_error          = &trace_error_;
     ctx.trace_rays_done      = ctx.trace_running ? trace_ctl_.rays_done()  : 0;
     ctx.trace_rays_total     = ctx.trace_running ? trace_ctl_.rays_total() : 0;
     ctx.cancel_trace         = [this]() { trace_ctl_.request_cancel(); };

@@ -79,6 +79,8 @@ struct PanelContext {
     /// True while a trace runs on the worker thread. The Viewer already greys out every
     /// scene-mutating panel for the duration; a panel only needs this to phrase itself.
     bool        trace_running    = false;
+    /// Why the last trace failed, empty when it did not; shown in red by the trace toolbar.
+    const std::string* trace_error = nullptr;
     /// Primary rays completed by the running trace (0 when idle).
     std::size_t trace_rays_done  = 0;
     /// Primary rays the running trace was asked for (0 when idle).
