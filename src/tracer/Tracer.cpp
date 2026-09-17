@@ -24,6 +24,12 @@ void Tracer::trace_one(core::Ray r, FluxAccumulator& acc, math::Rng& rng,
                                std::numeric_limits<double>::max(), h))
             return;
 
+        // Optical path length: the distance just travelled times the index of the medium it was
+        // travelled in. Pure bookkeeping for the coherent receiver (Wave 5); it touches no power,
+        // direction or RNG draw, so every result is unchanged. h.t is a true distance because
+        // directions are unit vectors and every material starts its outgoing ray AT the hit.
+        r.opl_m += r.medium_n * h.t;
+
         if (path) {
             // One node per hit, one edge from wherever this ray came from. Recording the edge's
             // power here (before the material acts) is what lets the renderer show how much
@@ -91,6 +97,12 @@ void Tracer::trace_one(core::Ray r, scene::Receiver& receiver, math::Rng& rng,
                                std::numeric_limits<double>::max(), h))
             return;
 
+        // Optical path length: the distance just travelled times the index of the medium it was
+        // travelled in. Pure bookkeeping for the coherent receiver (Wave 5); it touches no power,
+        // direction or RNG draw, so every result is unchanged. h.t is a true distance because
+        // directions are unit vectors and every material starts its outgoing ray AT the hit.
+        r.opl_m += r.medium_n * h.t;
+
         if (path) {
             // One node per hit, one edge from wherever this ray came from. Recording the edge's
             // power here (before the material acts) is what lets the renderer show how much
@@ -114,6 +126,9 @@ void Tracer::trace_one(core::Ray r, scene::Receiver& receiver, math::Rng& rng,
                 return;
 
             r.origin = h.position + r.direction * scrt::math::EPSILON_T;
+            // The nudge past a pass-through receiver face is 1 um - more than a wavelength - so it is
+            // optical path too; leaving it out would be a phase error of over one full cycle.
+            r.opl_m += r.medium_n * scrt::math::EPSILON_T;
             if (r.power < power_cutoff)
                 return;
             continue;

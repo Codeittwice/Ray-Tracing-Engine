@@ -55,6 +55,7 @@ Interaction ThinDielectricPane::interact(const core::Ray& r, const core::Hit& h,
         ia.transmitted.bounces   = r.bounces + 1;
         ia.transmitted.power     = r.power * optics::transfer_state(
             r, n, ia.transmitted, std::sqrt(ts_slab), std::sqrt(tp_slab));
+        ia.transmitted.opl_m += n_ * thickness_m_ / std::max(cos_t, 1.0e-9) + r.medium_n * 1.0e-7;
         return ia;
     }
     (void)rng;
@@ -86,6 +87,10 @@ Interaction ThinDielectricPane::interact(const core::Ray& r, const core::Hit& h,
     ia.transmitted.direction = r.direction;
     ia.transmitted.power = r.power * std::clamp(slab_t, 0.0, 1.0);
     ia.transmitted.bounces = r.bounces + 1;
+    // Wave 5 optical path: the pane has no geometric thickness, so its glass is added here - n t
+    // along the refracted path - plus the 1e-7 m the origin is nudged. Air the real slab would have
+    // displaced is not subtracted: this model has never offset the transmitted ray either.
+    ia.transmitted.opl_m += n_ * thickness_m_ / std::max(cos_t, 1.0e-9) + r.medium_n * 1.0e-7;
     return ia;
 }
 

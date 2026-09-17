@@ -367,7 +367,18 @@ vertices in ImDrawList") and would have drawn garbage in release. Any grid above
 have done it; no scene had one. `FluxPlotter` now block-averages to at most 120 cells a side for
 DRAWING only - the stated power and hottest spot still come from the raw bins, and the 3D receiver
 (Polyscope's own GL) is unaffected.
-- [ ] Stage 5 - optical path length with the index inside a dielectric
+- [x] Stage 5 - optical path length with the index inside a dielectric
+
+**Stage 5.** Both `trace_one` overloads add `medium_n * h.t` to `Ray::opl_m` on every hit, before the
+receiver or the material sees the ray. `Dielectric` (both paths) sets the transmitted ray's
+`medium_n` to the index it enters (glass, or 1 on the way out); `ThinDielectricPane`, which has no
+geometric thickness, adds n t / cos(theta_t) to the transmitted ray. Two nudges matter at optical
+scale: a pass-through receiver face moves the ray on by `EPSILON_T` = **1 um, more than a
+wavelength**, so that step is added to the path too; the pane nudges its transmitted origin by 1e-7 m
+and adds it back. Pure bookkeeping - no power, direction or draw changes: corpus 100/100 identical.
+VERIFIED through the real `Tracer` with a recording probe material (`tests/test_optical_path.cpp`):
+air 0.800 m; a 10 mm n = 1.5 window 0.805 m direct and 0.835 m for the first internal ghost (two
+extra passes of n t); a 4 mm pane 0.806 m.
 - [ ] Stage 6 - coherent receiver, coherence length, grid sampling, Michelson example
 - [ ] Stage 7 - user feedback, deliberately after Stage 6 because the coherent receiver changes what the
   flux map shows and Stages 5-6 give rays the path and phase an inspector should show:

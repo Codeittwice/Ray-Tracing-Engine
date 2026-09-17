@@ -90,6 +90,7 @@ Interaction interact_polarised(const core::Ray& r, const core::Hit& h, double n_
     ia.transmitted.origin    = h.position;
     ia.transmitted.direction = t_dir;
     ia.transmitted.bounces   = r.bounces + 1;
+    ia.transmitted.medium_n  = n2;   // entering the glass, or leaving it into air
     // The state takes (ts, tp); the POWER is 1 - R, which is what (n2 ct / n1 ci)|t|^2 sums to and
     // avoids carrying that obliquity factor through a second path that could drift from it.
     optics::transfer_state(r, h.normal, ia.transmitted, a.ts, a.tp);
@@ -147,6 +148,9 @@ Interaction Dielectric::interact(const core::Ray& r, const core::Hit& h,
     ia.transmitted.direction = t_dir;
     ia.transmitted.power    = p * fr.T;
     ia.transmitted.bounces  = r.bounces + 1;
+    // Wave 5: the medium the transmitted ray now travels in, for its optical path length. Power,
+    // direction and every draw above are untouched, so no existing result moves (corpus-checked).
+    ia.transmitted.medium_n = n2;
 
     return ia;
 }
