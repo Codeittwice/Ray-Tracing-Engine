@@ -6,6 +6,7 @@
 #include "scrt/scene/Scene.hpp"
 #include "scrt/tracer/FluxAccumulator.hpp"
 #include "scrt/tracer/Tracer.hpp"
+#include "scrt/viz/Sweep.hpp"
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -87,6 +88,23 @@ struct PanelContext {
     std::size_t trace_rays_total = 0;
     /// Asks the running trace to stop; null when the Viewer has no worker.
     std::function<void()> cancel_trace;
+
+    // Stage 8: live preview and sweeps
+    /// Re-trace a small preview automatically after every edit (GUI thread, between frames).
+    bool*       live_update = nullptr;
+    /// Rays the live preview currently uses (it adapts to hold ~30 fps) and its last trace time.
+    std::size_t live_rays   = 0;
+    double      live_ms     = 0.0;
+    /// The sweep engine (read-only for panels); null when the Viewer has none.
+    const SweepRunner* sweep = nullptr;
+    /// True while a sweep runs or its player is open: the scene is being driven, so edits are locked.
+    bool        sweep_busy  = false;
+    int*        sweep_frame = nullptr;
+    bool*       sweep_playing = nullptr;
+    std::function<void(const SweepSpec&)> start_sweep;
+    /// Cancels a running sweep or closes the player, restoring the part's pose either way.
+    std::function<void()> stop_sweep;
+    std::function<void(int)> show_sweep_frame;
 
     /// Queues a fully-formed element to be added to the scene; returns whether the request was
     /// accepted. Null until the Viewer owns a scene::SceneEditor; while unset the import panel
@@ -234,6 +252,12 @@ void draw_trace_panel(PanelContext& ctx);
 
 /// Draws the Preview / Full Trace toolbar floating at the top of the 3D viewport rect.
 void draw_trace_toolbar(PanelContext& ctx, const ImVec2& vmin, const ImVec2& vmax);
+
+/// Sweep setup for the selected part (move or turn over a range); drawn in the Simulate tab.
+void draw_sweep_setup(PanelContext& ctx);
+
+/// The sweep progress bar while it runs, then the player: scrub, play, and power vs position.
+void draw_sweep_window(PanelContext& ctx, const ImVec2& vmin, const ImVec2& vmax);
 /// Draws the 3D model import panel (file, unit detection, submesh split, placement).
 void draw_import_panel(PanelContext& ctx);
 

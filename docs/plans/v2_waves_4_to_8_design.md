@@ -433,6 +433,18 @@ shows and Stages 5-6 give each ray the path and phase an inspector ought to show
 
 ---
 
+### 5.8.1 Stage 8 - live update and movement sweeps (added after Stage 7, at the user's request)
+
+Measured first: release laser benches trace in 8-92 ms at full ray count (Michelson 19 / 23 / 47 / 72 ms
+at 10k / 30k / 100k / 300k rays), so both are affordable without a new engine.
+- **Live:** re-trace a small preview after every edit, on the GUI thread (the worker would lock the
+  gizmo mid-drag), ray count adapting to hold ~30 fps.
+- **Sweep:** one part, moved along or turned about a world axis over a range in N steps, each a full
+  trace; flux maps kept; a player with scrub, play and a power / centre-flux vs offset plot. The scene
+  document is never edited; the live pose is restored on close. Locked editing while open.
+- Gates: `tests/test_sweep.cpp` (Michelson lambda/2 = one fringe cycle; Malus cos^2 exact), QA 17 and
+  QA 18, screenshots of setup, running, playback and close. No tracer change, so no corpus run of its own.
+
 # Wave 6 — diffraction, as a second engine
 
 **Goal:** a slit produces a diffraction pattern rather than a sharp-edged bright rectangle.

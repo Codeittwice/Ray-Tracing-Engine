@@ -218,6 +218,8 @@ void draw_trace_toolbar(PanelContext& ctx, const ImVec2& vmin, const ImVec2& vma
     }
 
     if (!ctx.trace_running) {
+        // A sweep drives the part while it runs or plays back; tracing is off until it is closed.
+        ImGui::BeginDisabled(ctx.sweep_busy);
         if (ImGui::Button(ICON_FA_PLAY "  Preview")) {
             if (ctx.run_trace) ctx.run_trace(10'000);
         }
@@ -235,6 +237,18 @@ void draw_trace_toolbar(PanelContext& ctx, const ImVec2& vmin, const ImVec2& vma
             if (ctx.run_trace) ctx.run_trace(ctx.cfg->n_primary_rays);
         }
         tip("The full ray count set on the Simulate tab.");
+        if (ctx.live_update) {
+            ImGui::SameLine();
+            ImGui::Checkbox("Live", ctx.live_update);
+            tip("Re-trace a small preview automatically after every change - drag a part and watch\n"
+                "the result follow. The ray count adapts to keep the view responsive; use Full trace\n"
+                "for a number you intend to quote.");
+            if (*ctx.live_update && ctx.live_rays > 0) {
+                ImGui::SameLine();
+                ImGui::TextDisabled("%zuk rays, %.0f ms", ctx.live_rays / 1000, ctx.live_ms);
+            }
+        }
+        ImGui::EndDisabled();
     } else {
         const float frac = ctx.trace_rays_total > 0
                                ? static_cast<float>(static_cast<double>(ctx.trace_rays_done) /

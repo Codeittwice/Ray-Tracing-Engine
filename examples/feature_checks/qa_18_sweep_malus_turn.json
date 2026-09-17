@@ -1,0 +1,90 @@
+{
+    "scene": {
+        "name": "QA 18: sweep - Malus's law as a curve. A vertically polarised 5 mW laser through a polariser whose axis starts vertical. Select the polariser, 'Sweep this part': Turn about X (the beam axis), from 0 to 180 deg, 37 steps, Run sweep. 'On target' traces cos^2: 5 mW at 0, 2.5 mW at 45 deg, 0 at 90 deg, 5 mW again at 180 deg - checked by tests/test_sweep.cpp",
+        "materials": [
+            {
+                "id": "Ideal linear polariser (reference)",
+                "type": "polariser",
+                "transmission_axis_deg": 0.0,
+                "extinction_ratio": 1000000000.0,
+                "transmission": 1.0
+            }
+        ],
+        "elements": [
+            {
+                "name": "polariser_axis_vertical",
+                "material": "Ideal linear polariser (reference)",
+                "surface": {
+                    "type": "disk",
+                    "radius": 0.0127
+                },
+                "transform": {
+                    "translation": [
+                        0.1,
+                        0.0,
+                        0.1
+                    ],
+                    "rotation_euler_deg": [
+                        0.0,
+                        90.0,
+                        0.0
+                    ]
+                },
+                "body": {
+                    "post": true
+                }
+            }
+        ],
+        "receiver": {
+            "surface": {
+                "type": "plane",
+                "half_width": 0.01,
+                "half_height": 0.01
+            },
+            "grid": {
+                "nx": 200,
+                "ny": 200
+            },
+            "transform": {
+                "translation": [
+                    0.3,
+                    0.0,
+                    0.1
+                ],
+                "rotation_euler_deg": [
+                    0.0,
+                    90.0,
+                    0.0
+                ]
+            }
+        },
+        "sources": [
+            {
+                "type": "laser",
+                "origin": [
+                    -0.1,
+                    0.0,
+                    0.1
+                ],
+                "direction": [
+                    1.0,
+                    0.0,
+                    0.0
+                ],
+                "power_w": 0.005,
+                "wavelength_nm": 632.8,
+                "beam_diameter_m": 0.002,
+                "divergence_mrad": 0.0,
+                "polarisation": {
+                    "linear_deg": 0.0
+                }
+            }
+        ]
+    },
+    "trace": {
+        "n_primary_rays": 50000,
+        "max_bounces": 8,
+        "rng_seed": 118,
+        "power_cutoff_w": 1e-15
+    }
+}

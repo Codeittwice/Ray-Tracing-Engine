@@ -18,6 +18,17 @@ FluxAccumulator::FluxAccumulator(double half_width, double half_height, int nx, 
     assert(nx > 0 && ny > 0 && half_width > 0.0 && half_height > 0.0);
 }
 
+FluxAccumulator FluxAccumulator::from_flux_map(double half_width, double half_height, int nx, int ny,
+                                               const std::vector<double>& flux_wm2) {
+    FluxAccumulator a(half_width, half_height, nx, ny);
+    const double area = a.bin_width_m() * a.bin_height_m();
+    for (std::size_t i = 0; i < a.flux_.size() && i < flux_wm2.size(); ++i) {
+        a.flux_[i]      = flux_wm2[i];
+        a.power_sum_[i] = flux_wm2[i] * area;
+    }
+    return a;
+}
+
 void FluxAccumulator::deposit(const core::Ray& r, const core::Hit& h) noexcept {
     // h.uv is the local surface coordinate set by Plane::intersect
     double u = h.uv.x;

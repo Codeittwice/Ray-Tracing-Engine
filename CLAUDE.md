@@ -467,6 +467,55 @@ would move solar corpus results slightly.
 scale (three powers), 12 half-wave rotator, 13 HWP + PBS variable splitter, 14 coherence washout, 15
 window at normal incidence, 16 ray inspector.
 
+- [x] Stage 8 - live update while editing, and a movement sweep with playback (asked for by the user
+  after the Stage 7 timings: laser benches trace in 8-92 ms at full ray count in release)
+
+**Stage 8a (Live).** A "Live" switch on the trace toolbar re-traces a small preview whenever an edit
+marks the result stale. **It runs on the GUI THREAD, not the worker**, and that is not an
+optimisation: the worker reads the scene without a lock, so the Viewer greys out every editing control
+and calls `ImGuizmo::Enable(false)` while it runs - a live preview on the worker would cut the user's
+drag off mid-gesture. The ray count adapts (halve above 40 ms, double below 12 ms, 2k floor, the Rays
+slider as ceiling) and is capped at 30 traces/s. A refused scene (coherent + random source) turns Live
+off and shows the reason once rather than failing every frame. VERIFIED by eye on QA 18: Live on,
+polariser axis typed to 60 deg on the Design tab, the toolbar re-traced by itself to 1.25 mW (cos^2 60)
+at "5k rays, 67 ms" in the debug build. A gizmo DRAG with Live on was not driven (the harness has no
+drag step); it uses the same `need_retrace_` flag the typed edit set.
+
+**Stage 8b (sweep).** `viz::SweepRunner` (`include/scrt/viz/Sweep.hpp`, GUI-free, compiled into the tests):
+move a part along, or turn it about its own centre around, a world axis over a range; one full trace
+per step into a fresh accumulator; keeps each frame's flux map, power, peak and centre bin. It moves the
+LIVE surface and never the document, and restores the pose bit-for-bit at the end (tested with `==`).
+The Viewer steps it once per GUI frame (the window keeps drawing progress and Cancel). While a sweep runs
+OR its player is open, editing is locked and `start_trace` refuses - the player puts the part physically
+at the shown frame's pose, and a worker reading the scene then would race it. Close sweep restores the
+pose and re-traces at the END of the frame (it is clicked mid-frame, when later panels were not yet
+disabled). Setup is in the Simulate tab ("Sweep a part", the selected part; mm for moves, degrees for
+turns, a one-click 0 to lambda/2 range when the scene has a laser); the player floats over the bottom of
+the 3D view: Play/Pause, a frame slider, Close, and a plot of power on target and screen-centre flux
+against the offset with the current frame marked. The Flux Analysis window shows the frame's map
+(`FluxAccumulator::from_flux_map`).
+- `tests/test_sweep.cpp`: QA 10's M1 moved by lambda/2 in 25 steps - centre bin 0.65 to 416 W/m2 and
+  the last frame equals the first; QA 18's polariser turned 0-180 deg in 5-deg steps reads
+  5 mW x cos^2 to 1e-9 W at every step; bad specs refused with a reason.
+- VERIFIED by eye: QA 18 (cos^2 curve, 5 mW -> 0 at 90 deg -> 5 mW), QA 17 (40 steps; Play advanced to
+  frame 23 with the marker moving; Close restored M1 and the re-trace read exactly the pre-sweep
+  2.472 mW / 441.540610 W/m2).
+- **The first screenshot found the setup in the wrong place:** under the transform editor in the
+  Selection panel it sat below the fold of a scrolling panel. It moved to the Simulate tab. The axis
+  radios also clipped Z, and turns were in mrad; both fixed.
+- **QA 17's first name was wrong about the physics:** it said power on target stays flat. It ripples
+  about 1% (2.47-2.52 mW): the 4 mm beam holds ~6.3 fringes, not a whole number, so the screen's
+  total depends on the phase, and the balance leaves by the other output port toward the laser.
+- Harness: `screenshot_app.ps1 -Clicks` gained `w:x,y,n` (wheel), `s:sec` (wait), `shot:path`
+  (mid-sequence photo), `k:keys` (SendKeys typing) and `cc:x,y` (Ctrl+click, which turns an ImGui
+  slider into a text field). Clicks sent while the debug build is busy with its startup trace get lost:
+  wait longer, and re-photograph after a click that changes layout (choosing Turn removes the lambda/2
+  button and the scrolled panel shifts).
+- Not done: rays are not recorded per sweep frame (paths are hidden during playback); a sweep of a
+  multi-face receiver is refused.
+
+**QA 17** (sweep a Michelson mirror by lambda/2) **and QA 18** (turn a polariser: Malus as a curve).
+
 **Timing baseline (Stage 0), release, 98-scene corpus, summed `wall_time_s`:** 20.59 s (end of
 Wave 4), 21.10 s and 20.86 s (two captures at Stage 0) - a spread of about +-1.2%, dominated by one
 12 s scene. The ray-size decision in Stage 2 compares against these three.

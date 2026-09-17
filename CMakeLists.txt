@@ -179,11 +179,13 @@ target_sources(scrt_tests PRIVATE
     tests/test_optical_path.cpp
     tests/test_coherent.cpp
     tests/test_ray_inspector.cpp
+    tests/test_sweep.cpp
     # The library and the config path it uses are GUI-free (json and filesystem only),
     # so the test binary compiles them directly rather than linking scrt_viz, which
     # would drag in Polyscope, GLFW and a window.
     src/viz/Library.cpp
     src/viz/Body.cpp
+    src/viz/Sweep.cpp
     src/viz/AppConfig.cpp
     tests/test_sun.cpp
     tests/test_paraxial.cpp
@@ -232,6 +234,7 @@ add_library(scrt_viz STATIC
     src/viz/Library.cpp
     src/viz/Appearance.cpp
     src/viz/Body.cpp
+    src/viz/Sweep.cpp
     src/viz/Preview.cpp
     src/viz/panels/SunPanel.cpp
     src/viz/panels/TracePanel.cpp
@@ -239,6 +242,7 @@ add_library(scrt_viz STATIC
     src/viz/panels/SavePanel.cpp
     src/viz/panels/SettingsPanel.cpp
     src/viz/panels/SelectionPanel.cpp
+    src/viz/panels/SweepPanel.cpp
     src/viz/panels/IoOverlay.cpp
     src/viz/panels/AiOverlay.cpp
     src/viz/panels/TopBarPanel.cpp

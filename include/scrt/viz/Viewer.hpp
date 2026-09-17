@@ -6,6 +6,7 @@
 #include "scrt/tracer/FluxAccumulator.hpp"
 #include "scrt/tracer/Tracer.hpp"
 #include "scrt/viz/Panels.hpp"
+#include "scrt/viz/Sweep.hpp"
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
@@ -157,6 +158,26 @@ private:
 
     /// Launches a trace of `n_rays` on the worker thread; a no-op while one already runs.
     void start_trace(std::size_t n_rays);
+
+    // ---- Stage 8: live preview and sweeps ----
+    bool        live_update_   = false;   ///< Re-trace a small preview after every edit.
+    std::size_t live_rays_     = 20000;   ///< Adapts to hold ~30 fps.
+    double      live_ms_       = 0.0;     ///< Last live trace time.
+    double      live_last_s_   = -1.0;    ///< ImGui time of the last live trace.
+    SweepRunner sweep_;
+    bool        sweep_open_    = false;   ///< The player is showing a finished sweep.
+    int         sweep_frame_   = 0;
+    bool        sweep_playing_ = false;
+    double      sweep_clock_s_ = 0.0;
+    bool        preview_after_sweep_ = false;   ///< Re-trace the restored pose at the end of this frame.
+    /// Runs one live preview trace on the GUI thread when something changed and nothing else traces.
+    void run_live_preview();
+    /// Advances a running sweep by one frame, or the player by elapsed time.
+    void tick_sweep();
+    /// Puts sweep frame `i` on screen: its flux map, and the part at that frame's pose.
+    void show_sweep_frame(int i);
+    /// Cancels a running sweep or closes the player, restoring the part's original pose.
+    void close_sweep();
     /// GUI-thread poll: joins a finished worker and publishes its result. Called once per frame.
     void poll_trace();
     /// Cancels any running trace and joins the worker; safe to call when idle.

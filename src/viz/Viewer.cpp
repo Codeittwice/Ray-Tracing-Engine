@@ -13,6 +13,7 @@
 #include "scrt/scene/Receiver.hpp"
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 #include <filesystem>
@@ -22,6 +23,7 @@
 #include "imgui.h"       // must precede ImGuizmo.h: ImGuizmo.h declares against ImGui types
 #include "ImGuizmo.h"    // NOLINT(build/include_order)
 #include "implot.h"
+#include "polyscope/curve_network.h"
 #include "polyscope/polyscope.h"
 #include "polyscope/imgui_config.h"
 #include <GLFW/glfw3.h>
@@ -189,6 +191,10 @@ void Viewer::load_from_file(const std::filesystem::path& path) {
 // ---- load_scene_internal -----------------------------------------------------
 
 void Viewer::load_scene_internal(io::LoadedScene ls) {
+    // A sweep refers to a part of the scene being replaced; drop it without restoring anything.
+    sweep_         = SweepRunner{};
+    sweep_open_    = false;
+    sweep_playing_ = false;
     // Nothing below may run while a worker is reading the scene we are about to replace.
     cancel_and_join_trace();
 
@@ -321,6 +327,9 @@ void Viewer::start_trace(std::size_t n_rays) {
     // One trace at a time. The buttons are greyed out while one runs, but a stale callback
     // or a scripted call must not be able to launch a second worker over the first.
     if (trace_running_.load(std::memory_order_acquire)) return;
+    // A sweep moves the part on the GUI thread every frame; a worker reading the scene meanwhile
+    // would race it. Every launch path goes through here, so this one guard covers them all.
+    if (sweep_.running() || sweep_open_) return;
     if (trace_thread_.joinable()) trace_thread_.join();
 
     // The BVH rebuild is a scene mutation, so it happens here on the GUI thread, before the
@@ -414,6 +423,113 @@ void Viewer::cancel_and_join_trace() {
     trace_done_.store(false, std::memory_order_relaxed);
     pending_result_ = {};
     pending_acc_.reset();
+}
+
+// ---- Stage 8: live preview and sweeps ------------------------------------------
+
+void Viewer::run_live_preview() {
+    // A small trace ON THE GUI THREAD, between frames, instead of on the worker: the worker reads the
+    // scene without a lock, which is why editing is greyed out while it runs, and a live preview that
+    // locked the scene would make the part impossible to drag. Laser benches trace in 10-90 ms at
+    // full ray count (measured), so a few tens of thousands of rays per frame keep the view live.
+    if (!live_update_ || !need_retrace_ || !scene_ || !scene_->receiver()) return;
+    if (trace_running_.load(std::memory_order_acquire) || sweep_.running() || sweep_open_) return;
+    const double now = ImGui::GetTime();
+    if (live_last_s_ >= 0.0 && now - live_last_s_ < 1.0 / 30.0) return;
+
+    if (need_rebuild_) {
+        scene_->build_acceleration_structure();
+        need_rebuild_ = false;
+    }
+    tracer::TraceConfig cfg = cfg_;
+    cfg.n_primary_rays      = live_rays_;
+    auto* recv              = scene_->receiver();
+    const auto t0           = std::chrono::steady_clock::now();
+    try {
+        tracer::Tracer tr(*scene_);
+        if (recv->is_multi_face()) {
+            result_ = tr.run(cfg);
+            acc_    = std::make_unique<tracer::FluxAccumulator>(recv->accumulator());
+        } else {
+            const auto& ra = recv->accumulator();
+            auto acc = std::make_unique<tracer::FluxAccumulator>(ra.half_width(), ra.half_height(),
+                                                                 ra.nx(), ra.ny());
+            result_ = tr.run(cfg, *acc);
+            acc_    = std::move(acc);
+        }
+    } catch (const std::exception& e) {
+        trace_error_  = e.what();
+        live_update_  = false;   // a refused scene would refuse every frame; say it once
+        return;
+    }
+    live_ms_ = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    // Hold roughly 30 fps: halve the rays when a frame is slow, double them back when it is quick.
+    if (live_ms_ > 40.0)      live_rays_ = std::max<std::size_t>(2000, live_rays_ / 2);
+    else if (live_ms_ < 12.0) live_rays_ = std::min<std::size_t>(std::max<std::size_t>(cfg_.n_primary_rays, 2000),
+                                                                 live_rays_ * 2);
+    live_last_s_  = now;
+    traced_       = true;
+    need_retrace_ = false;
+    trace_error_.clear();
+    update_receiver_flux();
+    RayRenderer(scene_, editor_ ? &editor_->doc() : nullptr).register_paths(result_);
+}
+
+void Viewer::tick_sweep() {
+    if (sweep_.running()) {
+        if (trace_running_.load(std::memory_order_acquire)) return;   // one tracer at a time
+        // One frame per GUI frame: a 60-step sweep of a 70 ms trace takes ~4 s and the window keeps
+        // drawing its progress and Cancel button throughout.
+        sweep_.step(*scene_);
+        if (!sweep_.running()) {
+            need_rebuild_ = true;
+            if (!sweep_.error().empty()) trace_error_ = sweep_.error();
+            if (sweep_.frames_done() > 0) {
+                sweep_open_  = true;
+                sweep_frame_ = 0;
+                show_sweep_frame(0);
+            }
+        }
+        return;
+    }
+    if (sweep_open_ && sweep_playing_ && sweep_.frames_done() > 1) {
+        sweep_clock_s_ += ImGui::GetIO().DeltaTime;
+        constexpr double kFrameS = 1.0 / 12.0;
+        if (sweep_clock_s_ >= kFrameS) {
+            sweep_clock_s_ = 0.0;
+            show_sweep_frame((sweep_frame_ + 1) % sweep_.frames_done());
+        }
+    }
+}
+
+void Viewer::show_sweep_frame(int i) {
+    if (!scene_ || i < 0 || i >= sweep_.frames_done()) return;
+    sweep_frame_ = i;
+    const SweepFrame& f = sweep_.frames()[static_cast<std::size_t>(i)];
+    acc_ = std::make_unique<tracer::FluxAccumulator>(tracer::FluxAccumulator::from_flux_map(
+        sweep_.half_width(), sweep_.half_height(), sweep_.nx(), sweep_.ny(), f.flux));
+    traced_ = true;
+    result_ = {};
+    if (polyscope::hasCurveNetwork("ray_paths")) polyscope::removeCurveNetwork("ray_paths", false);
+    update_receiver_flux();
+    // The part is drawn (and, for as long as the player is open, physically placed) at this frame's
+    // pose; close_sweep puts it back. The document is never touched.
+    RayRenderer(scene_).set_surface_transform(sweep_.spec().surface_id, sweep_.pose_at(f.value));
+    need_rebuild_ = true;
+}
+
+void Viewer::close_sweep() {
+    if (!scene_) return;
+    if (sweep_.running()) sweep_.cancel(*scene_);
+    if (sweep_.spec().surface_id != 0 && scene_->surface_by_id(sweep_.spec().surface_id))
+        RayRenderer(scene_).set_surface_transform(sweep_.spec().surface_id, sweep_.original_pose());
+    sweep_open_    = false;
+    sweep_playing_ = false;
+    need_rebuild_  = true;
+    need_retrace_  = true;
+    // The flux on screen is the last frame's, so the real pose is re-traced - at the end of the
+    // frame, not here: this runs from a button, and panels drawn later this frame were not disabled.
+    preview_after_sweep_ = true;
 }
 
 // ---- register_scene ----------------------------------------------------------
@@ -511,6 +627,21 @@ PanelContext Viewer::make_panel_context() {
     ctx.trace_rays_done      = ctx.trace_running ? trace_ctl_.rays_done()  : 0;
     ctx.trace_rays_total     = ctx.trace_running ? trace_ctl_.rays_total() : 0;
     ctx.cancel_trace         = [this]() { trace_ctl_.request_cancel(); };
+    ctx.live_update          = &live_update_;
+    ctx.live_rays            = live_last_s_ >= 0.0 ? live_rays_ : 0;   // no readout before the first live trace
+    ctx.live_ms              = live_ms_;
+    ctx.sweep                = &sweep_;
+    ctx.sweep_busy           = sweep_.running() || sweep_open_;
+    ctx.sweep_frame          = &sweep_frame_;
+    ctx.sweep_playing        = &sweep_playing_;
+    ctx.start_sweep          = [this](const SweepSpec& spec) {
+        if (!scene_ || trace_running_.load(std::memory_order_acquire)) return;
+        if (sweep_open_) close_sweep();
+        if (need_rebuild_) { scene_->build_acceleration_structure(); need_rebuild_ = false; }
+        if (!sweep_.start(*scene_, spec, cfg_)) trace_error_ = sweep_.error();
+    };
+    ctx.stop_sweep           = [this]() { close_sweep(); };
+    ctx.show_sweep_frame     = [this](int i) { show_sweep_frame(i); };
 
     // Import needs the scene's own directory so mesh paths stay relative to the file,
     // and a SceneEditor so a committed element reaches both document and live scene.
@@ -578,8 +709,12 @@ void Viewer::draw_gui() {
     // Pick up a finished worker before anything reads result_ or acc_ this frame.
     poll_trace();
 
+    tick_sweep();
+
     PanelContext ctx  = make_panel_context();
-    const bool   busy = ctx.trace_running;
+    // A running sweep or an open player is driving the part, so edits are locked exactly as for a
+    // background trace.
+    const bool   busy = ctx.trace_running || ctx.sweep_busy;
 
     // The menu bar claims the top strip, so the panels start below whatever height it reports.
     // Recomputed every frame from the live window size with ImGuiCond_Always: the old
@@ -653,6 +788,9 @@ void Viewer::draw_gui() {
             draw_sun_panel(ctx);
             ImGui::EndDisabled();
             draw_trace_panel(ctx);   // owns the Cancel button, so it must stay live
+            ImGui::BeginDisabled(busy);
+            draw_sweep_setup(ctx);
+            ImGui::EndDisabled();
             ImGui::EndTabItem();
         }
         ImGui::EndTabBar();
@@ -664,6 +802,7 @@ void Viewer::draw_gui() {
     // an ImGui window. This creates its overlay only while a drag is in flight.
     draw_viewport_drop_target(ctx, lay.viewport_min, lay.viewport_max);
     draw_trace_toolbar(ctx, lay.viewport_min, lay.viewport_max);
+    draw_sweep_window(ctx, lay.viewport_min, lay.viewport_max);
 
     // ---- right column, bottom: what is selected, and how to place it --
     ImGui::SetNextWindowPos(lay.right_bottom_pos, ImGuiCond_Always);
@@ -713,6 +852,11 @@ void Viewer::draw_gui() {
         return;
     }
     apply_element_ops();
+    if (preview_after_sweep_) {
+        preview_after_sweep_ = false;
+        if (!live_update_) start_trace(kPreviewRays);
+    }
+    run_live_preview();
     // Every frame, but it does work only when the setting or the step changed, or a scene load
     // removed every structure (and with them the grid).
     sync_grid(scene_);

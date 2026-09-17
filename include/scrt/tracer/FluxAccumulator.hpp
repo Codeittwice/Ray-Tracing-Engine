@@ -15,6 +15,11 @@ public:
     /// hw/hh: half-extents (m) matching the receiver Plane; nx/ny: grid resolution.
     FluxAccumulator(double half_width, double half_height, int nx, int ny);
 
+    /// A finalised, incoherent accumulator holding a stored flux map [W/m2] - for showing a frame of
+    /// a sweep with the same plotting code as a live trace. total_power_w() is the map's integral.
+    static FluxAccumulator from_flux_map(double half_width, double half_height, int nx, int ny,
+                                         const std::vector<double>& flux_wm2);
+
     /// Deposit ray power into the bin corresponding to hit.uv.
     void deposit(const core::Ray& r, const core::Hit& h) noexcept;
 
