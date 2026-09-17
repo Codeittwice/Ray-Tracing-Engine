@@ -456,7 +456,18 @@ capture showed the Windows lock screen ("Press Ctrl+Alt+Delete to unlock"). This
 the old "the harness photographs the wallpaper for laser scenes" note below actually was - not the
 capture path, not laser scenes.
 
-**Power cutoff finding (engine default NOT changed, a decision for the user).** `TraceConfig::
+**Power cutoff: FIXED after Wave 5, decided with the user ("relative, keep goldens"; corpus moves accepted).**
+The cutoff applied to a branch is now `min(power_cutoff_w, power_cutoff_rel x the primary's starting
+power)`, `power_cutoff_rel` = 1e-6 (new optional trace key, omitted on write at its default). A min, so an
+existing file that stores 1e-9 W still gets the fix. Measured: the five goldens are unchanged (a solar ray
+there starts at ~0.03 W, so 1e-6 of it is above 1e-9 and the old cutoff still applies). The corpus moved
+in four scenes: three laser scenes gained their real ghost light (optical_bench 2.20183 -> 2.20255 mW,
+pcx_lens_focus 4.58935 -> 4.59158 mW, the user's untracked qa_01 fiddle scene) and one 10M-ray solar scene
+(two_level_final_double_pmma, 9.5e-5 W per ray, so the relative cutoff is the lower one) moved
+248.3856 -> 248.3339 W, -0.02%, within its Monte Carlo noise: deeper pane ghosts are now traced and consume
+random draws. New corpus baseline: `cutoff`. With the 1e-15 override removed, QA 07, 13 and 15 read
+exactly what the override gave; `tests/test_laser.cpp` pins QA 15 at (1-R)^2/(1-R^2) with the default.
+The history, as found: `TraceConfig::
 power_cutoff_w` is an ABSOLUTE 1e-9 W per ray, sized for solar rays. A 5 mW laser over 200k rays is
 2.5e-8 W per ray, so Fresnel ghosts (x 0.04 x 0.04) and extinction leaks (x 1e-3) were dropped: QA 15
 read 92.16% instead of (1-R)^2/(1-R^2) = 92.308%, QA 07 25.53% instead of the full series 25.77%,

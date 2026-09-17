@@ -1,4 +1,12 @@
 #include <doctest/doctest.h>
+#include "scrt/io/SceneDocument.hpp"
+#include "scrt/io/SceneLoader.hpp"
+#include <filesystem>
+#include <fstream>
+#include <nlohmann/json.hpp>
+#ifndef SCRT_SOURCE_DIR
+#define SCRT_SOURCE_DIR "."
+#endif
 #include "scrt/core/Ray.hpp"
 #include "scrt/core/Transform.hpp"
 #include "scrt/materials/Absorber.hpp"
@@ -253,4 +261,23 @@ TEST_CASE("Laser grid sampling: equal-area, deterministic, inside the beam, and 
     const auto rb = l.sample_ray(b);
     CHECK(ra.origin == rb.origin);
     CHECK(ra.direction == rb.direction);
+}
+
+TEST_CASE("power cutoff: relative to each primary ray, so a milliwatt laser keeps its ghosts") {
+    // QA 15 (5 mW through an n = 1.5 window at normal incidence) with its explicit 1e-15 W override
+    // REMOVED, i.e. the default absolute 1e-9 W. Split over 50k rays each ray starts at 1e-7 W, so every
+    // internal ghost (x 0.0016) used to fall under the absolute cutoff and the screen read 92.16%. The
+    // relative cutoff keeps them, and the full incoherent series (1-R)^2 / (1-R^2) = 92.308% is read.
+    auto doc = scrt::io::parse_document(
+        nlohmann::json::parse(std::ifstream(std::filesystem::path(SCRT_SOURCE_DIR) / "examples" /
+                                            "feature_checks" / "qa_15_window_normal_incidence.json")),
+        true);
+    doc.trace.power_cutoff_w = 1e-9;
+    auto ls = scrt::io::build_scene(doc, std::filesystem::path(SCRT_SOURCE_DIR) / "examples" / "feature_checks");
+    ls.scene->build_acceleration_structure();
+    ls.cfg.num_threads = 4;
+    scrt::tracer::Tracer(*ls.scene).run(ls.cfg);
+    const double R      = 0.04;
+    const double expect = 0.005 * (1.0 - R) * (1.0 - R) / (1.0 - R * R);
+    CHECK(std::fabs(ls.scene->receiver()->accumulator().total_power_w() / expect - 1.0) < 1e-6);
 }

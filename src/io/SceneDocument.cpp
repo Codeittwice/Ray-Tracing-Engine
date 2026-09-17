@@ -610,7 +610,7 @@ SceneDocument parse_document(const json& root, bool strict) {
             if (strict)
                 reject_unknown_keys(tj,
                                      {"n_primary_rays", "max_bounces", "record_paths",
-                                      "max_paths_to_record", "rng_seed", "power_cutoff_w"},
+                                      "max_paths_to_record", "rng_seed", "power_cutoff_w", "power_cutoff_rel"},
                                      "trace");
             if (tj.contains("n_primary_rays"))
                 cfg.n_primary_rays = tj["n_primary_rays"].get<std::size_t>();
@@ -618,6 +618,8 @@ SceneDocument parse_document(const json& root, bool strict) {
                 cfg.max_bounces = tj["max_bounces"].get<int>();
             if (tj.contains("power_cutoff_w"))
                 cfg.power_cutoff_w = tj["power_cutoff_w"].get<double>();
+            if (tj.contains("power_cutoff_rel"))
+                cfg.power_cutoff_rel = tj["power_cutoff_rel"].get<double>();
             if (tj.contains("rng_seed"))
                 cfg.rng_seed = tj["rng_seed"].get<std::uint64_t>();
             if (tj.contains("record_paths"))

@@ -22,6 +22,11 @@ struct TraceConfig {
     std::size_t   n_primary_rays       = 1'000'000;
     int           max_bounces          = 16;
     double        power_cutoff_w       = 1e-9;
+    /// A branch is also kept while it carries at least this FRACTION of its primary ray's starting
+    /// power: the cutoff actually applied is min(power_cutoff_w, power_cutoff_rel x start power).
+    /// The absolute 1e-9 W was sized for solar rays of ~0.03 W and silently dropped every ghost and
+    /// extinction leak of a milliwatt laser split over 1e5 rays (2.5e-8 W each).
+    double        power_cutoff_rel     = 1e-6;
     std::uint64_t rng_seed             = 0;        ///< 0 → std::random_device
     bool          record_paths         = false;
     std::size_t   max_paths_to_record  = 2000;

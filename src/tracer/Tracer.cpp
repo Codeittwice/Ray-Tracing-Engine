@@ -322,7 +322,7 @@ TraceResult Tracer::run(const TraceConfig& cfg, TraceControl* ctl) const {
                 path_buf.monochromatic = (e.source->type_name() == "laser");
             }
             trace_one(r, slot_receiver, slot_rng, path_ptr, 0u, cfg.max_bounces,
-                      cfg.power_cutoff_w, hits);
+                      std::min(cfg.power_cutoff_w, cfg.power_cutoff_rel * r.power), hits);
 
             if (path_ptr && !path_buf.edges.empty()) {
                 std::lock_guard<std::mutex> lk(path_mutex);
@@ -472,7 +472,7 @@ TraceResult Tracer::run(const TraceConfig& cfg, FluxAccumulator& acc, TraceContr
                 path_buf.monochromatic = (e.source->type_name() == "laser");
             }
             trace_one(r, slot_acc, slot_rng, path_ptr, 0u, cfg.max_bounces,
-                      cfg.power_cutoff_w, hits);
+                      std::min(cfg.power_cutoff_w, cfg.power_cutoff_rel * r.power), hits);
 
             if (path_ptr && !path_buf.edges.empty()) {
                 std::lock_guard<std::mutex> lk(path_mutex);

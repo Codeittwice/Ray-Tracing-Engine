@@ -331,6 +331,8 @@ json trace_to_json(const tracer::TraceConfig& cfg) {
     j["n_primary_rays"] = cfg.n_primary_rays;
     j["max_bounces"] = cfg.max_bounces;
     j["power_cutoff_w"] = cfg.power_cutoff_w;
+    // Omitted at its default, so every existing file re-saves unchanged.
+    if (cfg.power_cutoff_rel != tracer::TraceConfig{}.power_cutoff_rel) j["power_cutoff_rel"] = cfg.power_cutoff_rel;
     j["rng_seed"] = cfg.rng_seed;
     j["record_paths"] = cfg.record_paths;
     j["max_paths_to_record"] = cfg.max_paths_to_record;
