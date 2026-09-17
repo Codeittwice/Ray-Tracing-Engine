@@ -43,6 +43,11 @@ public:
     /// 1000 W/m^2. The Viewer calls this from register_scene(); set_scene_dni() undoes it.
     static void set_no_sun();
 
+    /// Total power of every source in the scene on screen [W]; the fixed flux-scale reference is
+    /// this over the receiver area. Published by Viewer::register_scene.
+    static void   set_scene_source_power(double watts);
+    static double scene_source_power();
+
     /// False after set_no_sun() until the next set_scene_dni(); true otherwise (the default,
     /// so a caller that never says either keeps the pre-Wave-2 behaviour).
     static bool scene_has_sun();

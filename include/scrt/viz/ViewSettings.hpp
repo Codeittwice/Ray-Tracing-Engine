@@ -51,6 +51,17 @@ void  set_ray_opacity(float a);
 bool show_grid();
 void set_show_grid(bool on);
 
+/// Flux-map sensitivity: the colour scale's top is the reference flux divided by this. 1 shows the
+/// reference (source power / receiver area) as full scale; 10 makes a tenth of it full scale.
+float flux_sensitivity();
+void  set_flux_sensitivity(float s);
+
+/// The fixed flux reference [W/m2] chosen by the user for the colour scale: total source power over
+/// the receiver area, i.e. the flux if every emitted watt fell evenly on the screen. It never adapts
+/// to a trace, so a design that delivers less visibly dims; a focused spot can exceed 100%.
+/// Returns 0 when there is no power or no area (callers then fall back to the trace's own peak).
+double flux_reference_wm2(double source_power_w, double half_width, double half_height);
+
 /// Whether the drawn-only posts under bench parts are shown (they are never traced either way).
 bool show_posts();
 void set_show_posts(bool on);

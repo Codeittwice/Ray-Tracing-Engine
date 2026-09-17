@@ -42,7 +42,8 @@ namespace {
 
 void register_receiver_face_flux(const scene::ReceiverFace& face,
                                  const tracer::FluxAccumulator& acc,
-                                 const std::string& mesh_name) {
+                                 const std::string& mesh_name,
+                                 double source_power_w) {
     const int nx = acc.nx(), ny = acc.ny();
     const double hw = acc.half_width(), hh = acc.half_height();
     const auto& xf = face.surface()->transform();
@@ -99,6 +100,11 @@ void register_receiver_face_flux(const scene::ReceiverFace& face,
     auto* mesh = polyscope::registerSurfaceMesh(mesh_name, pv, pf);
     auto* q = mesh->addVertexScalarQuantity("flux_Wm2", fvals);
     q->setColorMap(flux_colormap());
+    // The same FIXED scale as the heatmap beside it: 100% = source power / receiver area, over the
+    // sensitivity. Polyscope clamps above the range in its shader, so no value needs clamping here.
+    const double reference = flux_reference_wm2(source_power_w, hw, hh);
+    if (reference > 0.0)
+        q->setMapRange({0.0, reference / static_cast<double>(flux_sensitivity())});
     q->setEnabled(true);
 }
 
@@ -453,17 +459,22 @@ void Viewer::register_scene() {
 void Viewer::update_receiver_flux() {
     if (!scene_ || !scene_->receiver()) return;
 
+    // Every source's power, published for the flux window too: both views scale against it.
+    double source_power = 0.0;
+    for (const auto& src : scene_->sources()) source_power += src->total_power_w();
+    FluxPlotter::set_scene_source_power(source_power);
+
     auto* recv = scene_->receiver();
     if (recv->is_multi_face()) {
         for (const auto& face : recv->faces()) {
             register_receiver_face_flux(
-                *face, face->accumulator(), "receiver_" + face->name() + "_flux");
+                *face, face->accumulator(), "receiver_" + face->name() + "_flux", source_power);
         }
         return;
     }
 
     if (!acc_) return;
-    register_receiver_face_flux(*recv->faces().front(), *acc_, "receiver_flux");
+    register_receiver_face_flux(*recv->faces().front(), *acc_, "receiver_flux", source_power);
 }
 
 // ---- make_panel_context --------------------------------------------------------
@@ -706,6 +717,12 @@ void Viewer::draw_gui() {
     // removed every structure (and with them the grid).
     sync_grid(scene_);
     sync_axis(scene_);
+    // The flux-map sensitivity slider lives in the flux window; the 3D receiver follows it here.
+    static float drawn_sensitivity = flux_sensitivity();
+    if (flux_sensitivity() != drawn_sensitivity) {
+        drawn_sensitivity = flux_sensitivity();
+        update_receiver_flux();
+    }
 }
 
 

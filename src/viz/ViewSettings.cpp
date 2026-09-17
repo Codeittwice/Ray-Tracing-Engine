@@ -65,6 +65,15 @@ namespace { bool g_show_grid = true; }
 bool show_grid() { return g_show_grid; }
 void set_show_grid(bool on) { g_show_grid = on; }
 
+namespace { float g_flux_sensitivity = 1.0f; }
+float flux_sensitivity() { return g_flux_sensitivity; }
+void  set_flux_sensitivity(float s) { g_flux_sensitivity = std::clamp(s, 1.0e-4f, 1000.0f); }
+
+double flux_reference_wm2(double source_power_w, double half_width, double half_height) {
+    const double area = 4.0 * half_width * half_height;
+    return (source_power_w > 0.0 && area > 0.0) ? source_power_w / area : 0.0;
+}
+
 namespace { bool g_show_posts = true; }
 bool show_posts() { return g_show_posts; }
 void set_show_posts(bool on) { g_show_posts = on; }

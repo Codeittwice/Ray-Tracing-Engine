@@ -21,6 +21,8 @@ double g_scene_dni_wm2 = 1000.0;
 /// False until a real scene DNI has been published; the window says so when it is false.
 bool   g_scene_dni_known = false;
 bool   g_scene_has_sun   = true;
+/// Total source power of the scene on screen, for the fixed flux reference. GUI thread only.
+double g_scene_source_power_w = 0.0;
 
 /// Grey explanatory line, wrapped to the panel width; for plain-language captions.
 void help_line(const char* text) {
@@ -63,6 +65,9 @@ void FluxPlotter::set_no_sun() {
 }
 
 bool FluxPlotter::scene_has_sun() { return g_scene_has_sun; }
+
+void   FluxPlotter::set_scene_source_power(double watts) { g_scene_source_power_w = watts; }
+double FluxPlotter::scene_source_power() { return g_scene_source_power_w; }
 
 double FluxPlotter::scene_dni() { return g_scene_dni_wm2; }
 
@@ -169,8 +174,19 @@ void FluxPlotter::draw_heatmap_tab(const tracer::FluxAccumulator& acc, double dn
     // ImPlot maps a value to a colour with (siz-1)*t + 0.5 and does not clamp the result, so a
     // sample even a rounding step above scale_max indexes past the end of the colour table - and
     // (float)x can round up above the double max of the same array.
-    float vmaxf = 0.0f;
-    for (float v : data) vmaxf = std::max(vmaxf, v);
+    // The colour scale is FIXED, from the source (the user's choice): 100% = total source power over
+    // the receiver area, divided by the sensitivity. It never adapts to this trace, so a design that
+    // delivers less power visibly dims. Values above full scale are clamped for drawing - ImPlot maps
+    // a value to a colour without clamping, and a sample above scale_max reads past its colour table.
+    const double reference = flux_reference_wm2(scene_source_power(), acc.half_width(), acc.half_height());
+    const double sens      = static_cast<double>(flux_sensitivity());
+    float        vmaxf     = 0.0f;
+    if (reference > 0.0) {
+        vmaxf = static_cast<float>(reference / sens);
+        for (float& v : data) v = std::min(v, vmaxf);
+    } else {
+        for (float v : data) vmaxf = std::max(vmaxf, v);   // no power known: fall back to the peak
+    }
     double vmax = static_cast<double>(vmaxf);
     if (vmax <= 0.0) vmax = 1.0;
 
@@ -211,11 +227,40 @@ void FluxPlotter::draw_heatmap_tab(const tracer::FluxAccumulator& acc, double dn
 
     ImGui::Separator();
 
+    // ---- the fixed scale ----
+    if (reference > 0.0) {
+        std::snprintf(buf, sizeof(buf), "Full scale: %.0f%% of %.4g W/m² (source power / screen area)",
+                      100.0 / sens, reference);
+        figure(buf, "The colours are on a FIXED scale taken from the light source: 100% is the flux "
+                    "you would get if every watt the sources emit fell evenly on this screen. It does "
+                    "not change from one trace to the next, so a design that delivers less power is "
+                    "visibly darker. A focused spot can read far above 100% - raise the sensitivity "
+                    "to see dim light, lower it to see inside a bright spot.");
+        std::snprintf(buf, sizeof(buf), "Hottest spot: %.1f%% of reference", 100.0 * acc.peak_flux_wm2() / reference);
+        ImGui::TextDisabled("%s", buf);
+        // Measured on QA 11: three 2 mm spots on a 16 mm screen peak at 6024% of the reference, so at
+        // x1 they all saturate and look alike. The slider reaches x0.0001 for exactly that case.
+        float s = flux_sensitivity();
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.6f);
+        if (ImGui::SliderFloat("Sensitivity##flux", &s, 1.0e-4f, 1000.0f, "x%.3g", ImGuiSliderFlags_Logarithmic))
+            set_flux_sensitivity(s);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Full scale = reference / sensitivity. x1: the reference is full scale;\n"
+                              "x10: a tenth of it is. Changes the picture only, never a number.");
+    }
+
     // Polyscope's own ramp, sampled - so the plot and the receiver in the 3D view are the same
     // colours rather than two libraries' idea of "viridis".
     ImPlot::PushColormap(implot_flux_colormap());
     const char* title = (sigma > 0.0f) ? "Where the light lands (smoothed for viewing)"
                                        : "Where the light lands (bright = hot)";
+    // A colour bar in PERCENT of the reference, so "how much less" is readable straight off the map.
+    if (reference > 0.0) {
+        const float bar_w = ImGui::GetFontSize() * 4.0f;
+        const float h     = std::max(80.0f, ImGui::GetContentRegionAvail().y);
+        ImPlot::ColormapScale("% of reference", 0.0, 100.0 / sens, ImVec2(bar_w, h), "%.0f%%");
+        ImGui::SameLine();
+    }
     if (ImPlot::BeginPlot(title, ImVec2(-1, -1), ImPlotFlags_Equal | ImPlotFlags_NoLegend)) {
         ImPlot::SetupAxis(ImAxis_X1, "x (m)");
         ImPlot::SetupAxis(ImAxis_Y1, "y (m)");
