@@ -310,3 +310,23 @@ TEST_CASE("SceneDocument: strict mode rejects an unrecognized key") {
     bad_material["scene"]["materials"][0]["slope_error_mrad"] = 2.0;  // absorber has no params
     CHECK_THROWS_AS(scrt::io::parse_document(bad_material, /*strict=*/true), std::runtime_error);
 }
+
+TEST_CASE("receiver exposure: parsed, written only when set, refused when not positive") {
+    const auto path = std::filesystem::path(SCRT_SOURCE_DIR) / "examples" / "feature_checks" /
+                      "qa_08_malus_polariser.json";
+    nlohmann::json j = nlohmann::json::parse(std::ifstream(path));
+    j["scene"]["receiver"].erase("exposure");   // the QA scene stores one; start from the default
+    auto doc = scrt::io::parse_document(j, true);
+    CHECK(doc.receiver.exposure == 1.0);
+    CHECK_FALSE(scrt::io::write_document(doc)["scene"]["receiver"].contains("exposure"));
+
+    j["scene"]["receiver"]["exposure"] = 0.05;
+    doc = scrt::io::parse_document(j, true);
+    CHECK(doc.receiver.exposure == 0.05);
+    const auto again = scrt::io::parse_document(scrt::io::write_document(doc), true);
+    CHECK(again.receiver.exposure == 0.05);
+
+    j["scene"]["receiver"]["exposure"] = 0.0;
+    CHECK_THROWS(scrt::io::parse_document(j, true));
+    CHECK_THROWS(scrt::io::parse_document(j, false));
+}

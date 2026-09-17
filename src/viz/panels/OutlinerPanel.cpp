@@ -1,17 +1,20 @@
 #include "scrt/viz/Panels.hpp"
 #include "scrt/viz/Icons.hpp"
 #include "scrt/viz/RayRenderer.hpp"
+#include "scrt/viz/Appearance.hpp"
 
 #include "scrt/materials/Material.hpp"
 #include "scrt/scene/Receiver.hpp"
 #include "scrt/surfaces/Surface.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdint>
 #include <cstdio>
 #include <string>
 #include <tuple>
 #include <unordered_map>
+#include <vector>
 
 #include "imgui.h"
 #include "polyscope/pick.h"
@@ -289,6 +292,33 @@ std::string surface_detail(const surfaces::Surface& surf) {
     return buf;
 }
 
+/// A group in the scene tree: what a part IS, taken from its material's type.
+struct PartGroup {
+    const char* title;      ///< Tree heading, plural.
+    const char* kind;       ///< Singular, for the selection read-out.
+    const char* icon;
+    int         rank;       ///< Order in the tree.
+};
+
+/// The tree used to file every element under "Reflectors" - a lens, a polariser and a beam dump
+/// alike. The grouping is dispatched on the same material-type classification the 3D view is
+/// coloured by (appearance_for), so the tree and the picture cannot disagree about what a part is.
+const PartGroup& group_of(const surfaces::Surface& surf) {
+    static const PartGroup kMirrors{"Mirrors", "Mirror", ICON_FA_SOLAR_PANEL, 0};
+    static const PartGroup kLenses{"Lenses and windows", "Lens or window", ICON_FA_MAGNIFYING_GLASS, 1};
+    static const PartGroup kSplitters{"Beam splitters", "Beam splitter", ICON_FA_RIGHT_LEFT, 2};
+    static const PartGroup kPolarisation{"Polarisation optics", "Polarisation optic", ICON_FA_SLIDERS, 3};
+    static const PartGroup kStops{"Screens, stops and absorbers", "Screen, stop or absorber", ICON_FA_SQUARE, 4};
+    static const PartGroup kOther{"Other parts", "Part", ICON_FA_CUBE, 5};
+    const std::string k = appearance_for(surf.material()).kind;
+    if (k == "mirror" || k == "ideal mirror") return kMirrors;
+    if (k == "glass" || k == "glazing") return kLenses;
+    if (k == "splitter" || k == "polarising splitter") return kSplitters;
+    if (k == "polariser" || k == "waveplate") return kPolarisation;
+    if (k == "matte" || k == "absorber") return kStops;
+    return kOther;
+}
+
 /// Points the camera at the selected structure's bounding box.
 void frame_selected() {
     auto* mesh = mesh_or_null(g_sel.structure);
@@ -317,11 +347,22 @@ void draw_outliner_panel(PanelContext& ctx, bool boxed) {
 
     const auto& reg = StructureRegistry::instance();
 
-    // ---- Reflectors --
-    if (ImGui::TreeNodeEx(ICON_FA_SOLAR_PANEL "  Reflectors", ImGuiTreeNodeFlags_DefaultOpen)) {
-        auto surfs = ctx.scene->surfaces();
-        if (surfs.empty()) ImGui::TextDisabled("(none)");
+    // ---- Parts, grouped by what they are --
+    auto surfs = ctx.scene->surfaces();
+    if (surfs.empty()) ImGui::TextDisabled(ICON_FA_CUBE "  (no parts)");
+    // Groups in a fixed order, each drawn only when it has members; parts keep scene order inside.
+    std::vector<const PartGroup*> order;
+    for (const auto& surf : surfs) {
+        const PartGroup* g = &group_of(*surf);
+        if (std::find(order.begin(), order.end(), g) == order.end()) order.push_back(g);
+    }
+    std::sort(order.begin(), order.end(), [](const PartGroup* a, const PartGroup* b) { return a->rank < b->rank; });
+    for (const PartGroup* g : order) {
+        char title[96];
+        std::snprintf(title, sizeof(title), "%s  %s", g->icon, g->title);
+        if (!ImGui::TreeNodeEx(title, ImGuiTreeNodeFlags_DefaultOpen)) continue;
         for (const auto& surf : surfs) {
+            if (&group_of(*surf) != g) continue;
             const std::uint64_t id = surf->id();
             const std::string&  ps_name = reg.name_for(id);
             const std::string   label =
@@ -329,8 +370,8 @@ void draw_outliner_panel(PanelContext& ctx, bool boxed) {
                     ? (surf->name().empty() ? "surface_" + std::to_string(id) : surf->name())
                     : ps_name;
             const std::string detail = surface_detail(*surf);
-            outliner_row(ctx, ICON_FA_CUBE, label.c_str(), "surface:" + std::to_string(id),
-                         ps_name, id, "Reflector", detail.c_str());
+            outliner_row(ctx, g->icon, label.c_str(), "surface:" + std::to_string(id),
+                         ps_name, id, g->kind, detail.c_str());
         }
         ImGui::TreePop();
     }

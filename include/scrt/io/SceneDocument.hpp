@@ -296,6 +296,10 @@ struct ReceiverDoc {
     /// Wave 5: sum ray FIELDS (interference) instead of power. Requires every source to use grid
     /// sampling; build_scene refuses otherwise. Omitted on write when false.
     bool coherent{false};
+    /// The detector's exposure, as on a camera or beam profiler: the flux map's full scale is
+    /// (total source power / screen area) / exposure. Stored with the setup, never adapted to a trace.
+    /// 1 is the default and is omitted on write.
+    double exposure{1.0};
 };
 
 /// Root document: the full contents of one scene JSON file plus its trace configuration.

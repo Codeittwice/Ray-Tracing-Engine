@@ -110,6 +110,10 @@ public:
     /// live counterpart to keep in step — the Viewer holds its own tracer::TraceConfig copy.
     void commit_trace_config(const tracer::TraceConfig& cfg);
 
+    /// Records the detector exposure the user set on the flux map (a view of the receiver that is
+    /// saved with the setup, like a camera's exposure). No live counterpart: nothing traced reads it.
+    void commit_exposure(double exposure);
+
     /// Appends a material to the document and derives its live materials::Material (rule 1: the
     /// document owns its existence, the live object is derived through io::build_material).
     /// Returns false, changing nothing, when `md.id` is empty or already names a material;

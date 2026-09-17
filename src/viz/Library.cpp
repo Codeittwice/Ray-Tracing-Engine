@@ -345,33 +345,48 @@ const std::vector<ComponentEntry>& builtin_components() {
 const std::vector<SourceEntry>& builtin_sources() {
     static const std::vector<SourceEntry> v = [] {
         std::vector<SourceEntry> s;
+        // Realistic polarisation and coherence (Wave 5 follow-up; the plan promised this and the first
+        // library shipped every laser unpolarised). Every entry is grid-sampled: a laser is a coherent
+        // source, and only a grid-sampled one may light a coherent screen - a random one was refused
+        // the moment it was dropped onto an interferometer. Coherence lengths are TYPICAL figures for the
+        // kind of laser named, not a catalogue part's.
         auto laser = [](const char* name, const char* note, double nm, double watts,
-                        double dia_m, double div_mrad) {
+                        double dia_m, double div_mrad, double linear_deg, double coherence_m) {
             io::LaserSourceDoc l;
-            l.origin          = {0.0, 0.0, 0.3};
-            l.direction       = {0.0, 0.0, -1.0};
-            l.power_w         = watts;
-            l.wavelength_nm   = nm;
-            l.beam_diameter_m = dia_m;
-            l.divergence_mrad = div_mrad;
+            l.origin                  = {0.0, 0.0, 0.3};
+            l.direction               = {0.0, 0.0, -1.0};
+            l.power_w                 = watts;
+            l.wavelength_nm           = nm;
+            l.beam_diameter_m         = dia_m;
+            l.divergence_mrad         = div_mrad;
+            l.polarisation            = "linear";
+            l.polarisation_linear_deg = linear_deg;
+            l.sampling                = "grid";
+            l.coherence_length_m      = coherence_m;
             SourceEntry e;
             e.name = name; e.note = note; e.doc = l;
             return e;
         };
-        s.push_back(laser("Helium-neon laser, 633 nm",
-                          "Catalogue wavelength; the rest typical. The classic red bench laser, "
-                          "and the right default for interferometry.", 632.8, 0.005, 0.0008, 1.3));
+        s.push_back(laser("Helium-neon laser, 633 nm, polarised",
+                          "Catalogue wavelength; the rest typical. A polarised bench HeNe: linear, "
+                          "vertical, about 20 cm coherence length. The right default for interferometry.",
+                          632.8, 0.005, 0.0008, 1.3, 0.0, 0.2));
         s.push_back(laser("Green DPSS laser, 532 nm",
-                          "Catalogue wavelength. Brightest to the eye, so it photographs best.",
-                          532.0, 0.005, 0.0015, 1.5));
-        s.push_back(laser("Red diode laser, 650 nm", "Typical pointer module.",
-                          650.0, 0.005, 0.003, 2.0));
+                          "Catalogue wavelength. Linear, vertical; a multimode module keeps about 1 cm "
+                          "of coherence. Brightest to the eye, so it photographs best.",
+                          532.0, 0.005, 0.0015, 1.5, 0.0, 0.01));
+        s.push_back(laser("Red diode laser, 650 nm",
+                          "Typical pointer module. Diodes emit linearly polarised light (vertical here); "
+                          "about 1 mm coherence, so arms must match closely to show fringes.",
+                          650.0, 0.005, 0.003, 2.0, 0.0, 0.001));
         s.push_back(laser("Violet diode laser, 405 nm",
-                          "Shows dispersion most strongly against the 633 nm line.",
-                          405.0, 0.02, 0.002, 2.0));
-        s.push_back(laser("Infrared diode, 1064 nm",
-                          "Pair it with the gold mirror, whose figure is only honest here.",
-                          1064.0, 0.05, 0.002, 2.0));
+                          "Linear, vertical, about 1 mm coherence. Shows dispersion most strongly "
+                          "against the 633 nm line.",
+                          405.0, 0.02, 0.002, 2.0, 0.0, 0.001));
+        s.push_back(laser("Infrared laser, 1064 nm",
+                          "Linear, vertical, about 1 cm coherence (a multimode DPSS module). Pair it "
+                          "with the gold mirror, whose figure is only honest here.",
+                          1064.0, 0.05, 0.002, 2.0, 0.0, 0.01));
 
         io::SunSourceDoc sun;
         sun.direction     = math::vec3{0.0, 0.0, -1.0};

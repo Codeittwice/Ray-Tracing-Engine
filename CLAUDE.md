@@ -434,8 +434,8 @@ and the 3D receiver (`setMapRange`) both colour against reference / sensitivity,
 trace's peak. Heatmap values above full scale are CLAMPED before ImPlot (it does not clamp). Colour bar
 in percent, reference in W/m2, hottest spot as a percentage. **Measured on QA 11, a real consequence
 of the chosen definition:** three 2 mm spots on a 16 mm screen peak at 6024% of the reference, so at
-x1 all three saturate and look identical although they are 10 : 5 : 1. The slider reaches x0.0001;
-whether the default should be something other than x1 is the user's call, not changed.
+x1 all three saturate and look identical although they are 10 : 5 : 1. Resolved later by a saved
+per-scene exposure with Auto-expose (see the follow-ups below).
 
 **Stage 7b (ray display and inspector).** `RayPath::edge_info` records wavelength, power, optical path,
 and the Jones state per edge (recording only - corpus 100/100 identical); `monochromatic` marks laser
@@ -547,6 +547,33 @@ correct across threads, every new mutation path guarded against the worker. Six 
    an edge-on pose builds a perpendicular axis instead of trusting an unpolarised ray's default s axis.
 Tests: `test_coherent.cpp` (slope-error mirror and diffuser refused, slope 0 loads; the editor refuses
 a random laser and accepts a grid one), `test_polarising_optics.cpp` (ER 1.5 refused, 2 accepted).
+
+**Follow-ups the user asked to have fixed after Wave 5 shipped** (besides the power cutoff, above):
+- **Flux map exposure, like a real experiment** (the user's criterion). The sensitivity became the
+  detector's EXPOSURE, saved with the setup as the receiver's `"exposure"` (default 1, omitted on
+  write, positive only; `SceneEditor::commit_exposure`, loaded into the view on scene load). Auto-expose
+  sets it ONCE so the brightest detector bin sits at 90% of full scale; a warning line reports how much of
+  the lit area is saturated. Both read the RAW bins (the detector's pixels), not the smoothed, averaged
+  picture: a camera saturates on its pixels, and a display filter must not decide the exposure. Every QA
+  scene stores an exposure traced that way (QA 06 shares QA 07's so the pair compares). VERIFIED by eye
+  on QA 11: loads at x0.015, the three spots read visibly 10 : 5 : 1, Auto-expose gives x0.0149 and
+  marks the scene changed, x0.1 saturates two spots and shows "64% of lit area saturated".
+- **Outliner groups parts by what they are**: Mirrors, Lenses and windows, Beam splitters, Polarisation
+  optics, Screens stops and absorbers, Other parts - dispatched on `appearance_for(material).kind`, the
+  same classification the 3D colours use. VERIFIED by eye on QA 13 and QA 16.
+- **Stage 7 looked at on screen, and one real defect fixed.** Ray colours (633 nm red-orange, 532 nm
+  green) and the ray inspector (QA 16, a click between the plates: 532.0 nm, "circular, right",
+  0.270000 m optical path = 0.15 + 0.12 m) are right. The POLARISATION MARKS WERE INVISIBLE: one mark per
+  ray, 200 of them 3.6 mm long at one spot inside a solid 3 mm tube of rays. Now one mark per beam
+  segment (edges grouped by 5 mm midpoint cell and direction), at the group's mean midpoint, long enough
+  to clear the bundle, arms scaled to the ellipse's axes. The geometry was printed from the app rather
+  than judged from a foreshortened picture: vertical line at x = -0.075, equal diagonal crosses at 0.06
+  and 0.185 - exactly linear, circular, circular.
+- **Library lasers are realistic:** linear vertical polarisation, typical coherence lengths (polarised
+  HeNe 20 cm, DPSS 1 cm, diodes 1 mm), and GRID sampling, so a library laser dropped on an interferometer
+  interferes instead of being refused. `tests/test_library.cpp` still builds and round-trips every one.
+- **Packaging** copies only git-tracked scenes (`git ls-files`), so uncommitted experiments no longer
+  ship, and ships `examples/feature_checks` so the QA scenes are in the zip.
 
 **Timing baseline (Stage 0), release, 98-scene corpus, summed `wall_time_s`:** 20.59 s (end of
 Wave 4), 21.10 s and 20.86 s (two captures at Stage 0) - a spread of about +-1.2%, dominated by one

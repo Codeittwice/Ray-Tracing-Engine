@@ -97,6 +97,7 @@
                                    }
                                ],
                   "receiver":  {
+                                   "exposure": 0.01,
                                    "surface":  {
                                                    "type":  "plane",
                                                    "half_width":  0.01,

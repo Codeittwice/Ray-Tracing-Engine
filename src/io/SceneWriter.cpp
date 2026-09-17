@@ -320,7 +320,8 @@ json receiver_to_json(const ReceiverDoc& recv) {
         },
         recv.kind);
     j["transform"] = transform_to_json(recv.transform);
-    if (recv.coherent) j["coherent"] = true;   // omitted when false: every existing file re-saves unchanged
+    if (recv.coherent) j["coherent"] = true;
+    if (recv.exposure != 1.0) j["exposure"] = recv.exposure;   // omitted at its default   // omitted when false: every existing file re-saves unchanged
     return j;
 }
 

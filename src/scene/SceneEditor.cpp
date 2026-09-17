@@ -399,6 +399,12 @@ bool SceneEditor::remove_source(std::size_t index) {
 
 // ---- commit_trace_config ------------------------------------------------
 
+void SceneEditor::commit_exposure(double exposure) {
+    if (doc_.receiver.exposure == exposure) return;   // no dirtying on a no-op
+    doc_.receiver.exposure = exposure;
+    dirty_                 = true;
+}
+
 void SceneEditor::commit_trace_config(const tracer::TraceConfig& cfg) {
     doc_.trace = cfg;
     dirty_     = true;

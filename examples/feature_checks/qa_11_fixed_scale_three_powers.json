@@ -1,9 +1,10 @@
 {
     "scene": {
-        "name": "QA 11: three lasers side by side at 1.0, 0.5 and 0.1 mW on one screen (measured 1.600 mW in total). On the FIXED flux scale the spots are visibly unequal, 10 : 5 : 1; raise the sensitivity to see the 0.1 mW one clearly",
+        "name": "QA 11: three lasers side by side at 1.0, 0.5 and 0.1 mW on one screen (measured 1.600 mW in total). The scene is saved at exposure x0.015, set once with Auto-expose so the 1.0 mW spot sits just under saturation; the spots then read visibly unequal, 10 : 5 : 1. Raise the exposure and the 1.0 and 0.5 mW spots clip (the saturation warning appears) while the 0.1 mW one brightens",
         "materials": [],
         "elements": [],
         "receiver": {
+            "exposure": 0.015,
             "surface": {
                 "type": "plane",
                 "half_width": 0.008,

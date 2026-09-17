@@ -181,8 +181,19 @@ void FluxPlotter::draw_heatmap_tab(const tracer::FluxAccumulator& acc, double dn
     const double reference = flux_reference_wm2(scene_source_power(), acc.half_width(), acc.half_height());
     const double sens      = static_cast<double>(flux_sensitivity());
     float        vmaxf     = 0.0f;
+    // Auto-expose and the clipping warning read the RAW bins - the detector's pixels, where a real
+    // camera saturates - not the smoothed, block-averaged picture, which is a display filter.
+    const double shown_peak         = acc.peak_flux_wm2();
+    double       saturated_fraction = 0.0;
     if (reference > 0.0) {
         vmaxf = static_cast<float>(reference / sens);
+        const double full = reference / sens;
+        int lit = 0, clipped = 0;
+        for (double v : flux) {
+            if (v > 0.0) ++lit;
+            if (v > full) ++clipped;
+        }
+        saturated_fraction = lit > 0 ? static_cast<double>(clipped) / lit : 0.0;
         for (float& v : data) v = std::min(v, vmaxf);
     } else {
         for (float v : data) vmaxf = std::max(vmaxf, v);   // no power known: fall back to the peak
@@ -234,19 +245,35 @@ void FluxPlotter::draw_heatmap_tab(const tracer::FluxAccumulator& acc, double dn
         figure(buf, "The colours are on a FIXED scale taken from the light source: 100% is the flux "
                     "you would get if every watt the sources emit fell evenly on this screen. It does "
                     "not change from one trace to the next, so a design that delivers less power is "
-                    "visibly darker. A focused spot can read far above 100% - raise the sensitivity "
-                    "to see dim light, lower it to see inside a bright spot.");
+                    "visibly darker. A focused spot can read far above 100% - raise the exposure "
+                    "to see dim light, lower it (or Auto-expose) to see inside a bright spot.");
         std::snprintf(buf, sizeof(buf), "Hottest spot: %.1f%% of reference", 100.0 * acc.peak_flux_wm2() / reference);
         ImGui::TextDisabled("%s", buf);
         // Measured on QA 11: three 2 mm spots on a 16 mm screen peak at 6024% of the reference, so at
         // x1 they all saturate and look alike. The slider reaches x0.0001 for exactly that case.
+        // Like a camera or beam profiler: an exposure set by the experimenter and saved with the setup
+        // (the receiver's "exposure"), an auto-expose that sets it ONCE so the brightest spot sits just
+        // below saturation, and a clipping warning. The scale never follows a trace by itself.
         float s = flux_sensitivity();
-        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.6f);
-        if (ImGui::SliderFloat("Sensitivity##flux", &s, 1.0e-4f, 1000.0f, "x%.3g", ImGuiSliderFlags_Logarithmic))
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.45f);
+        if (ImGui::SliderFloat("##exposure", &s, 1.0e-4f, 1000.0f, "exposure x%.3g", ImGuiSliderFlags_Logarithmic))
             set_flux_sensitivity(s);
         if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Full scale = reference / sensitivity. x1: the reference is full scale;\n"
-                              "x10: a tenth of it is. Changes the picture only, never a number.");
+            ImGui::SetTooltip("Full scale = reference / exposure, as a camera's exposure sets which intensity\n"
+                              "saturates. Saved with the scene. Changes the picture only, never a number.");
+        ImGui::SameLine();
+        if (ImGui::Button("Auto-expose") && shown_peak > 0.0)
+            set_flux_sensitivity(static_cast<float>(0.9 * reference / shown_peak));
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Set the exposure once so the brightest detector bin sits at 90%% of full\n"
+                              "scale. It then stays put: a weaker design traced next reads visibly darker.");
+        if (saturated_fraction > 0.0) {
+            // Own line: beside the slider it ran off the panel edge (seen on QA 11 at x0.1).
+            ImGui::TextColored({1.0f, 0.55f, 0.2f, 1.0f}, "%.0f%% of lit area saturated", 100.0 * saturated_fraction);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("These cells are brighter than full scale and all draw in the top colour, so\n"
+                                  "differences between them are invisible - lower the exposure to see inside.");
+        }
     }
 
     // Polyscope's own ramp, sampled - so the plot and the receiver in the 3D view are the same

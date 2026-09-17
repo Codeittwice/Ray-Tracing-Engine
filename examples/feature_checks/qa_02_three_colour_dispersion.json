@@ -15,6 +15,7 @@
             }
         ],
         "receiver": {
+            "exposure": 0.00033,
             "surface": {"type": "plane", "half_width": 0.006, "half_height": 0.006},
             "grid": {"nx": 120, "ny": 120},
             "transform": {"translation": [0.167, 0.0, 0.1], "rotation_euler_deg": [0.0, 90.0, 0.0]}

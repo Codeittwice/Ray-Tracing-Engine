@@ -30,7 +30,16 @@ Copy-Item "$BinDir\scrt_compare.exe" $DistDir
 # Example scenes
 $ExDst = Join-Path $DistDir "examples"
 New-Item $ExDst -ItemType Directory | Out-Null
-Get-ChildItem "$Root\examples\*.json" | Copy-Item -Destination $ExDst
+# Only COMMITTED scenes: a plain glob also shipped whatever uncommitted experiments sat in examples\.
+# The QA scenes in examples\feature_checks ship too, so the checks can be repeated from the zip; the
+# app lists that folder as "QA / ..." in its Scene Browser.
+$tracked = git -C $Root ls-files -- "examples/*.json"
+if ($LASTEXITCODE -ne 0 -or -not $tracked) { throw "git ls-files found no example scenes" }
+foreach ($rel in $tracked) {
+    $dst = Join-Path $DistDir ($rel -replace '/', '\')
+    New-Item (Split-Path $dst -Parent) -ItemType Directory -Force | Out-Null
+    Copy-Item (Join-Path $Root $rel) $dst
+}
 
 # Mesh assets. The STL scenes reference "../assets/meshes/<name>.stl" relative to
 # the scene file, so they must land at <dist>\assets\meshes for those paths to resolve.
@@ -48,7 +57,8 @@ CONTENTS
 --------
   scrt_app.exe       Interactive 3-D viewer (GPU/OpenGL required)
   scrt_compare.exe   Headless batch tool — runs scenes and writes a CSV
-  examples\          Six ready-to-use scene files
+  examples\          Ready-to-use scene files
+  examples\feature_checks\  QA scenes: each states what you should see and the number it was traced to
 
 QUICK START — Interactive viewer
 ---------------------------------

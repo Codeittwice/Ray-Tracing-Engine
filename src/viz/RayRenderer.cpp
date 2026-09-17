@@ -12,6 +12,7 @@
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -469,9 +470,21 @@ void RayRenderer::register_paths(const tracer::TraceResult& result) {
     // Polarisation ticks: the axes of each polarised edge's polarisation ellipse, drawn across the
     // ray at its midpoint. Linear light is one line, circular an equal cross, elliptical a long and a
     // short line. Unpolarised light gets none - it has no axis to draw.
+    //
+    // ONE mark per beam segment, not one per ray. Looked at on QA 16: a 3 mm beam of ~200 rays drew 200
+    // marks 3.6 mm long at the same place, all buried inside the solid tube the rays make, and nothing
+    // could be seen. Edges are grouped by where their midpoint lies (5 mm cells) and which way they run;
+    // each group draws the first member's state at the group's mean midpoint, long enough to reach
+    // clear of the bundle.
     std::vector<glm::vec3>                  tick_nodes;
     std::vector<std::array<std::size_t, 2>> tick_edges;
-    const double tick_half = std::max(0.0015, 6.0 * static_cast<double>(ray_radius_m()));
+    const double tick_min_half = std::max(0.0015, 6.0 * static_cast<double>(ray_radius_m()));
+    struct TickGroup {
+        math::vec3          major{0.0}, minor{0.0};
+        math::vec3          sum{0.0};
+        std::vector<math::vec3> mids;
+    };
+    std::map<std::array<long long, 6>, TickGroup> tick_groups;
 
     // A path is a tree now, so its edges are given rather than implied by adjacency. The old
     // "join consecutive points" loop drew a split as a line that ran out along the reflected
@@ -514,14 +527,34 @@ void RayRenderer::register_paths(const tracer::TraceResult& result) {
                 const std::complex<double> rot = std::exp(std::complex<double>(0.0, -0.5 * std::arg(ff)));
                 const math::vec3 major{(rot * fx).real(), (rot * fy).real(), (rot * fz).real()};
                 const math::vec3 minor{(rot * fx).imag(), (rot * fy).imag(), (rot * fz).imag()};
-                for (const math::vec3& axis : {major, minor}) {
-                    if (glm::length(axis) < 0.05) continue;   // a pure linear state has no minor axis
-                    const math::vec3 u = axis * tick_half;
-                    tick_edges.push_back({tick_nodes.size(), tick_nodes.size() + 1});
-                    tick_nodes.emplace_back(glm::vec3(mid - u));
-                    tick_nodes.emplace_back(glm::vec3(mid + u));
+                const math::vec3 dir = glm::normalize(b - a);
+                const std::array<long long, 6> key{
+                    std::llround(mid.x / 0.005), std::llround(mid.y / 0.005), std::llround(mid.z / 0.005),
+                    std::llround(dir.x * 20.0), std::llround(dir.y * 20.0), std::llround(dir.z * 20.0)};
+                auto& g = tick_groups[key];
+                if (g.mids.empty()) {
+                    g.major = major;
+                    g.minor = minor;
                 }
+                g.sum += mid;
+                g.mids.push_back(mid);
             }
+        }
+    }
+
+    for (const auto& [key, g] : tick_groups) {
+        const math::vec3 centre = g.sum / static_cast<double>(g.mids.size());
+        double spread = 0.0;
+        for (const auto& m : g.mids) spread = std::max(spread, glm::length(m - centre));
+        const double half = std::max(tick_min_half, 1.6 * spread + tick_min_half * 0.5);
+        for (const math::vec3& axis : {g.major, g.minor}) {
+            if (glm::length(axis) < 0.05) continue;   // a pure linear state has no minor axis
+            // Normalised: the Jones vector is unit power, so a circular state's axes are 1/sqrt2 long
+            // and would draw a cross smaller than a linear line; equal arms read as "circular".
+            const math::vec3 u = glm::normalize(axis) * half * glm::length(axis) / std::max(glm::length(g.major), 1e-12);
+            tick_edges.push_back({tick_nodes.size(), tick_nodes.size() + 1});
+            tick_nodes.emplace_back(glm::vec3(centre - u));
+            tick_nodes.emplace_back(glm::vec3(centre + u));
         }
     }
 

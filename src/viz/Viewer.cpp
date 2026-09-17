@@ -215,6 +215,8 @@ void Viewer::load_scene_internal(io::LoadedScene ls) {
 
     set_scene(&editor_->scene());
     cfg_ = loaded_cfg;
+    // The detector's exposure travels with the setup: set it before anything draws the new scene.
+    set_flux_sensitivity(static_cast<float>(editor_->doc().receiver.exposure));
 
     // set_loaded_scene() is called from main() BEFORE run() calls polyscope::init(), and
     // every polyscope entry point throws "Polyscope has not been initialized" until then.
@@ -870,6 +872,7 @@ void Viewer::draw_gui() {
     static float drawn_sensitivity = flux_sensitivity();
     if (flux_sensitivity() != drawn_sensitivity) {
         drawn_sensitivity = flux_sensitivity();
+        if (editor_) editor_->commit_exposure(static_cast<double>(drawn_sensitivity));
         update_receiver_flux();
     }
 }

@@ -527,7 +527,7 @@ SceneDocument parse_document(const json& root, bool strict) {
         if (strict)
             reject_unknown_keys(
                 rj, {"surface", "grid", "transform", "depth", "top_mode", "type", "battery",
-                     "coherent"},
+                     "coherent", "exposure"},
                 "receiver");
 
         ReceiverDoc rd;
@@ -599,6 +599,8 @@ SceneDocument parse_document(const json& root, bool strict) {
         if (rj.contains("transform"))
             rd.transform = parse_transform_doc(rj["transform"], strict);
         rd.coherent = rj.value("coherent", false);
+    rd.exposure = rj.value("exposure", 1.0);
+    require(std::isfinite(rd.exposure) && rd.exposure > 0.0, "receiver 'exposure' must be a positive number");
         doc.receiver = std::move(rd);
     }
 
